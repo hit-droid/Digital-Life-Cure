@@ -8,7 +8,7 @@ set_target_properties(CubismCore PROPERTIES
     IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/Core/lib/android/${ANDROID_ABI}/libLive2DCubismCore.a
 )
 
-set(FRAMEWORK_SRC_DIR ${CMAKE_SOURCE_DIR}/Framework)
+set(FRAMEWORK_SRC_DIR ${CMAKE_SOURCE_DIR}/Framework/src)
 set(LAPP_SRC_DIR ${CMAKE_SOURCE_DIR}/LApp)
 
 file(GLOB_RECURSE FRAMEWORK_SRCS
@@ -16,6 +16,8 @@ file(GLOB_RECURSE FRAMEWORK_SRCS
 )
 list(FILTER FRAMEWORK_SRCS EXCLUDE REGEX ".*/D3D9/.*")
 list(FILTER FRAMEWORK_SRCS EXCLUDE REGEX ".*/D3D11/.*")
+list(FILTER FRAMEWORK_SRCS EXCLUDE REGEX ".*/Metal/.*")
+list(FILTER FRAMEWORK_SRCS EXCLUDE REGEX ".*/Vulkan/.*")
 
 set(LAPP_SRCS
     ${LAPP_SRC_DIR}/JniBridgeC.cpp
@@ -40,6 +42,7 @@ target_include_directories(maidendungeon PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/Core
     ${CMAKE_SOURCE_DIR}/Framework
+    ${CMAKE_SOURCE_DIR}/Framework/src
     ${CMAKE_SOURCE_DIR}/LApp
 )
 

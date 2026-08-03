@@ -59,7 +59,10 @@ public class EmotionState {
         return Math.max(0.2f, Math.min(1f, sum / 2f));
     }
 
-    public float get(String dim) { return emotion.getOrDefault(dim, 0f); }
+    public float get(String dim) {
+        Float value = emotion.get(dim);
+        return value != null ? value : 0f;
+    }
 
     public float getIntimacy() { return intimacy; }
     public void addIntimacy(float v) { intimacy = Math.max(0f, Math.min(1f, intimacy + v)); }
