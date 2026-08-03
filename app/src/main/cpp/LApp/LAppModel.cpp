@@ -576,6 +576,13 @@ void LAppModel::DoDraw()
         return;
     }
 
+    static csmUint32 s_drawFrameCount = 0;
+    if ((s_drawFrameCount % 90) == 0)
+    {
+        LAppPal::PrintLog("[APP]drawing model (frame=%u)", s_drawFrameCount);
+    }
+    s_drawFrameCount++;
+
     GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->DrawModel();
 }
 
