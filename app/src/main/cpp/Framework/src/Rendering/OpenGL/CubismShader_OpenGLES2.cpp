@@ -1074,6 +1074,8 @@ GLuint CubismShader_OpenGLES2::LoadShaderProgram(const csmChar* vertShaderSrc, c
         glDeleteShader(fragShader);
     }
 
+    CubismLogInfo("[APP]shader program created: %d", shaderProgram);
+
     return shaderProgram;
 }
 
