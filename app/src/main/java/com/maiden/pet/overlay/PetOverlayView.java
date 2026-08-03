@@ -176,6 +176,13 @@ public class PetOverlayView extends FrameLayout {
         if (w > 0 && bubbleView != null) {
             bubbleView.setMaxWidth((int) (w * 0.9f));
         }
+        // 模型经 viewMatrix 下移后，人偶头顶约在悬浮窗顶部往下 1/4 高度处；
+        // 气泡框下移贴近头顶，避免离头顶太远悬空。
+        if (h > 0 && bubbleContainer != null) {
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) bubbleContainer.getLayoutParams();
+            lp.topMargin = (int) (h * 0.26f);
+            bubbleContainer.setLayoutParams(lp);
+        }
     }
 
     private void handleModelTap(float x, float y) {
