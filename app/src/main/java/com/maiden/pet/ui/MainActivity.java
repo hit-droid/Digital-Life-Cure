@@ -490,7 +490,11 @@ public class MainActivity extends Activity {
         requestRecordPermission();
         Intent i = new Intent(this, PetService.class);
         i.setAction(PetService.ACTION_START);
-        startForegroundService(i);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(i);
+        } else {
+            startService(i);
+        }
         Toast.makeText(this, "小汐正在醒来…", Toast.LENGTH_SHORT).show();
         handler.postDelayed(this::updateStatus, 1500);
     }

@@ -84,7 +84,7 @@ LAppModel::LAppModel()
 
 LAppModel::~LAppModel()
 {
-    _renderBuffer.DestroyOffscreenFrame();
+    _renderBuffer.DestroyRenderTarget();
 
     ReleaseMotions();
     ReleaseExpressions();
@@ -115,7 +115,13 @@ void LAppModel::LoadAssets(const csmChar* dir, const csmChar* fileName)
 
     SetupModel(setting);
 
-    CreateRenderer();
+    if (_model == NULL)
+    {
+        LAppPal::PrintLog("Failed to LoadAssets().");
+        return;
+    }
+
+    CreateRenderer(LAppDelegate::GetInstance()->GetWindowWidth(), LAppDelegate::GetInstance()->GetWindowHeight());
 
     SetupTextures();
 }
@@ -357,8 +363,8 @@ void LAppModel::Update()
     _userTimeSeconds += deltaTimeSeconds;
 
     _dragManager->Update(deltaTimeSeconds);
-    _dragX = _dragManager->GetX();
-    _dragY = _dragManager->GetY();
+    const csmFloat32 dragX = _dragManager->GetX();
+    const csmFloat32 dragY = _dragManager->GetY();
 
     // モーションによるパラメータ更新の有無
     csmBool motionUpdated = false;
@@ -399,16 +405,16 @@ void LAppModel::Update()
 
     //ドラッグによる変化
     //ドラッグによる顔の向きの調整
-    _model->AddParameterValue(_idParamAngleX, _dragX * 30); // -30から30の値を加える
-    _model->AddParameterValue(_idParamAngleY, _dragY * 30);
-    _model->AddParameterValue(_idParamAngleZ, _dragX * _dragY * -30);
+    _model->AddParameterValue(_idParamAngleX, dragX * 30); // -30から30の値を加える
+    _model->AddParameterValue(_idParamAngleY, dragY * 30);
+    _model->AddParameterValue(_idParamAngleZ, dragX * dragY * -30);
 
     //ドラッグによる体の向きの調整
-    _model->AddParameterValue(_idParamBodyAngleX, _dragX * 10); // -10から10の値を加える
+    _model->AddParameterValue(_idParamBodyAngleX, dragX * 10); // -10から10の値を加える
 
     //ドラッグによる目の向きの調整
-    _model->AddParameterValue(_idParamEyeBallX, _dragX); // -1から1の値を加える
-    _model->AddParameterValue(_idParamEyeBallY, _dragY);
+    _model->AddParameterValue(_idParamEyeBallX, dragX); // -1から1の値を加える
+    _model->AddParameterValue(_idParamEyeBallY, dragY);
 
     // 呼吸など
     if (_breath != NULL)
@@ -423,7 +429,7 @@ void LAppModel::Update()
     }
 
     // リップシンクの設定
-    if (_lipSync)
+    if (_lipSyncIds.GetSize() > 0)
     {
         csmFloat32 value = 0; // リアルタイムでリップシンクを行う場合、システムから音量を取得して0〜1の範囲で値を入力します。
 
@@ -615,7 +621,7 @@ void LAppModel::SetExpression(const csmChar* expressionID)
 
     if (motion != NULL)
     {
-        _expressionManager->StartMotionPriority(motion, false, PriorityForce);
+        _expressionManager->StartMotion(motion, false);
     }
     else
     {
@@ -649,7 +655,7 @@ void LAppModel::ReloadRenderer()
 {
     DeleteRenderer();
 
-    CreateRenderer();
+    CreateRenderer(LAppDelegate::GetInstance()->GetWindowWidth(), LAppDelegate::GetInstance()->GetWindowHeight());
 
     SetupTextures();
 }
@@ -687,7 +693,7 @@ void LAppModel::MotionEventFired(const csmString& eventValue)
     CubismLogInfo("%s is fired on LAppModel!!", eventValue.GetRawString());
 }
 
-Csm::Rendering::CubismOffscreenFrame_OpenGLES2& LAppModel::GetRenderBuffer()
+Csm::Rendering::CubismRenderTarget_OpenGLES2& LAppModel::GetRenderBuffer()
 {
     return _renderBuffer;
 }

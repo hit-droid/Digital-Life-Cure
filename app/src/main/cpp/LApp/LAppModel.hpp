@@ -12,7 +12,7 @@
 #include <Model/CubismUserModel.hpp>
 #include <ICubismModelSetting.hpp>
 #include <Type/csmRectF.hpp>
-#include <Rendering/OpenGL/CubismOffscreenSurface_OpenGLES2.hpp>
+#include <Rendering/OpenGL/CubismRenderTarget_OpenGLES2.hpp>
 
 /**
  * @brief ユーザーが実際に使用するモデルの実装クラス<br>
@@ -111,7 +111,7 @@ public:
     /**
      * @brief   別ターゲットに描画する際に使用するバッファの取得
      */
-    Csm::Rendering::CubismOffscreenFrame_OpenGLES2& GetRenderBuffer();
+    Csm::Rendering::CubismRenderTarget_OpenGLES2& GetRenderBuffer();
 
     /**
      * @brief   AIが外部から指定したパラメータ値を登録する（毎フレームUpdateの最後に適用される）
@@ -211,7 +211,7 @@ private:
     Csm::csmString _currentMotionGroup; ///< 直近に開始したモーショングループ名
     std::atomic<bool> _externalActionPlaying; ///< 非待機アクション再生中フラグ（GLスレッド書込・他スレッド読込）
 
-    Csm::Rendering::CubismOffscreenFrame_OpenGLES2  _renderBuffer;   ///< フレームバッファ以外の描画先
+    Csm::Rendering::CubismRenderTarget_OpenGLES2  _renderBuffer;   ///< フレームバッファ以外の描画先
 };
 
 
