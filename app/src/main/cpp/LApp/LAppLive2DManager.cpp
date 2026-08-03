@@ -185,8 +185,28 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
     // ディレクトリ名とmodel3.jsonの名前を一致させておくこと.
     std::string model = ModelDir[index];
     std::string modelPath = ResourcesPath + model + "/";
-    std::string modelJsonName = ModelDir[index];
-    modelJsonName += ".model.json";
+
+    // 使用 ModelJsonName（如果为 NULL 则使用 ModelDir）
+    std::string modelBase;
+    if (ModelJsonName[index] != NULL) {
+        modelBase = ModelJsonName[index];
+    } else {
+        modelBase = ModelDir[index];
+    }
+
+    // 优先尝试 .model.json，不存在则尝试 .model3.json
+    std::string modelJsonName = modelBase + ".model.json";
+    {
+        Csm::csmSizeInt size;
+        std::string jsonPath = modelPath + modelJsonName;
+        Csm::csmByte* buffer = LAppPal::LoadFileAsBytes(jsonPath.c_str(), &size);
+        if (buffer == NULL) {
+            // 不存在，改用 .model3.json
+            modelJsonName = modelBase + ".model3.json";
+        } else {
+            LAppPal::ReleaseBytes(buffer);
+        }
+    }
 
     ReleaseAllModel();
     _models.PushBack(new LAppModel());

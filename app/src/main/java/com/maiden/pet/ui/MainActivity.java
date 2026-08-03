@@ -30,6 +30,7 @@ import com.maiden.pet.PetService;
 import com.maiden.pet.brain.AICore;
 import com.maiden.pet.brain.LLMClient;
 import com.maiden.pet.memory.Settings;
+import com.maiden.pet.render.Live2DNative;
 
 /**
  * 桌宠控制面板：悬浮窗授权引导 + API 配置 + 连接测试 + 语音引擎诊断 + 启停控制。
@@ -138,6 +139,13 @@ public class MainActivity extends Activity {
         LinearLayout cSwitch = card(root, "功能设置");
         swVoice = switchRow(cSwitch, "语音互动（说话+发声）", settings.isVoiceEnabled());
         swProactive = switchRow(cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
+        // 模型切换按钮（仅在桌宠启动后可用）
+        Button btnSwitchModel = button(cSwitch, "切换模型（当前: " + getCurrentModelName() + "）");
+        btnSwitchModel.setOnClickListener(v -> {
+            switchModel();
+            btnSwitchModel.setText("切换模型（当前: " + getCurrentModelName() + "）");
+        });
+
         btnVoiceDiag = button(cSwitch, "检查语音引擎");
         btnVoiceDiag.setOnClickListener(v -> checkVoiceDiag());
         tvVoiceDiag = new TextView(this);
@@ -401,6 +409,27 @@ public class MainActivity extends Activity {
         String result = ai.getMemory().runLocalSelfCheck();
         tvMemoryDebug.setTextColor(Color.rgb(90, 150, 100));
         tvMemoryDebug.setText("自检结果：" + result + "\n\n" + ai.getMemory().buildDebugSnapshot());
+    }
+
+    private int currentModelIndex = 0;
+
+    private String getCurrentModelName() {
+        int count = Live2DNative.nativeGetModelCount();
+        if (count <= 0) return "?";
+        if (currentModelIndex >= count) currentModelIndex = 0;
+        return Live2DNative.nativeGetModelDirName(currentModelIndex);
+    }
+
+    private void switchModel() {
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            Toast.makeText(this, "请先启动桌宠再切换模型", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int count = Live2DNative.nativeGetModelCount();
+        currentModelIndex = (currentModelIndex + 1) % count;
+        Live2DNative.nativeChangeScene(currentModelIndex);
+        Toast.makeText(this, "已切换至: " + getCurrentModelName(), Toast.LENGTH_SHORT).show();
     }
 
     private void checkVoiceDiag() {
