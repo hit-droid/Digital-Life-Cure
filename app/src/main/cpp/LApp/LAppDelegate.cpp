@@ -104,10 +104,6 @@ void LAppDelegate::Run()
 
 void LAppDelegate::OnSurfaceCreate()
 {
-    //テクスチャサンプリング設定
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
     //透過設定
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -115,11 +111,19 @@ void LAppDelegate::OnSurfaceCreate()
     //Initialize cubism
     CubismFramework::Initialize();
 
-    _view->InitializeShader();
+    LAppPal::PrintLog("[APP]surface created: gl=%s renderer=%s",
+        reinterpret_cast<const char*>(glGetString(GL_VERSION)),
+        reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+
+    if (_view != NULL)
+    {
+        _view->InitializeShader();
+    }
 }
 
 void LAppDelegate::OnSurfaceChanged(float width, float height)
 {
+    LAppPal::PrintLog("[APP]surface changed: %.0fx%.0f", width, height);
     glViewport(0, 0, width, height);
     _width = width;
     _height = height;
