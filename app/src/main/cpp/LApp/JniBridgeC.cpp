@@ -19,6 +19,7 @@
 #include "LAppDelegate.hpp"
 #include "LAppPal.hpp"
 #include "LAppLive2DManager.hpp"
+#include "LAppDefine.hpp"
 #include "LAppModel.hpp"
 #include <CubismDefaultParameterId.hpp>
 #include <Id/CubismIdManager.hpp>
@@ -347,6 +348,27 @@ extern "C"
             return JNI_TRUE;
         }
         return JNI_FALSE;
+    }
+
+    JNIEXPORT void JNICALL
+    Java_com_maiden_pet_render_Live2DNative_nativeChangeScene(JNIEnv *env, jclass type, jint index)
+    {
+        LAppLive2DManager::GetInstance()->ChangeScene(index);
+    }
+
+    JNIEXPORT jint JNICALL
+    Java_com_maiden_pet_render_Live2DNative_nativeGetModelCount(JNIEnv *env, jclass type)
+    {
+        return LAppDefine::ModelDirSize;
+    }
+
+    JNIEXPORT jstring JNICALL
+    Java_com_maiden_pet_render_Live2DNative_nativeGetModelDirName(JNIEnv *env, jclass type, jint index)
+    {
+        if (index < 0 || index >= LAppDefine::ModelDirSize) {
+            return env->NewStringUTF("");
+        }
+        return env->NewStringUTF(LAppDefine::ModelDir[index]);
     }
 }
 

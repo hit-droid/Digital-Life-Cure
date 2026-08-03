@@ -75,4 +75,9 @@ public class Live2DNative {
     public static native void nativeSetParameterValue(String paramId, float value);
     /** 是否有非待机动作（如 TapBody）在播放；AI 待机微动应让位 */
     public static native boolean nativeIsMotionPlaying();
+
+    // Model switching
+    public static native void nativeChangeScene(int index);
+    public static native int nativeGetModelCount();
+    public static native String nativeGetModelDirName(int index);
 }
