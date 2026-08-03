@@ -119,6 +119,7 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
         textureInfo->id = textureId;
 
         _textures.PushBack(textureInfo);
+        LAppPal::PrintLog("[APP]texture ready: %s (%dx%d, id=%u)", fileName.c_str(), width, height, textureId);
     }
 
     return textureInfo;
@@ -129,6 +130,7 @@ void LAppTextureManager::ReleaseTextures()
 {
     for (Csm::csmUint32 i = 0; i < _textures.GetSize(); i++)
     {
+        glDeleteTextures(1, &_textures[i]->id);
         delete _textures[i];
     }
 
@@ -143,6 +145,7 @@ void LAppTextureManager::ReleaseTexture(Csm::csmUint32 textureId)
         {
             continue;
         }
+        glDeleteTextures(1, &_textures[i]->id);
         delete _textures[i];
         _textures.Remove(i);
         break;
@@ -155,6 +158,7 @@ void LAppTextureManager::ReleaseTexture(std::string fileName)
     {
         if (_textures[i]->fileName == fileName)
         {
+            glDeleteTextures(1, &_textures[i]->id);
             delete _textures[i];
             _textures.Remove(i);
             break;

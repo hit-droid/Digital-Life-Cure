@@ -124,6 +124,7 @@ void LAppModel::LoadAssets(const csmChar* dir, const csmChar* fileName)
     CreateRenderer(LAppDelegate::GetInstance()->GetWindowWidth(), LAppDelegate::GetInstance()->GetWindowHeight());
 
     SetupTextures();
+    LAppPal::PrintLog("[APP]model ready: %s (textures=%d)", fileName, _modelSetting->GetTextureCount());
 }
 
 
