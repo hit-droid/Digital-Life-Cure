@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#1a0a20; }
+  canvas { display:block; }
+  #error-msg { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:13px; font-family:sans-serif; text-align:center; background:rgba(40,10,30,0.92); padding:14px 20px; border-radius:12px; border:2px solid #ff6b8a; max-width:90%; z-index:10; line-height:1.5; }
+  #loading { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#c8a0e0; font-size:16px; font-family:sans-serif; z-index:5; }
+</style>
+</head>
+<body>
+<div id="loading">Loading...</div>
+<div id="error-msg"></div>
+<script src="pixi.min.js"></script>
+<script src="live2dcubismcore.min.js"></script>
+<script src="cubism2.min.js"></script>
+<script>
+var app = null;
+var model = null;
+var idleTimer = null;
+var speaking = false;
+
+function showError(text) {
+    var el = document.getElementById('error-msg');
+    el.style.display = 'block';
+    el.textContent = text;
+    var ld = document.getElementById('loading');
+    if (ld) ld.style.display = 'none';
+    console.error(text);
+}
+
+function showInfo(text) {
+    var ld = document.getElementById('loading');
+    if (ld) ld.textContent = text;
+}
+
+function initPixi() {
+    try {
+        showInfo('Init PixiJS...');
+        app = new PIXI.Application({
+            width: Math.max(window.innerWidth, 200),
+            height: Math.max(window.innerHeight, 200),
+            transparent: false,
+            backgroundColor: 0x1a0a20,
+            antialias: true,
+            resolution: window.devicePixelRatio || 1,
+            autoDensity: true
+        });
+        document.body.appendChild(app.view);
+        showInfo('PixiJS OK, loading model...');
+        return true;
+    } catch(e) {
+        showError('PixiJS init failed: ' + e.message);
+        return false;
+    }
+}
+
+function loadModel() {
+    if (typeof PIXI === 'undefined' || !PIXI.live2d) {
+        showError('PIXI.live2d not available. cubism2 plugin may not have loaded.');
+        return;
+    }
+    showInfo('Loading model...');
+    PIXI.live2d.Live2DModel.from('shizuku/shizuku.model.json', { autoInteract: false }).then(function(m) {
+        model = m;
+        app.stage.addChild(model);
+        var s = Math.min(window.innerWidth / model.width, window.innerHeight / model.height) * 0.55;
+        model.scale.set(s);
+        model.position.set(window.innerWidth / 2, window.innerHeight * 0.45);
+        document.getElementById('loading').style.display = 'none';
+        startIdle();
+        model.on('hit', function() { playMotion('tap_body'); });
+        console.log('Live2D model loaded OK');
+    }).catch(function(err) {
+        showError('Model load failed: ' + (err.message || err));
+    });
+}
+
+function startIdle() {
+    if (idleTimer) clearInterval(idleTimer);
+    idleTimer = setInterval(function() {
+        if (!model || speaking) return;
+        playMotion('idle');
+    }, 8000 + Math.random() * 4000);
+}
+
+function playMotion(name) {
+    if (!model) return;
+    try { model.motion(name); } catch(e) { console.error('Motion:', name, e); }
+}
+
+window.live2dBridge = {
+    setExpression: function(name) {
+        if (!model) return;
+        try { model.internalModel.motionManager.expressionManager.setExpression(name); } catch(e) {}
+    },
+    setMotion: function(name) { playMotion(name); },
+    setMouth: function(open) {
+        if (!model || !model.internalModel) return;
+        try { model.internalModel.coreModel.setParameterValueById('ParamMouthOpenY', open); } catch(e) {}
+    },
+    setSpeaking: function(s) {
+        speaking = s;
+        if (!model || !model.internalModel) return;
+        try { model.internalModel.coreModel.setParameterValueById('ParamMouthOpenY', s ? 0.5 : 0); } catch(e) {}
+    }
+};
+
+window.addEventListener('resize', function() {
+    if (app && app.renderer) app.renderer.resize(window.innerWidth, window.innerHeight);
+    if (model) {
+        var s = Math.min(window.innerWidth / model.width, window.innerHeight / model.height) * 0.55;
+        model.scale.set(s);
+        model.position.set(window.innerWidth / 2, window.innerHeight * 0.45);
+    }
+});
+
+// Check WebGL
+var canvas = document.createElement('canvas');
+var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+if (!gl) {
+    showError('WebGL not supported on this device. Live2D requires WebGL.');
+} else if (initPixi()) {
+    loadModel();
+}
+</script>
+</body>
+</html>
