@@ -152,6 +152,12 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         buffer = CreateBuffer(path.GetRawString(), &size);
         LoadModel(buffer, size);
         DeleteBuffer(buffer, path.GetRawString());
+
+        if (_model == NULL)
+        {
+            LAppPal::PrintLog("[APP]failed to create model: %s", setting->GetModelFileName());
+            return;
+        }
     }
 
     //Expression
