@@ -33,15 +33,14 @@ public class Live2DNative {
         }
         try {
             InputStream is = sAssetManager.open(path);
-            byte[] data = new byte[is.available()];
-            int total = 0;
-            while (total < data.length) {
-                int read = is.read(data, total, data.length - total);
-                if (read < 0) break;
-                total += read;
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) {
+                out.write(buf, 0, n);
             }
             is.close();
-            return data;
+            return out.toByteArray();
         } catch (Exception e) {
             Log.e(TAG, "Failed to load: " + path, e);
             return null;

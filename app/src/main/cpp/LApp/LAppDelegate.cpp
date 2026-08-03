@@ -150,6 +150,8 @@ LAppDelegate::LAppDelegate():
     // Setup Cubism
     _cubismOption.LogFunction = LAppPal::PrintMessage;
     _cubismOption.LoggingLevel = LAppDefine::CubismLoggingLevel;
+    _cubismOption.LoadFileFunction = LAppPal::LoadFileAsBytes;
+    _cubismOption.ReleaseBytesFunction = LAppPal::ReleaseBytes;
     CubismFramework::CleanUp();
     CubismFramework::StartUp(&_cubismAllocator, &_cubismOption);
 }
