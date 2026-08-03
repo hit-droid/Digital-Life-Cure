@@ -13,6 +13,7 @@
 #include "LAppDefine.hpp"
 #include "LAppLive2DManager.hpp"
 #include "LAppTextureManager.hpp"
+#include "Rendering/OpenGL/CubismShader_OpenGLES2.hpp"
 #include "JniBridgeC.hpp"
 
 using namespace Csm;
@@ -73,6 +74,10 @@ void LAppDelegate::OnStop()
     LAppLive2DManager::ReleaseInstance();
 
     CubismFramework::Dispose();
+
+    // 同一プロセス内で再起動したとき、旧GLコンテキストのprogram IDが新コンテキストで無効になるため、
+    // シェーダ単体を破棄して次回StartUp時に再生成させる。
+    Rendering::CubismShader_OpenGLES2::DeleteInstance();
 }
 
 void LAppDelegate::OnDestroy()
