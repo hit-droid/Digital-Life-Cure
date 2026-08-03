@@ -675,6 +675,11 @@ void LAppModel::SetupTextures()
         texturePath = _modelHomeDir + texturePath;
 
         LAppTextureManager::TextureInfo* texture = LAppDelegate::GetInstance()->GetTextureManager()->CreateTextureFromPngFile(texturePath.GetRawString());
+        if (texture == NULL)
+        {
+            LAppPal::PrintLog("[APP]failed to bind model texture: %s", texturePath.GetRawString());
+            continue;
+        }
         const csmInt32 glTextueNumber = texture->id;
 
         //OpenGL
