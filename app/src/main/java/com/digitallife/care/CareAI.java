@@ -25,9 +25,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class CareAI {
 
+    private static CareAI instance;
+
+    /** 获取单例。首次调用需传入有效 Context。 */
+    public static synchronized CareAI getInstance(Context ctx) {
+        if (instance == null) {
+            instance = new CareAI(ctx.getApplicationContext());
+        }
+        return instance;
+    }
+
+    /** 销毁单例（清空历史） */
+    public static synchronized void resetInstance() {
+        if (instance != null) {
+            instance.clearHistory();
+            instance = null;
+        }
+    }
+
     public interface CareListener {
         void onDelta(String text);
-        void onToolCall(String toolName, JSONObject args);
+        void onToolCall(String toolName, JSONObject args, String toolCallId);
         void onDone(String fullText);
         void onError(String error);
     }
@@ -132,14 +150,30 @@ public class CareAI {
             }
 
             @Override
-            public void onToolCall(String name, JSONObject args) {
-                postToolCall(name, args);
+            public void onToolCall(String name, JSONObject args, String toolCallId) {
+                postToolCall(name, args, toolCallId);
                 try {
                     String result = tools.execute(name, args);
                     if (result.length() > 2000) {
                         result = result.substring(0, 2000) + "\n...（结果已截断）";
                     }
-                    history.add(new LLMClient.ChatMessage("tool", result));
+                    // 添加 assistant 消息（含 tool_calls）到历史
+                    JSONArray tcs = new JSONArray();
+                    JSONObject tc = new JSONObject();
+                    tc.put("id", toolCallId);
+                    tc.put("type", "function");
+                    JSONObject fn = new JSONObject();
+                    fn.put("name", name);
+                    fn.put("arguments", args.toString());
+                    tc.put("function", fn);
+                    tcs.put(tc);
+                    LLMClient.ChatMessage asstMsg = new LLMClient.ChatMessage("assistant", null);
+                    asstMsg.toolCalls = tcs;
+                    history.add(asstMsg);
+                    // 添加 tool 结果消息
+                    LLMClient.ChatMessage toolMsg = new LLMClient.ChatMessage("tool", result);
+                    toolMsg.toolCallId = toolCallId;
+                    history.add(toolMsg);
                 } catch (Exception e) {
                     history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + e.getMessage()));
                 }
@@ -198,9 +232,9 @@ public class CareAI {
         });
     }
 
-    private void postToolCall(final String name, final JSONObject args) {
+    private void postToolCall(final String name, final JSONObject args, final String toolCallId) {
         handler.post(() -> {
-            if (listener != null) listener.onToolCall(name, args);
+            if (listener != null) listener.onToolCall(name, args, toolCallId);
         });
     }
 

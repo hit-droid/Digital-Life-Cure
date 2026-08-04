@@ -401,7 +401,7 @@ public class AICore {
             }
 
             @Override
-            public void onToolCall(String name, JSONObject args) {
+            public void onToolCall(String name, JSONObject args, String toolCallId) {
                 if (gen != requestGen) return;
                 tools.execute(name, args, (tn, ta, res, err) -> {
                     if (err != null && out != null) out.onError(err);
@@ -526,7 +526,7 @@ public class AICore {
             }
 
             @Override
-            public void onToolCall(String name, JSONObject args) {
+            public void onToolCall(String name, JSONObject args, String toolCallId) {
                 if (gen != requestGen) return;
                 tools.execute(name, args, (tn, ta, res, err) -> {
                     if (out != null && err != null) out.onError(err);

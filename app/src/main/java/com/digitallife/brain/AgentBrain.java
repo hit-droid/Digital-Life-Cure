@@ -137,7 +137,7 @@ public class AgentBrain {
             }
 
             @Override
-            public void onToolCall(String name, JSONObject args) {
+            public void onToolCall(String name, JSONObject args, String toolCallId) {
                 executeToolAndContinue(name, args, msgs, extra);
             }
 

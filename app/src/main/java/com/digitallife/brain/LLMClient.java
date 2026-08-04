@@ -23,17 +23,44 @@ public class LLMClient {
 
     public interface StreamListener {
         void onDelta(String text);
-        void onToolCall(String name, JSONObject args);
+        void onToolCall(String name, JSONObject args, String toolCallId);
         void onDone(String fullText);
         void onError(String error);
     }
 
     public static class ChatMessage {
-        public final String role;
-        public final String content;
+        public String role;
+        public String content;
+        /** 工具调用 ID（tool 角色消息需要） */
+        public String toolCallId;
+        /** 工具调用列表（assistant 角色消息包含工具调用时使用） */
+        public JSONArray toolCalls;
+
         public ChatMessage(String role, String content) {
             this.role = role;
             this.content = content;
+        }
+
+        /** 序列化为 API 请求中的 JSON 消息对象 */
+        public JSONObject toJson() {
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("role", role);
+                if (content != null) {
+                    obj.put("content", content);
+                }
+                if ("tool".equals(role) && toolCallId != null) {
+                    obj.put("tool_call_id", toolCallId);
+                }
+                if ("assistant".equals(role) && toolCalls != null && toolCalls.length() > 0) {
+                    obj.put("tool_calls", toolCalls);
+                }
+                return obj;
+            } catch (Exception e) {
+                JSONObject fallback = new JSONObject();
+                try { fallback.put("role", role); fallback.put("content", content); } catch (Exception ignored) {}
+                return fallback;
+            }
         }
     }
 
@@ -93,7 +120,7 @@ public class LLMClient {
             sys.put("content", buildSystemPrompt(extraSystem));
             msgs.put(sys);
             for (ChatMessage m : messages) {
-                msgs.put(new JSONObject().put("role", m.role).put("content", m.content));
+                msgs.put(m.toJson());
             }
             body.put("messages", msgs);
 
@@ -128,6 +155,7 @@ public class LLMClient {
                 String toolName = null;
                 StringBuilder toolArgsBuf = new StringBuilder();
                 JSONObject toolArgs = null;
+                String toolCallId = null;
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
                 String line;
                 while ((line = reader.readLine()) != null && !cancelled) {
@@ -153,6 +181,10 @@ public class LLMClient {
                             JSONArray tcs = delta.getJSONArray("tool_calls");
                             for (int i = 0; i < tcs.length(); i++) {
                                 JSONObject tc = tcs.getJSONObject(i);
+                                // 捕获 tool_call_id
+                                if (tc.has("id") && !tc.isNull("id")) {
+                                    toolCallId = tc.optString("id");
+                                }
                                 JSONObject fn = tc.optJSONObject("function");
                                 if (fn == null) continue;
                                 if (fn.has("name") && !fn.isNull("name")) {
@@ -176,7 +208,7 @@ public class LLMClient {
                     } catch (Exception ignored) {
                         toolArgs = new JSONObject();
                     }
-                    listener.onToolCall(toolName, toolArgs);
+                    listener.onToolCall(toolName, toolArgs, toolCallId != null ? toolCallId : "");
                 }
                 listener.onDone(full.toString());
             } catch (Exception ex) {
@@ -196,7 +228,7 @@ public class LLMClient {
                 body.put("stream", false);
                 JSONArray msgs = new JSONArray();
                 msgs.put(new JSONObject().put("role", "system").put("content", buildSystemPrompt(extraSystem)));
-                for (ChatMessage m : messages) msgs.put(new JSONObject().put("role", m.role).put("content", m.content));
+                for (ChatMessage m : messages) msgs.put(m.toJson());
                 body.put("messages", msgs);
 
                 URL url = new URL(buildUrl(baseUrl));
