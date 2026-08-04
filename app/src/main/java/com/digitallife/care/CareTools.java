@@ -1,7 +1,6 @@
 package com.digitallife.care;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
 import com.digitallife.render.Live2DNative;
 
@@ -17,14 +16,15 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * 护理大脑工具集：模型管理、动作管理、工作流、定时任务。
- * 每个工具实现 Tool 接口，供 CareAI 的 LLM function calling 调用。
+ * 纯文件系统操作，不依赖 native 引擎是否启动。
  */
 public class CareTools {
 
@@ -32,8 +32,8 @@ public class CareTools {
     private static final String PREFS_SCHEDULE = "care_schedules";
 
     private final Context ctx;
-    private final SharedPreferences workflowPrefs;
-    private final SharedPreferences schedulePrefs;
+    private final android.content.SharedPreferences workflowPrefs;
+    private final android.content.SharedPreferences schedulePrefs;
 
     public CareTools(Context ctx) {
         this.ctx = ctx.getApplicationContext();
@@ -43,7 +43,6 @@ public class CareTools {
 
     // ============ 工具注册 ============
 
-    /** 返回所有工具的 JSON array（供 LLM tools 参数） */
     public JSONArray getToolSchemas() {
         JSONArray arr = new JSONArray();
         try {
@@ -89,7 +88,7 @@ public class CareTools {
         }
         params.put("properties", props);
         if (required.length > 0) {
-            params.put("required", new JSONArray(java.util.Arrays.asList(required)));
+            params.put("required", new JSONArray(Arrays.asList(required)));
         }
         func.put("parameters", params);
         schema.put("function", func);
@@ -98,7 +97,6 @@ public class CareTools {
 
     // ============ 工具执行 ============
 
-    /** 执行工具调用，返回结果文本 */
     public String execute(String toolName, JSONObject args) throws Exception {
         switch (toolName) {
             case "list_models": return listModels();
@@ -136,15 +134,28 @@ public class CareTools {
 
     // ============ 模型管理 ============
 
-    private String listModels() {
-        StringBuilder sb = new StringBuilder("已安装模型：\n");
-        int count = Live2DNative.nativeGetModelCount();
-        if (count == 0) {
-            return "尚未安装任何模型。";
+    /** 获取模型根目录，确保已初始化 */
+    private File getModelsDirSafe() {
+        if (Live2DNative.getModelsDir() == null) {
+            Live2DNative.init(ctx);
         }
-        for (int i = 0; i < count; i++) {
-            String dir = Live2DNative.nativeGetModelDirName(i);
-            sb.append("  ").append(i).append(". ").append(dir).append("\n");
+        return Live2DNative.getModelsDir();
+    }
+
+    /** 扫描模型目录（文件系统），不依赖 native 引擎 */
+    private String listModels() {
+        File modelsDir = getModelsDirSafe();
+        if (modelsDir == null) return "模型目录未初始化。";
+
+        File[] dirs = modelsDir.listFiles(File::isDirectory);
+        if (dirs == null || dirs.length == 0) {
+            // 也检查 assets 中有无模型
+            return "尚未安装任何模型。\n提示：可通过护理大脑聊天界面" +
+                   "上传模型 zip 文件，或先启动桌宠确保模型已注册。";
+        }
+        StringBuilder sb = new StringBuilder("已安装模型：\n");
+        for (int i = 0; i < dirs.length; i++) {
+            sb.append("  ").append(i + 1).append(". ").append(dirs[i].getName()).append("\n");
         }
         return sb.toString();
     }
@@ -156,53 +167,45 @@ public class CareTools {
             return "未找到模型目录: " + modelName;
         }
         StringBuilder report = new StringBuilder("模型检查报告: " + modelName + "\n");
-        // 检查 model3.json
         File[] modelJsons = modelDir.listFiles((d, n) -> n.endsWith(".model3.json") || n.endsWith(".model.json"));
         if (modelJsons == null || modelJsons.length == 0) {
-            report.append("  [缺失] 未找到 .model3.json 或 .model.json 文件\n");
+            report.append("  [缺失] 未找到 .model3.json 或 .model.json\n");
         } else {
-            report.append("  [OK] 模型定义文件: ").append(modelJsons[0].getName()).append("\n");
+            report.append("  [OK] 模型定义: ").append(modelJsons[0].getName()).append("\n");
         }
-        // 检查 moc3
         File[] mocs = modelDir.listFiles((d, n) -> n.endsWith(".moc3"));
         if (mocs == null || mocs.length == 0) {
             report.append("  [缺失] 未找到 .moc3 文件\n");
         } else {
-            report.append("  [OK] MOC 文件: ").append(mocs[0].getName()).append("\n");
+            report.append("  [OK] MOC: ").append(mocs[0].getName()).append("\n");
         }
-        // 检查纹理
         File[] textures = modelDir.listFiles((d, n) -> n.endsWith(".png") || n.endsWith(".jpg"));
-        if (textures == null || textures.length == 0) {
-            report.append("  [缺失] 未找到纹理文件\n");
-        } else {
-            report.append("  [OK] 纹理文件: ").append(textures.length).append(" 个\n");
-        }
-        // 检查动作
+        report.append("  ").append(textures != null && textures.length > 0 ? "[OK]" : "[缺失]")
+              .append(" 纹理: ").append(textures != null ? textures.length : 0).append(" 个\n");
         File[] motions = modelDir.listFiles((d, n) -> n.endsWith(".motion3.json"));
-        if (motions != null && motions.length > 0) {
-            report.append("  [OK] 动作文件: ").append(motions.length).append(" 个\n");
-        } else {
-            report.append("  [提示] 暂无动作文件\n");
-        }
-        // 检查表情
+        report.append("  ").append(motions != null && motions.length > 0 ? "[OK]" : "[提示]")
+              .append(" 动作: ").append(motions != null ? motions.length : 0).append(" 个\n");
         File[] expressions = modelDir.listFiles((d, n) -> n.endsWith(".exp3.json"));
-        if (expressions != null && expressions.length > 0) {
-            report.append("  [OK] 表情文件: ").append(expressions.length).append(" 个\n");
-        }
-        // 检查 physics3
+        report.append("  ").append(expressions != null && expressions.length > 0 ? "[OK]" : "[提示]")
+              .append(" 表情: ").append(expressions != null ? expressions.length : 0).append(" 个\n");
         File[] physics = modelDir.listFiles((d, n) -> n.endsWith(".physics3.json"));
-        if (physics != null && physics.length > 0) {
-            report.append("  [OK] 物理模拟文件: ").append(physics[0].getName()).append("\n");
-        }
+        report.append("  ").append(physics != null && physics.length > 0 ? "[OK]" : "[提示]")
+              .append(" 物理: ").append(physics != null && physics.length > 0 ? physics[0].getName() : "无").append("\n");
         return report.toString();
     }
 
     private String installModel(String zipPath) {
         if (zipPath.isEmpty()) return "请提供模型压缩包路径。";
-        // 模型安装由 ModelManager 处理，这里假设 zip 已保存到本地
-        // 简化：直接返回安装指引
-        return "模型安装需要从聊天界面发送 zip 文件。请在聊天中点击附件按钮，选择模型 zip 文件上传。\n" +
-               "收到文件后我会自动完成安装。";
+        File zipFile = new File(zipPath);
+        if (!zipFile.exists()) return "文件不存在: " + zipPath;
+        // 委托给 ModelManager 安装
+        android.net.Uri uri = android.net.Uri.fromFile(zipFile);
+        com.digitallife.model.ModelManager.ImportResult result =
+                com.digitallife.model.ModelManager.importFromUri(ctx, uri);
+        if (result.ok) {
+            return "模型安装成功: " + result.modelDir + "\n" + result.message;
+        }
+        return "安装失败: " + result.message;
     }
 
     private String repairModel(String modelName) {
@@ -212,30 +215,20 @@ public class CareTools {
             return "未找到模型目录: " + modelName;
         }
         StringBuilder report = new StringBuilder("开始修复模型: " + modelName + "\n");
-        boolean fixed = false;
-
-        // 检查并创建缺失的 model3.json
         File[] modelJsons = modelDir.listFiles((d, n) -> n.endsWith(".model3.json") || n.endsWith(".model.json"));
         if (modelJsons == null || modelJsons.length == 0) {
-            // 尝试生成最小 model3.json
             File mocFile = findFirstFile(modelDir, ".moc3");
             if (mocFile != null) {
                 String baseName = mocFile.getName().replace(".moc3", "");
                 createMinimalModel3Json(modelDir, baseName);
                 report.append("  [修复] 已生成最小 model3.json\n");
-                fixed = true;
+            } else {
+                report.append("  [失败] 未找到 .moc3 文件，无法生成模型定义\n");
             }
         }
-
-        // 检查纹理
         File[] textures = modelDir.listFiles((d, n) -> n.endsWith(".png") || n.endsWith(".jpg"));
         if (textures == null || textures.length == 0) {
-            // 创建占位纹理（通知用户）
             report.append("  [提示] 缺少纹理文件，请手动添加纹理图片\n");
-        }
-
-        if (!fixed) {
-            report.append("  模型文件完整，无需修复。\n");
         }
         return report.toString();
     }
@@ -257,11 +250,9 @@ public class CareTools {
         for (int i = 0; i < motions.length; i++) {
             File m = motions[i];
             String name = m.getName().replace(".motion3.json", "");
-            long size = m.length();
             sb.append("  ").append(i + 1).append(". ").append(name)
-              .append(" (").append(size / 1024).append("KB")
-              .append(", 修改于 ").append(sdf.format(new Date(m.lastModified())))
-              .append(")\n");
+              .append(" (").append(m.length() / 1024).append("KB")
+              .append(", ").append(sdf.format(new Date(m.lastModified()))).append(")\n");
         }
         return sb.toString();
     }
@@ -274,13 +265,11 @@ public class CareTools {
         if (modelDir == null || !modelDir.exists()) {
             return "未找到模型目录: " + modelName;
         }
-        String motionFileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
-        File motionFile = new File(modelDir, motionFileName);
+        String fileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
+        File motionFile = new File(modelDir, fileName);
         if (motionFile.exists()) {
-            return "动作文件已存在: " + motionFileName + "。如需修改请使用 edit_motion。";
+            return "动作文件已存在: " + fileName + "，如需修改请使用 edit_motion。";
         }
-
-        // 创建最小动作模板
         JSONObject motion = new JSONObject();
         motion.put("Version", 3);
         JSONObject meta = new JSONObject();
@@ -296,11 +285,10 @@ public class CareTools {
         motion.put("Meta", meta);
         motion.put("Curves", new JSONArray());
         motion.put("UserData", new JSONArray());
-
         try (OutputStream os = new FileOutputStream(motionFile)) {
             os.write(motion.toString(2).getBytes(StandardCharsets.UTF_8));
         }
-        return "已创建动作文件: " + motionFileName + "（时长 " + duration + " 秒，无曲线）。\n" +
+        return "已创建动作文件: " + fileName + "（时长 " + duration + " 秒）\n" +
                "可使用 edit_motion 添加参数曲线。";
     }
 
@@ -312,49 +300,42 @@ public class CareTools {
         if (modelDir == null || !modelDir.exists()) {
             return "未找到模型目录: " + modelName;
         }
-        String motionFileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
-        File motionFile = new File(modelDir, motionFileName);
+        String fileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
+        File motionFile = new File(modelDir, fileName);
         if (!motionFile.exists()) {
-            return "未找到动作文件: " + motionFileName + "。请先使用 generate_motion 创建。";
+            return "未找到动作文件: " + fileName + "。请先使用 generate_motion 创建。";
         }
-
-        // 读取现有 motion
         String content = readFile(motionFile);
         JSONObject motion = new JSONObject(content);
         JSONObject edits = new JSONObject(editsJson);
-
-        // 应用编辑：支持修改 duration、loop
         if (edits.has("duration")) {
             motion.getJSONObject("Meta").put("Duration", edits.getDouble("duration"));
         }
         if (edits.has("loop")) {
             motion.getJSONObject("Meta").put("Loop", edits.getBoolean("loop"));
         }
-        // 支持添加曲线（简化：添加单个参数曲线）
         if (edits.has("addCurve")) {
             JSONObject curveDef = edits.getJSONObject("addCurve");
             JSONObject curve = new JSONObject();
             curve.put("Target", curveDef.optString("target", "Parameter"));
             curve.put("Id", curveDef.optString("id", "ParamAngleX"));
             JSONArray segments = new JSONArray();
-            segments.put(0.0); // start time
-            segments.put(0.0); // start value
-            segments.put(edits.optDouble("duration", 4.0)); // end time
-            segments.put(curveDef.optDouble("endValue", 0.0)); // end value
+            segments.put(0.0);
+            segments.put(0.0);
+            segments.put(edits.optDouble("duration", 4.0));
+            segments.put(curveDef.optDouble("endValue", 0.0));
             curve.put("Segments", segments);
             motion.getJSONArray("Curves").put(curve);
-            // 更新 meta 计数
             JSONObject meta = motion.getJSONObject("Meta");
             meta.put("CurveCount", motion.getJSONArray("Curves").length());
             meta.put("TotalSegmentCount", meta.optInt("TotalSegmentCount", 0) + 2);
             meta.put("TotalPointCount", meta.optInt("TotalPointCount", 0) + 2);
         }
-
         try (OutputStream os = new FileOutputStream(motionFile)) {
             os.write(motion.toString(2).getBytes(StandardCharsets.UTF_8));
         }
         JSONObject meta = motion.getJSONObject("Meta");
-        return "已更新动作文件: " + motionFileName + "\n" +
+        return "已更新动作文件: " + fileName + "\n" +
                "  时长: " + meta.optDouble("Duration", 0) + "s\n" +
                "  循环: " + meta.optBoolean("Loop", false) + "\n" +
                "  曲线数: " + meta.optInt("CurveCount", 0);
@@ -368,15 +349,15 @@ public class CareTools {
         if (modelDir == null || !modelDir.exists()) {
             return "未找到模型目录: " + modelName;
         }
-        String motionFileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
-        File motionFile = new File(modelDir, motionFileName);
+        String fileName = motionName.endsWith(".motion3.json") ? motionName : motionName + ".motion3.json";
+        File motionFile = new File(modelDir, fileName);
         if (!motionFile.exists()) {
-            return "未找到动作文件: " + motionFileName;
+            return "未找到动作文件: " + fileName;
         }
         if (motionFile.delete()) {
-            return "已删除动作: " + motionFileName;
+            return "已删除动作: " + fileName;
         }
-        return "删除失败: " + motionFileName;
+        return "删除失败: " + fileName;
     }
 
     // ============ 工作流管理 ============
@@ -421,7 +402,6 @@ public class CareTools {
         JSONObject wf = new JSONObject(raw);
         JSONArray steps = wf.optJSONArray("steps");
         if (steps == null || steps.length() == 0) return "工作流「" + name + "」没有步骤。";
-
         StringBuilder result = new StringBuilder("执行工作流「" + name + "」：\n");
         for (int i = 0; i < steps.length(); i++) {
             JSONObject step = steps.getJSONObject(i);
@@ -431,7 +411,7 @@ public class CareTools {
             result.append("  步骤 ").append(i + 1).append(": ").append(tool).append(" → ");
             try {
                 String r = execute(tool, args);
-                result.append("成功\n").append("    结果: ").append(r).append("\n");
+                result.append("成功\n    结果: ").append(r).append("\n");
             } catch (Exception e) {
                 result.append("失败: ").append(e.getMessage()).append("\n");
                 return result.toString();
@@ -446,8 +426,8 @@ public class CareTools {
         if (name.isEmpty() || cronExpr.isEmpty() || workflowName.isEmpty()) {
             return "请填写任务名称、cron 表达式和工作流名称。";
         }
-        JSONObject task = new JSONObject();
         try {
+            JSONObject task = new JSONObject();
             task.put("name", name);
             task.put("cronExpr", cronExpr);
             task.put("workflowName", workflowName);
@@ -493,7 +473,6 @@ public class CareTools {
         }
         StringBuilder sb = new StringBuilder("模型信息: " + modelName + "\n");
         sb.append("  路径: ").append(modelDir.getAbsolutePath()).append("\n");
-        // 列出所有文件
         File[] allFiles = modelDir.listFiles();
         if (allFiles != null) {
             sb.append("  文件列表:\n");
@@ -502,17 +481,17 @@ public class CareTools {
                   .append(f.getName()).append(" (").append(f.length() / 1024).append("KB)\n");
             }
         }
-        // 读取 model3.json 内容
         File[] modelJsons = modelDir.listFiles((d, n) -> n.endsWith(".model3.json"));
         if (modelJsons != null && modelJsons.length > 0) {
             String content = readFile(modelJsons[0]);
-            sb.append("  model3.json 内容:\n");
-            // 格式化显示，最多 1000 字符
             try {
                 JSONObject json = new JSONObject(content);
-                sb.append("    ").append(json.toString(2).substring(0, Math.min(1000, json.toString(2).length()))).append("\n");
+                String pretty = json.toString(2);
+                sb.append("  model3.json 内容:\n    ")
+                  .append(pretty.substring(0, Math.min(1000, pretty.length()))).append("\n");
             } catch (Exception e) {
-                sb.append("    ").append(content.substring(0, Math.min(200, content.length()))).append("\n");
+                sb.append("  model3.json 内容:\n    ")
+                  .append(content.substring(0, Math.min(200, content.length()))).append("\n");
             }
         }
         return sb.toString();
@@ -521,14 +500,19 @@ public class CareTools {
     // ============ 工具方法 ============
 
     private File findModelDir(String modelName) {
-        File modelsDir = Live2DNative.getModelsDir();
+        File modelsDir = getModelsDirSafe();
         if (modelsDir == null) return null;
-        // 直接匹配
         File dir = new File(modelsDir, modelName);
         if (dir.exists() && dir.isDirectory()) return dir;
-        // 尝试资产目录
-        // 注意：资产目录不可写，但可读
-        // 在 assets 中查找
+        // 尝试模糊匹配
+        File[] dirs = modelsDir.listFiles(File::isDirectory);
+        if (dirs != null) {
+            for (File d : dirs) {
+                if (d.getName().toLowerCase(Locale.ROOT).contains(modelName.toLowerCase(Locale.ROOT))) {
+                    return d;
+                }
+            }
+        }
         return null;
     }
 
@@ -544,8 +528,9 @@ public class CareTools {
             model3.put("Version", 3);
             JSONObject fr = new JSONObject();
             fr.put("Moc", baseName + ".moc3");
-            fr.put("Textures", new JSONArray());
-            fr.getJSONArray("Textures").put(baseName + ".2048/texture_00.png");
+            JSONArray textures = new JSONArray();
+            textures.put(baseName + ".2048/texture_00.png");
+            fr.put("Textures", textures);
             model3.put("FileReferences", fr);
             model3.put("Groups", new JSONArray());
             File out = new File(modelDir, baseName + ".model3.json");

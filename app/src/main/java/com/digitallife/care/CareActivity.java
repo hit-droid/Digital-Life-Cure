@@ -42,37 +42,58 @@ public class CareActivity extends Activity {
     private ScrollView scrollView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView tvStatus;
+    private volatile boolean destroyed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        destroyed = false;
 
         careAI = new CareAI(this);
         careAI.setListener(new CareAI.CareListener() {
             @Override
             public void onDelta(String text) {
-                appendToLastMessage(text);
+                safeRun(() -> appendToLastMessage(text));
             }
 
             @Override
             public void onToolCall(String toolName, JSONObject args) {
-                addMessage("system", "调用工具: " + toolName + "(" + args.toString() + ")", Color.rgb(200, 180, 100));
+                safeRun(() -> addMessage("system", "调用工具: " + toolName + "(" + args.toString() + ")", Color.rgb(200, 180, 100)));
             }
 
             @Override
             public void onDone(String fullText) {
-                setStatus("就绪");
+                safeRun(() -> {
+                    setStatus("就绪");
+                    btnSend.setEnabled(true);
+                });
             }
 
             @Override
             public void onError(String error) {
-                addMessage("system", "错误: " + error, Color.rgb(220, 80, 80));
-                setStatus("出错");
+                safeRun(() -> {
+                    addMessage("system", "错误: " + error, Color.rgb(220, 80, 80));
+                    setStatus("出错");
+                    btnSend.setEnabled(true);
+                });
             }
         });
 
         buildUi();
         addMessage("system", "你好，我是护理大脑。\n我可以帮你管理 Live2D 模型、创建/修改动作、管理工作流和定时任务。\n发一个消息开始吧。", Color.rgb(130, 125, 150));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        destroyed = true;
+        if (careAI != null) careAI.cancel();
+    }
+
+    private void safeRun(Runnable r) {
+        handler.post(() -> {
+            if (!destroyed) r.run();
+        });
     }
 
     private void buildUi() {
@@ -181,8 +202,9 @@ public class CareActivity extends Activity {
 
     private void sendMessage() {
         String text = etInput.getText().toString().trim();
-        if (text.isEmpty()) return;
+        if (text.isEmpty() || btnSend.isEnabled() == false) return;
         etInput.setText("");
+        btnSend.setEnabled(false);
         addMessage("user", text, Color.rgb(60, 60, 80));
         setStatus("思考中…");
         careAI.sendMessage(text);
@@ -270,7 +292,9 @@ public class CareActivity extends Activity {
     }
 
     private void scrollToBottom() {
-        scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
+        if (scrollView != null) {
+            scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
+        }
     }
 
     private void setStatus(String text) {
