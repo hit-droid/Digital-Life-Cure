@@ -1,14 +1,15 @@
 package com.digitallife.brain;
 
+import com.digitallife.tools.ToolRegistry;
+
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 工具注册表：将角色的每一项能力暴露为 AI 可调用的「工具」。
- * 这是「AI 时时操控」的落地核心——LLM 通过 Function Calling 直接驱动
- * 表情/动作/说话/移动等表现层。
+ * 大脑内置工具集（表现层工具：表情/动作/说话/移动等）。
+ * 与全局 {@link ToolRegistry} 聚合：LLM 可见工具 = 内置工具 + 全局（MCP/插件）工具。
  */
 public class Tools {
 
@@ -117,10 +118,12 @@ public class Tools {
         }
     }
 
-    /** 生成 LLM 需要的 tools JSON 数组 */
+    /** 生成 LLM 需要的 tools JSON 数组（内置 + 全局 MCP/插件工具） */
     public org.json.JSONArray toJsonArray() {
         org.json.JSONArray arr = new org.json.JSONArray();
         for (JSONObject s : schemas) arr.put(s);
+        org.json.JSONArray global = ToolRegistry.getInstance().toJsonArray();
+        for (int i = 0; i < global.length(); i++) arr.put(global.opt(i));
         return arr;
     }
 
@@ -132,10 +135,12 @@ public class Tools {
             sb.append("- ").append(fn.optString("name"))
               .append(": ").append(fn.optString("description")).append("\n");
         }
+        String globalDesc = ToolRegistry.getInstance().describe();
+        if (!globalDesc.trim().isEmpty()) sb.append(globalDesc);
         return sb.toString();
     }
 
-    /** 执行一次工具调用 */
+    /** 执行一次工具调用（内置优先，未命中则委托全局注册表） */
     public void execute(String name, JSONObject args, Callback cb) {
         for (int i = 0; i < schemas.size(); i++) {
             if (schemas.get(i).optJSONObject("function").optString("name").equals(name)) {
@@ -148,6 +153,16 @@ public class Tools {
                 }
                 return;
             }
+        }
+        // 全局工具（MCP/插件）
+        if (ToolRegistry.getInstance().find(name) != null) {
+            String res = ToolRegistry.getInstance().execute(name, args, null);
+            if (res.startsWith("工具执行失败") || res.startsWith("未知工具")) {
+                cb.onResult(name, args, null, res);
+            } else {
+                cb.onResult(name, args, res, null);
+            }
+            return;
         }
         cb.onResult(name, args, "未知工具: " + name, null);
     }
