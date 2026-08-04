@@ -49,7 +49,7 @@ public class CareActivity extends Activity {
         super.onCreate(savedInstanceState);
         destroyed = false;
 
-        careAI = new CareAI(this);
+        careAI = CareAI.getInstance(this);
         careAI.setListener(new CareAI.CareListener() {
             @Override
             public void onDelta(String text) {
@@ -57,7 +57,7 @@ public class CareActivity extends Activity {
             }
 
             @Override
-            public void onToolCall(String toolName, JSONObject args) {
+            public void onToolCall(String toolName, JSONObject args, String toolCallId) {
                 safeRun(() -> addMessage("system", "调用工具: " + toolName + "(" + args.toString() + ")", Color.rgb(200, 180, 100)));
             }
 

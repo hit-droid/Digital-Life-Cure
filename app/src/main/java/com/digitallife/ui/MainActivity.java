@@ -37,6 +37,9 @@ import com.digitallife.util.Settings;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -48,6 +51,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "AI_PET";
     private static final int REQ_IMPORT_MODEL = 1001;
     private static final int REQ_INSTALL_PLUGIN = 1002;
+    private static final int REQ_CARE_ZIP = 1004;
     private Settings settings;
     private ApiManager apiManager;
     private com.digitallife.mcp.McpServerManager mcpManager;
@@ -124,13 +128,8 @@ public class MainActivity extends Activity {
         careSection = new ProfileSection(root, "护理大脑配置", ApiManager.SCOPE_CARE, "护理大脑");
         careSection.tvResult.setHint("护理大脑负责模型校验修复/动作创作，可与对话大脑使用不同 API。");
 
-        Button btnCareChat = button(root, "打开护理大脑对话界面");
-        btnCareChat.setBackgroundColor(Color.rgb(96, 74, 210));
-        btnCareChat.setTextColor(Color.WHITE);
-        btnCareChat.setOnClickListener(v -> {
-            Intent intent = new Intent(this, com.digitallife.care.CareActivity.class);
-            startActivity(intent);
-        });
+        // ---------- 2.1.1 护理大脑对话 ----------
+        buildCareChatSection(root);
 
         // ---------- 2.2 MCP 工具服务器 ----------
         buildMcpSection(root);
@@ -638,6 +637,34 @@ refreshModelList();
                     });
                 }
             }).start();
+        } else if (requestCode == REQ_CARE_ZIP && resultCode == RESULT_OK && data != null) {
+            final Uri uri = data.getData();
+            if (uri == null) return;
+            Toast.makeText(this, "正在处理文件…", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                try {
+                    File tempDir = new File(getCacheDir(), "care_uploads");
+                    tempDir.mkdirs();
+                    String fileName = "upload_" + System.currentTimeMillis() + ".zip";
+                    File tempFile = new File(tempDir, fileName);
+                    try (java.io.InputStream in = getContentResolver().openInputStream(uri);
+                         java.io.FileOutputStream out = new java.io.FileOutputStream(tempFile)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) != -1) out.write(buf);
+                    }
+                    final String path = tempFile.getAbsolutePath();
+                    handler.post(() -> {
+                        addCareMessage("user", "[上传文件: " + fileName + "]", Color.rgb(60, 60, 80));
+                        tvCareStatus.setText("处理中…");
+                        careAI.handleFile(fileName, path);
+                    });
+                } catch (Exception e) {
+                    handler.post(() -> {
+                        Toast.makeText(this, "文件处理失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    });
+                }
+            }).start();
         }
     }
 
@@ -837,6 +864,170 @@ refreshModelList();
         super.onDestroy();
     }
 
+    // ============ 护理大脑对话 ============
+
+    private LinearLayout careChatContainer;
+    private EditText etCareInput;
+    private Button btnCareSend, btnCareAttach, btnCareClear;
+    private ScrollView careChatScroll;
+    private TextView tvCareStatus;
+    private com.digitallife.care.CareAI careAI;
+
+    private void buildCareChatSection(LinearLayout root) {
+        careAI = com.digitallife.care.CareAI.getInstance(this);
+        LinearLayout cChat = card(root, "护理大脑对话");
+
+        careChatScroll = new ScrollView(this);
+        careChatScroll.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(280)));
+
+        careChatContainer = new LinearLayout(this);
+        careChatContainer.setOrientation(LinearLayout.VERTICAL);
+        careChatScroll.addView(careChatContainer, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        cChat.addView(careChatScroll, lp(0));
+
+        LinearLayout inputRow = new LinearLayout(this);
+        inputRow.setOrientation(LinearLayout.HORIZONTAL);
+        inputRow.setPadding(0, dp(4), 0, 0);
+
+        btnCareAttach = new Button(this);
+        btnCareAttach.setText("+");
+        btnCareAttach.setTextSize(16f);
+        btnCareAttach.setBackgroundColor(Color.TRANSPARENT);
+        btnCareAttach.setPadding(dp(8), dp(4), dp(8), dp(4));
+        btnCareAttach.setOnClickListener(v -> pickCareZip());
+        inputRow.addView(btnCareAttach, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        etCareInput = new EditText(this);
+        etCareInput.setHint("输入消息…");
+        etCareInput.setTextSize(13f);
+        etCareInput.setPadding(dp(6), dp(4), dp(6), dp(4));
+        etCareInput.setBackgroundResource(android.R.drawable.edit_text);
+        inputRow.addView(etCareInput, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        btnCareSend = new Button(this);
+        btnCareSend.setText("发送");
+        btnCareSend.setTextSize(13f);
+        btnCareSend.setTextColor(Color.WHITE);
+        btnCareSend.setBackgroundColor(Color.rgb(96, 74, 210));
+        btnCareSend.setPadding(dp(12), dp(4), dp(12), dp(4));
+        btnCareSend.setOnClickListener(v -> sendCareMessage());
+        inputRow.addView(btnCareSend, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        btnCareClear = new Button(this);
+        btnCareClear.setText("清空");
+        btnCareClear.setTextSize(12f);
+        btnCareClear.setTextColor(Color.rgb(150, 140, 160));
+        btnCareClear.setBackgroundColor(Color.TRANSPARENT);
+        btnCareClear.setPadding(dp(8), dp(4), dp(8), dp(4));
+        btnCareClear.setOnClickListener(v -> {
+            careAI.clearHistory();
+            careChatContainer.removeAllViews();
+            addCareMessage("system", "对话已清空。", Color.rgb(130, 125, 150));
+        });
+        inputRow.addView(btnCareClear, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        tvCareStatus = new TextView(this);
+        tvCareStatus.setText("就绪");
+        tvCareStatus.setTextSize(11f);
+        tvCareStatus.setTextColor(Color.rgb(130, 125, 150));
+        tvCareStatus.setPadding(dp(8), 0, 0, 0);
+        inputRow.addView(tvCareStatus, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        cChat.addView(inputRow, lp(0));
+
+        careAI.setListener(new com.digitallife.care.CareAI.CareListener() {
+            @Override
+            public void onDelta(String text) {
+                runOnUiThread(() -> appendCareLastMessage(text));
+            }
+
+            @Override
+            public void onToolCall(String toolName, org.json.JSONObject args, String toolCallId) {
+                runOnUiThread(() -> addCareMessage("system",
+                        "调用工具: " + toolName, Color.rgb(200, 180, 100)));
+            }
+
+            @Override
+            public void onDone(String fullText) {
+                runOnUiThread(() -> {
+                    tvCareStatus.setText("就绪");
+                    btnCareSend.setEnabled(true);
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    addCareMessage("system", "错误: " + error, Color.rgb(220, 80, 80));
+                    tvCareStatus.setText("出错");
+                    btnCareSend.setEnabled(true);
+                });
+            }
+        });
+
+        if (careChatContainer.getChildCount() == 0) {
+            addCareMessage("system", "护理大脑就绪，可以开始管理模型和动作了。", Color.rgb(130, 125, 150));
+        }
+    }
+
+    private void sendCareMessage() {
+        String text = etCareInput.getText().toString().trim();
+        if (text.isEmpty() || !btnCareSend.isEnabled()) return;
+        etCareInput.setText("");
+        btnCareSend.setEnabled(false);
+        addCareMessage("user", text, Color.rgb(60, 60, 80));
+        tvCareStatus.setText("思考中…");
+        careAI.sendMessage(text);
+    }
+
+    private void addCareMessage(String role, String text, int color) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13f);
+        tv.setLineSpacing(3f, 1f);
+        tv.setTextColor(color);
+        tv.setPadding(dp(10), dp(6), dp(10), dp(6));
+        tv.setAlpha(role.equals("user") ? 0.95f : 0.85f);
+        tv.setBackgroundResource(android.R.drawable.editbox_background);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(3), 0, dp(3));
+        careChatContainer.addView(tv, lp);
+        careChatScroll.post(() -> careChatScroll.fullScroll(ScrollView.FOCUS_DOWN));
+    }
+
+    private void appendCareLastMessage(String text) {
+        int count = careChatContainer.getChildCount();
+        if (count > 0) {
+            android.view.View last = careChatContainer.getChildAt(count - 1);
+            if (last instanceof TextView) {
+                TextView tv = (TextView) last;
+                tv.setText(tv.getText() + text);
+                careChatScroll.post(() -> careChatScroll.fullScroll(ScrollView.FOCUS_DOWN));
+            }
+        }
+    }
+
+    private void pickCareZip() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES,
+                    new String[]{"application/zip", "application/x-zip-compressed"});
+            startActivityForResult(i, REQ_CARE_ZIP);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /**
      * 一个大脑的 API Profile 编辑区。
      * 顶部下拉选择已有配置，下方表单编辑；支持保存/新建/删除/测试。
@@ -1020,5 +1211,5 @@ refreshModelList();
             }
             return null;
         }
-    }
 }
+    }
