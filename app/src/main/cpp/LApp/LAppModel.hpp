@@ -137,7 +137,7 @@ public:
      */
     bool IsExternalActionPlaying() const { return _externalActionPlaying.load(); }
 
-Csm::ICubismModelSetting* GetModelSetting() const { return _modelSetting; }
+    Csm::ICubismModelSetting* GetModelSetting() const { return _modelSetting; }
 
 protected:
     /**

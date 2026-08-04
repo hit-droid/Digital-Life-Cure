@@ -101,6 +101,9 @@ void LAppLive2DManager::OnTap(csmFloat32 x, csmFloat32 y)
 
     for (csmUint32 i = 0; i < _models.GetSize(); i++)
     {
+        if (_models[i]->GetModel() == NULL || !_models[i]->GetModelSetting()) {
+            continue;
+        }
         const csmBool hitHead = _models[i]->HitTest(HitAreaNameHead, x, y);
         const csmBool hitBody = _models[i]->HitTest(HitAreaNameBody, x, y);
 
