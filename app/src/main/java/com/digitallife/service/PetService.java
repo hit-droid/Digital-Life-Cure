@@ -167,6 +167,9 @@ public class PetService extends Service implements AICore.Output,
         aiCore.start();
         memory = aiCore.getMemory();
 
+        // 后台连接已保存的 MCP 工具服务器，连接成功后热刷新大脑工具集
+        connectMcpServersAsync();
+
         if (voiceEnabled) {
             tts = new TTSEngine(this, this);
             stt = new STTEngine(this, sttListener);
@@ -470,6 +473,23 @@ public class PetService extends Service implements AICore.Output,
         if (aiCore != null) {
             aiCore.applyConfig();
         }
+    }
+
+    private final com.digitallife.mcp.McpServerManager mcpManager = new com.digitallife.mcp.McpServerManager(this);
+
+    /** 后台连接已保存的 MCP 服务器；完成后热刷新大脑工具 */
+    private void connectMcpServersAsync() {
+        if (mcpManager.list().isEmpty()) return;
+        new Thread(() -> {
+            try {
+                mcpManager.connectAll();
+                // 工具已注册，通知大脑刷新工具集
+                android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                h.post(() -> reconfigureBrain());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
     }
 
     private void openSettings() {

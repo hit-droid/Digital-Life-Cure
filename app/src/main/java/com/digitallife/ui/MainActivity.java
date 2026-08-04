@@ -49,12 +49,13 @@ public class MainActivity extends Activity {
     private static final int REQ_IMPORT_MODEL = 1001;
     private Settings settings;
     private ApiManager apiManager;
+    private com.digitallife.mcp.McpServerManager mcpManager;
     private ProfileSection chatSection;   // 对话大脑
     private ProfileSection careSection;   // 护理大脑
     private Switch swVoice, swProactive;
     private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnClear, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck, btnImportModel;
     private EditText etChat, etPetName;
-    private TextView tvStatus, tvCrashPath, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus;
+    private TextView tvStatus, tvCrashPath, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus, tvMcpList;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -69,6 +70,7 @@ public class MainActivity extends Activity {
 
         settings = new Settings(this);
         apiManager = new ApiManager(this);
+        mcpManager = new com.digitallife.mcp.McpServerManager(this);
         // 迁移：旧版单配置尚未存入 Profile 时，以默认名导入
         if (apiManager.list(ApiManager.SCOPE_CHAT).isEmpty()
                 && settings.isConfigured()) {
@@ -118,6 +120,9 @@ public class MainActivity extends Activity {
         // ---------- 2.1 护理大脑配置（多 Profile） ----------
         careSection = new ProfileSection(root, "护理大脑配置", ApiManager.SCOPE_CARE, "护理大脑");
         careSection.tvResult.setHint("护理大脑负责模型校验修复/动作创作，可与对话大脑使用不同 API。");
+
+        // ---------- 2.2 MCP 工具服务器 ----------
+        buildMcpSection(root);
 
         // ---------- 3. 功能开关 ----------
         LinearLayout cSwitch = card(root, "功能设置");
@@ -336,6 +341,71 @@ public class MainActivity extends Activity {
     }
 
     // ================= 逻辑 =================
+    private void buildMcpSection(LinearLayout root) {
+        LinearLayout cMcp = card(root, "MCP 工具服务器（Smithery 等）");
+        TextView tvHint = new TextView(this);
+        tvHint.setText("连接外部 MCP 工具服务器（如你在 Smithery 注册的工具）。"
+                + "连接后其工具自动加入 AI 可用工具列表。\n"
+                + "Smithery 端点格式：https://server.smithery.ai/<namespace>/mcp");
+        tvHint.setTextSize(12f);
+        tvHint.setLineSpacing(2f, 1f);
+        tvHint.setTextColor(Color.rgb(130, 125, 150));
+        cMcp.addView(tvHint, lp(0));
+
+        EditText etName = input(cMcp, "服务器名称（如：我的天气工具）", "");
+        EditText etEndpoint = input(cMcp, "端点 URL（含 /mcp）", "");
+        EditText etKey = input(cMcp, "API Key（无则留空）", "");
+        etKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText etNs = input(cMcp, "命名空间前缀（如 weather，用于工具名分组）", "");
+
+        Button btnAdd = button(cMcp, "添加并连接服务器");
+        btnAdd.setOnClickListener(v -> {
+            String name = etName.getText().toString().trim();
+            String endpoint = etEndpoint.getText().toString().trim();
+            String key = etKey.getText().toString().trim();
+            String ns = etNs.getText().toString().trim();
+            if (name.isEmpty() || endpoint.isEmpty()) {
+                Toast.makeText(this, "请填写服务器名称和端点 URL", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            com.digitallife.mcp.McpServerManager.McpServerConfig cfg =
+                    new com.digitallife.mcp.McpServerManager.McpServerConfig(
+                            mcpManager.newId(), name, endpoint, key, ns);
+            mcpManager.save(cfg);
+            Toast.makeText(this, "配置已保存，桌宠下次启动时自动连接", Toast.LENGTH_SHORT).show();
+            etName.setText("");
+            etEndpoint.setText("");
+            etKey.setText("");
+            etNs.setText("");
+        });
+
+        tvMcpList = new TextView(this);
+        tvMcpList.setTextSize(12f);
+        tvMcpList.setLineSpacing(2f, 1f);
+        tvMcpList.setPadding(0, dp(6), 0, 0);
+        tvMcpList.setTextColor(Color.rgb(130, 125, 150));
+        cMcp.addView(tvMcpList, lp(0));
+        refreshMcpList();
+    }
+
+    private void refreshMcpList() {
+        if (tvMcpList == null) return;
+        List<com.digitallife.mcp.McpServerManager.McpServerConfig> list = mcpManager.list();
+        if (list.isEmpty()) {
+            tvMcpList.setText("尚未添加 MCP 服务器。");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("已保存：\n");
+        for (com.digitallife.mcp.McpServerManager.McpServerConfig c : list) {
+            sb.append("- ").append(c.name)
+              .append("  [").append(c.endpoint).append("]\n");
+        }
+        // 显示当前已注册的远程工具数量
+        int toolCount = com.digitallife.tools.ToolRegistry.getInstance().all().size();
+        sb.append("当前远程工具：").append(toolCount).append(" 个");
+        tvMcpList.setText(sb.toString());
+    }
+
     private void saveConfig() {
         // 角色名与功能开关为全局设置，独立于大脑 Profile
         settings.setPetName(etPetName != null ? etPetName.getText().toString().trim() : settings.getPetName());
@@ -669,6 +739,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         updateStatus();
+        refreshMcpList();
     }
 
     @Override
