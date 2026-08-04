@@ -31,17 +31,19 @@ public class McpServerManager {
         public String id;
         public String name;
         public String endpoint;
-        public String apiKey;
+        public String headerName;
+        public String headerValue;
         public String namespace;
 
         public McpServerConfig() {
         }
 
-        public McpServerConfig(String id, String name, String endpoint, String apiKey, String namespace) {
+        public McpServerConfig(String id, String name, String endpoint, String headerName, String headerValue, String namespace) {
             this.id = id;
             this.name = name;
             this.endpoint = endpoint;
-            this.apiKey = apiKey;
+            this.headerName = headerName;
+            this.headerValue = headerValue;
             this.namespace = namespace;
         }
     }
@@ -60,7 +62,8 @@ public class McpServerManager {
                         o.optString("id", UUID.randomUUID().toString()),
                         o.optString("name", ""),
                         o.optString("endpoint", ""),
-                        o.optString("apiKey", ""),
+                        o.optString("headerName", ""),
+                        o.optString("headerValue", ""),
                         o.optString("namespace", "")));
             }
         } catch (Exception ignored) {
@@ -98,7 +101,8 @@ public class McpServerManager {
                 o.put("id", c.id);
                 o.put("name", c.name == null ? "" : c.name);
                 o.put("endpoint", c.endpoint == null ? "" : c.endpoint);
-                o.put("apiKey", c.apiKey == null ? "" : c.apiKey);
+                o.put("headerName", c.headerName == null ? "" : c.headerName);
+                o.put("headerValue", c.headerValue == null ? "" : c.headerValue);
                 o.put("namespace", c.namespace == null ? "" : c.namespace);
                 arr.put(o);
             } catch (Exception ignored) {
@@ -114,7 +118,7 @@ public class McpServerManager {
      * 线程安全由调用方保证（建议后台线程）。
      */
     public void connect(McpServerConfig cfg) {
-        McpClient client = new McpClient(cfg.endpoint, cfg.apiKey);
+        McpClient client = new McpClient(cfg.endpoint, cfg.headerName, cfg.headerValue);
         client.connectAndRegister(cfg.namespace);
         connected.add(client);
     }

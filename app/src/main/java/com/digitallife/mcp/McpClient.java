@@ -28,13 +28,15 @@ public class McpClient {
         void onError(String error);
     }
 
-    private final String endpoint;
-    private final String apiKey;
+private final String endpoint;
+    private final String headerName;
+    private final String headerValue;
     private String sessionId;
 
-    public McpClient(String endpoint, String apiKey) {
+    public McpClient(String endpoint, String headerName, String headerValue) {
         this.endpoint = endpoint;
-        this.apiKey = apiKey == null ? "" : apiKey;
+        this.headerName = headerName;
+        this.headerValue = headerValue;
     }
 
     // ============ 握手与工具发现 ============
@@ -122,8 +124,8 @@ public class McpClient {
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("Accept", "application/json, text/event-stream");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        if (headerName != null && !headerName.isEmpty() && headerValue != null && !headerValue.isEmpty()) {
+            conn.setRequestProperty(headerName, headerValue);
         }
         if (sessionId != null) {
             conn.setRequestProperty("Mcp-Session-Id", sessionId);

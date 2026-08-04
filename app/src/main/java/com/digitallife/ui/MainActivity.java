@@ -47,15 +47,17 @@ public class MainActivity extends Activity {
 
     private static final String TAG = "AI_PET";
     private static final int REQ_IMPORT_MODEL = 1001;
+    private static final int REQ_INSTALL_PLUGIN = 1002;
     private Settings settings;
     private ApiManager apiManager;
     private com.digitallife.mcp.McpServerManager mcpManager;
+    private com.digitallife.plugin.PluginManager pluginManager;
     private ProfileSection chatSection;   // 对话大脑
     private ProfileSection careSection;   // 护理大脑
     private Switch swVoice, swProactive;
     private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnClear, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck, btnImportModel;
     private EditText etChat, etPetName;
-    private TextView tvStatus, tvCrashPath, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus, tvMcpList;
+    private TextView tvStatus, tvCrashPath, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus, tvMcpList, tvPluginList;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -71,6 +73,7 @@ public class MainActivity extends Activity {
         settings = new Settings(this);
         apiManager = new ApiManager(this);
         mcpManager = new com.digitallife.mcp.McpServerManager(this);
+        pluginManager = new com.digitallife.plugin.PluginManager(this);
         // 迁移：旧版单配置尚未存入 Profile 时，以默认名导入
         if (apiManager.list(ApiManager.SCOPE_CHAT).isEmpty()
                 && settings.isConfigured()) {
@@ -123,6 +126,9 @@ public class MainActivity extends Activity {
 
         // ---------- 2.2 MCP 工具服务器 ----------
         buildMcpSection(root);
+
+        // ---------- 2.3 插件安装器 ----------
+        buildPluginSection(root);
 
         // ---------- 3. 功能开关 ----------
         LinearLayout cSwitch = card(root, "功能设置");
@@ -354,15 +360,17 @@ public class MainActivity extends Activity {
 
         EditText etName = input(cMcp, "服务器名称（如：我的天气工具）", "");
         EditText etEndpoint = input(cMcp, "端点 URL（含 /mcp）", "");
-        EditText etKey = input(cMcp, "API Key（无则留空）", "");
-        etKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText etHeaderName = input(cMcp, "请求头名称（如 Authorization）", "");
+        EditText etHeaderValue = input(cMcp, "请求头值（如 Bearer sk-xxx）", "");
+        etHeaderValue.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         EditText etNs = input(cMcp, "命名空间前缀（如 weather，用于工具名分组）", "");
 
         Button btnAdd = button(cMcp, "添加并连接服务器");
         btnAdd.setOnClickListener(v -> {
             String name = etName.getText().toString().trim();
             String endpoint = etEndpoint.getText().toString().trim();
-            String key = etKey.getText().toString().trim();
+            String headerName = etHeaderName.getText().toString().trim();
+            String headerValue = etHeaderValue.getText().toString().trim();
             String ns = etNs.getText().toString().trim();
             if (name.isEmpty() || endpoint.isEmpty()) {
                 Toast.makeText(this, "请填写服务器名称和端点 URL", Toast.LENGTH_SHORT).show();
@@ -370,12 +378,13 @@ public class MainActivity extends Activity {
             }
             com.digitallife.mcp.McpServerManager.McpServerConfig cfg =
                     new com.digitallife.mcp.McpServerManager.McpServerConfig(
-                            mcpManager.newId(), name, endpoint, key, ns);
+                            mcpManager.newId(), name, endpoint, headerName, headerValue, ns);
             mcpManager.save(cfg);
             Toast.makeText(this, "配置已保存，桌宠下次启动时自动连接", Toast.LENGTH_SHORT).show();
             etName.setText("");
             etEndpoint.setText("");
-            etKey.setText("");
+            etHeaderName.setText("");
+            etHeaderValue.setText("");
             etNs.setText("");
         });
 
@@ -404,6 +413,56 @@ public class MainActivity extends Activity {
         int toolCount = com.digitallife.tools.ToolRegistry.getInstance().all().size();
         sb.append("当前远程工具：").append(toolCount).append(" 个");
         tvMcpList.setText(sb.toString());
+    }
+
+    private void buildPluginSection(LinearLayout root) {
+        LinearLayout cPlugin = card(root, "插件安装器（工具包）");
+        TextView tvHint = new TextView(this);
+        tvHint.setText("安装声明式插件 zip 包，自动注册工具到 AI 可用工具列表。"
+                + "插件包内需包含 plugin.json 描述工具集。");
+        tvHint.setTextSize(12f);
+        tvHint.setLineSpacing(2f, 1f);
+        tvHint.setTextColor(Color.rgb(130, 125, 150));
+        cPlugin.addView(tvHint, lp(0));
+
+        Button btnInstall = button(cPlugin, "选择插件 zip 安装");
+        btnInstall.setOnClickListener(v -> pickPluginZip());
+
+        tvPluginList = new TextView(this);
+        tvPluginList.setTextSize(12f);
+        tvPluginList.setLineSpacing(2f, 1f);
+        tvPluginList.setPadding(0, dp(6), 0, 0);
+        tvPluginList.setTextColor(Color.rgb(130, 125, 150));
+        cPlugin.addView(tvPluginList, lp(0));
+        refreshPluginList();
+    }
+
+    private void refreshPluginList() {
+        if (tvPluginList == null) return;
+        List<com.digitallife.plugin.PluginManager.InstalledPlugin> list = pluginManager.listInstalled();
+        if (list.isEmpty()) {
+            tvPluginList.setText("尚未安装插件。");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("已安装：\n");
+        for (com.digitallife.plugin.PluginManager.InstalledPlugin p : list) {
+            sb.append("✦ ").append(p.name)
+              .append(" v").append(p.version)
+              .append(" (").append(p.toolCount).append(" 工具)\n");
+        }
+        tvPluginList.setText(sb.toString());
+    }
+
+    private void pickPluginZip() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed"});
+            startActivityForResult(i, REQ_INSTALL_PLUGIN);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void saveConfig() {
@@ -546,8 +605,30 @@ public class MainActivity extends Activity {
                         tvModelStatus.setTextColor(Color.rgb(200, 70, 70));
                         tvModelStatus.setText(result.message);
                     }
-                    refreshModelList();
+refreshModelList();
                 });
+            }).start();
+        } else if (requestCode == REQ_INSTALL_PLUGIN && resultCode == RESULT_OK && data != null) {
+            final Uri uri = data.getData();
+            if (uri == null) return;
+            Toast.makeText(this, "正在安装插件…", Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                try {
+                    com.digitallife.plugin.PluginManager.InstallResult r =
+                            pluginManager.installFromStream(getContentResolver().openInputStream(uri));
+                    handler.post(() -> {
+                        if (r.ok) {
+                            Toast.makeText(this, r.message, Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(this, "安装失败: " + r.message, Toast.LENGTH_LONG).show();
+                        }
+                        refreshPluginList();
+                    });
+                } catch (Exception e) {
+                    handler.post(() -> {
+                        Toast.makeText(this, "安装异常: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    });
+                }
             }).start();
         }
     }
