@@ -310,7 +310,9 @@ extern "C"
     {
         const char* group = env->GetStringUTFChars(groupName, NULL);
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
-        if (model) model->StartMotion(group, index, priority);
+        if (model && model->GetModelSetting() && model->GetModelSetting()->GetMotionCount(group) > index) {
+            model->StartMotion(group, index, priority);
+        }
         env->ReleaseStringUTFChars(groupName, group);
     }
 
