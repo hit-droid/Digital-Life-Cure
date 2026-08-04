@@ -90,10 +90,10 @@ public class CareAI {
     /** 发送用户消息 */
     public void sendMessage(String text) {
         history.add(new LLMClient.ChatMessage("user", text));
-        startConversation();
+        if (running.compareAndSet(false, true)) {
+            pool.execute(this::converse);
+        }
     }
-
-    /** 处理文件上传（如模型 zip） */
     public void handleFile(String fileName, String filePath) {
         String msg = "我上传了一个文件: " + fileName + "\n路径: " + filePath;
         if (fileName.endsWith(".zip")) {
@@ -102,78 +102,83 @@ public class CareAI {
         sendMessage(msg);
     }
 
-    private void startConversation() {
-        if (running.getAndSet(true)) return;
-        pool.execute(this::runLLMLoop);
+    /**
+     * 对话循环：通过回调链持续调用 LLM，直到 LLM 返回文本内容。
+     * 不在循环中等待，而是每次 LLM 完成后由 onDone/onToolCall 触发下一步。
+     */
+    private void converse() {
+        cancelled = false;
+        doConverse();
     }
 
-    /** LLM 对话循环：反复调用直到 LLM 返回文本内容（而非工具调用） */
-    private void runLLMLoop() {
-        try {
-            while (true) {
-                if (cancelled) break;
-                // 构建消息列表（system + 最近历史）
-                List<LLMClient.ChatMessage> messages = new ArrayList<>();
-                messages.add(new LLMClient.ChatMessage("system", SYSTEM_PROMPT));
-                int start = Math.max(0, history.size() - 30);
-                for (int i = start; i < history.size(); i++) {
-                    messages.add(history.get(i));
-                }
-
-                final boolean[] toolCalled = {false};
-                final String[] errorResult = {null};
-
-                llm.chatStream(messages, null, new LLMClient.StreamListener() {
-                    @Override
-                    public void onDelta(String text) {
-                        postDelta(text);
-                    }
-
-                    @Override
-                    public void onToolCall(String name, JSONObject args) {
-                        toolCalled[0] = true;
-                        postToolCall(name, args);
-                        try {
-                            String result = tools.execute(name, args);
-                            // 截断过长结果
-                            if (result.length() > 2000) {
-                                result = result.substring(0, 2000) + "\n...（结果已截断）";
-                            }
-                            history.add(new LLMClient.ChatMessage("tool", result));
-                        } catch (Exception e) {
-                            String err = "工具执行失败: " + e.getMessage();
-                            history.add(new LLMClient.ChatMessage("tool", err));
-                        }
-                    }
-
-                    @Override
-                    public void onDone(String fullText) {
-                        if (!fullText.isEmpty()) {
-                            history.add(new LLMClient.ChatMessage("assistant", fullText));
-                            postDone(fullText);
-                        }
-                    }
-
-                    @Override
-                    public void onError(String error) {
-                        errorResult[0] = error;
-                    }
-                });
-
-                // chatStream 是同步阻塞调用，执行到这里表示一次 LLM 调用完成
-                if (errorResult[0] != null) {
-                    postError(errorResult[0]);
-                    break;
-                }
-                // 如果没有工具调用，说明 LLM 已给出文本回复，结束循环
-                if (!toolCalled[0]) break;
-                // 有工具调用，继续循环让 LLM 基于工具结果生成回复
-            }
-        } catch (Exception e) {
-            postError("对话异常: " + e.getMessage());
-        } finally {
+    private void doConverse() {
+        if (cancelled) {
             running.set(false);
+            return;
         }
+
+        // 构建消息列表
+        List<LLMClient.ChatMessage> messages = new ArrayList<>();
+        messages.add(new LLMClient.ChatMessage("system", SYSTEM_PROMPT));
+        int start = Math.max(0, history.size() - 30);
+        for (int i = start; i < history.size(); i++) {
+            messages.add(history.get(i));
+        }
+
+        llm.chatStream(messages, null, new LLMClient.StreamListener() {
+            @Override
+            public void onDelta(String text) {
+                postDelta(text);
+            }
+
+            @Override
+            public void onToolCall(String name, JSONObject args) {
+                postToolCall(name, args);
+                try {
+                    String result = tools.execute(name, args);
+                    if (result.length() > 2000) {
+                        result = result.substring(0, 2000) + "\n...（结果已截断）";
+                    }
+                    history.add(new LLMClient.ChatMessage("tool", result));
+                } catch (Exception e) {
+                    history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + e.getMessage()));
+                }
+            }
+
+            @Override
+            public void onDone(String fullText) {
+                if (!fullText.isEmpty()) {
+                    history.add(new LLMClient.ChatMessage("assistant", fullText));
+                    postDone(fullText);
+                }
+                // 判断是否继续对话
+                boolean shouldContinue = false;
+                if (fullText.isEmpty()) {
+                    // 空文本：检查是否有工具调用结果需要继续
+                    if (!history.isEmpty() && "tool".equals(history.get(history.size() - 1).role)) {
+                        shouldContinue = true;
+                    }
+                } else {
+                    // 有文本回复后，检查是否有未处理的新用户消息
+                    for (int i = history.size() - 1; i >= 0; i--) {
+                        String role = history.get(i).role;
+                        if ("assistant".equals(role) && i != history.size() - 1) break;
+                        if ("user".equals(role)) { shouldContinue = true; break; }
+                    }
+                }
+                if (shouldContinue) {
+                    doConverse();
+                } else {
+                    running.set(false);
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                postError(error);
+                running.set(false);
+            }
+        });
     }
 
     public void cancel() {
@@ -199,9 +204,9 @@ public class CareAI {
         });
     }
 
-    private void postDone(final String text) {
+    private void postDone(final String fullText) {
         handler.post(() -> {
-            if (listener != null) listener.onDone(text);
+            if (listener != null) listener.onDone(fullText);
         });
     }
 
