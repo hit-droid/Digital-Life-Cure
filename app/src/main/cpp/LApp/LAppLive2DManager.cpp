@@ -110,7 +110,9 @@ void LAppLive2DManager::OnTap(csmFloat32 x, csmFloat32 y)
             {
                 LAppPal::PrintLog("[APP]hit area: [%s]", HitAreaNameHead);
             }
-            _models[i]->SetRandomExpression();
+            if (_models[i]->GetModelSetting() && _models[i]->GetModelSetting()->GetExpressionCount() > 0) {
+                _models[i]->SetRandomExpression();
+            }
             continue;
         }
 
@@ -120,11 +122,15 @@ void LAppLive2DManager::OnTap(csmFloat32 x, csmFloat32 y)
             {
                 LAppPal::PrintLog("[APP]hit area: [%s]", HitAreaNameBody);
             }
-            _models[i]->StartRandomMotion(MotionGroupTapBody, PriorityNormal, FinishedMotion);
+            if (_models[i]->GetModelSetting() && _models[i]->GetModelSetting()->GetMotionCount(MotionGroupTapBody) > 0) {
+                _models[i]->StartRandomMotion(MotionGroupTapBody, PriorityNormal, FinishedMotion);
+            }
             continue;
         }
 
-        _models[i]->StartRandomMotion(MotionGroupTapBody, PriorityNormal, FinishedMotion);
+        if (_models[i]->GetModelSetting() && _models[i]->GetModelSetting()->GetMotionCount(MotionGroupTapBody) > 0) {
+            _models[i]->StartRandomMotion(MotionGroupTapBody, PriorityNormal, FinishedMotion);
+        }
     }
 }
 
