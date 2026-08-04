@@ -1,0 +1,24 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "紫色哥特剪刀妹妹 免费版.moc3",
+		"Textures": [
+			"紫色哥特剪刀妹妹 免费版.4096/texture_00.png",
+			"紫色哥特剪刀妹妹 免费版.4096/texture_01.png"
+		],
+		"Physics": "紫色哥特剪刀妹妹 免费版.physics3.json",
+		"DisplayInfo": "紫色哥特剪刀妹妹 免费版.cdi3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		},
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": []
+		}
+	]
+}
