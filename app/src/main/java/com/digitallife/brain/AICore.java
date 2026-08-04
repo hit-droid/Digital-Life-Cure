@@ -59,7 +59,7 @@ public class AICore {
     private final MemoryStore memory;
     private final EmotionState emotion;
     private final Tools tools = new Tools();
-    private final LLMClient llm;
+    private LLMClient llm;
     private final BehaviorStyle style = new BehaviorStyle();
 
     private Output out;
@@ -148,6 +148,16 @@ public class AICore {
         cancelled = true;
         llm.cancel();
         requestGen++;
+    }
+
+    /** 热切换 LLM 配置：按当前 Settings 重建客户端，无需重启桌宠 */
+    public void applyConfig() {
+        cancelled = true;
+        llm.cancel();
+        requestGen++;
+        llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
+        llm.setTools(tools.toJsonArray());
+        cancelled = false;
     }
 
     // ============ 用户事件 ============
