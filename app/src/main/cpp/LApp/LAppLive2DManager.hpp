@@ -91,10 +91,33 @@ public:
     Csm::csmInt32 GetSceneIndex() { return _sceneIndex; }
 
     /**
-     * @brief   モデル個数を得る
-     * @return  所持モデル個数
-     */
+    * @brief   モデル個数を得る
+    * @return  所持モデル個数
+    */
     Csm::csmUint32 GetModelNum() const;
+
+    /**
+    * @brief   選択可能なモデルディレクトリ総数を得る（内蔵 + インポート）
+    */
+    static Csm::csmInt32 GetModelDirCount();
+
+    /**
+    * @brief   インデックスに対応するモデルディレクトリ名を得る
+    */
+    static const Csm::csmChar* GetModelDirName(Csm::csmInt32 index);
+
+    /**
+    * @brief   インデックスに対応する model.json / model3.json のファイル名（拡張子除く）
+    *          内蔵モデルで ModelJsonName が NULL の場合は NULL を返す
+    */
+    static const Csm::csmChar* GetModelJsonBase(Csm::csmInt32 index);
+
+    /**
+    * @brief   インポートしたモデルディレクトリを動的に追加登録する
+    * @param[in]   dir        モデルディレクトリ名（内部ストレージ files/models/ 直下）
+    * @param[in]   jsonBase   model.json / model3.json のファイル名（拡張子除く）。NULL なら dir と同名扱い
+    */
+    static void AddModelDir(const Csm::csmChar* dir, const Csm::csmChar* jsonBase);
 
     /**
      * @brief   viewMatrixをセットする

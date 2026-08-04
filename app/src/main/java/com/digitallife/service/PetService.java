@@ -21,6 +21,7 @@ import android.view.WindowManager;
 import com.digitallife.R;
 import com.digitallife.brain.AICore;
 import com.digitallife.brain.Heartbeat;
+import com.digitallife.model.ModelManager;
 import com.digitallife.util.CrashHandler;
 import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
@@ -132,6 +133,8 @@ public class PetService extends Service implements AICore.Output,
 
         overlayView = new PetOverlayView(this, this);
         Live2DNative.init(this);
+        // 恢复上次导入的模型到 C++ 动态模型列表
+        ModelManager.registerImportedModels(this);
         overlayParams = new WindowManager.LayoutParams(
                 overlayW, overlayH,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O

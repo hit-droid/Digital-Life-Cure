@@ -7,6 +7,7 @@
 
 #include "LAppLive2DManager.hpp"
 #include <string>
+#include <vector>
 #include <GLES2/gl2.h>
 #include <Rendering/CubismRenderer.hpp>
 #include "LAppPal.hpp"
@@ -21,6 +22,10 @@ using namespace std;
 
 namespace {
     LAppLive2DManager* s_instance = NULL;
+
+    // インポートしたモデルディレクトリの動的リスト（LAppDefine::ModelDir の後ろに連結される）
+    std::vector<std::string> g_extraModelDirs;
+    std::vector<std::string> g_extraModelJsonBases;
 
     void FinishedMotion(ACubismMotion* self)
     {
@@ -189,18 +194,26 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
         LAppPal::PrintLog("[APP]model index: %d", _sceneIndex);
     }
 
-    // ModelDir[]に保持したディレクトリ名から
-    // model3.jsonのパスを決定する.
+    // ModelDir[]（内蔵）+ 動的追加（インポート）からモデルディレクトリ名を決定する.
     // ディレクトリ名とmodel3.jsonの名前を一致させておくこと.
-    std::string model = ModelDir[index];
+    const csmChar* dirName = GetModelDirName(index);
+    const csmChar* jsonBasePtr = GetModelJsonBase(index);
+    if (dirName == NULL)
+    {
+        LAppPal::PrintLog("[APP]model index out of range: %d", _sceneIndex);
+        ReleaseAllModel();
+        return;
+    }
+
+    std::string model = dirName;
     std::string modelPath = ResourcesPath + model + "/";
 
     // 使用 ModelJsonName（如果为 NULL 则使用 ModelDir）
     std::string modelBase;
-    if (ModelJsonName[index] != NULL) {
-        modelBase = ModelJsonName[index];
+    if (jsonBasePtr != NULL && jsonBasePtr[0] != '\0') {
+        modelBase = jsonBasePtr;
     } else {
-        modelBase = ModelDir[index];
+        modelBase = model;
     }
 
     // 优先尝试 .model.json，不存在则尝试 .model3.json
@@ -256,6 +269,46 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
 csmUint32 LAppLive2DManager::GetModelNum() const
 {
     return _models.GetSize();
+}
+
+csmInt32 LAppLive2DManager::GetModelDirCount()
+{
+    return static_cast<csmInt32>(ModelDirSize + g_extraModelDirs.size());
+}
+
+const csmChar* LAppLive2DManager::GetModelDirName(csmInt32 index)
+{
+    if (index < 0) return NULL;
+    if (index < ModelDirSize) return ModelDir[index];
+    csmUint32 extra = static_cast<csmUint32>(index - ModelDirSize);
+    if (extra < g_extraModelDirs.size()) return g_extraModelDirs[extra].c_str();
+    return NULL;
+}
+
+const csmChar* LAppLive2DManager::GetModelJsonBase(csmInt32 index)
+{
+    if (index < 0) return NULL;
+    if (index < ModelDirSize) return ModelJsonName[index];
+    csmUint32 extra = static_cast<csmUint32>(index - ModelDirSize);
+    if (extra < g_extraModelDirs.size()) {
+        // jsonBase 未指定时与目录同名
+        if (g_extraModelJsonBases[extra].empty()) return g_extraModelDirs[extra].c_str();
+        return g_extraModelJsonBases[extra].c_str();
+    }
+    return NULL;
+}
+
+void LAppLive2DManager::AddModelDir(const csmChar* dir, const csmChar* jsonBase)
+{
+    if (dir == NULL || dir[0] == '\0') return;
+    std::string d(dir);
+    for (size_t i = 0; i < g_extraModelDirs.size(); i++) {
+        if (g_extraModelDirs[i] == d) return;  // 去重
+    }
+    g_extraModelDirs.push_back(d);
+    g_extraModelJsonBases.push_back(jsonBase != NULL ? std::string(jsonBase) : "");
+    LAppPal::PrintLog("[APP]imported model registered: %s (json=%s)", d.c_str(),
+                      g_extraModelJsonBases.back().c_str());
 }
 
 void LAppLive2DManager::SetViewMatrix(CubismMatrix44* m)

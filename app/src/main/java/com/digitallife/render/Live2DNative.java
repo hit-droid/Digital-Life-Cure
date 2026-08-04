@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.util.Log;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 
 /**
@@ -18,32 +20,58 @@ public class Live2DNative {
     }
 
     private static AssetManager sAssetManager;
+    /** 内部导入模型根目录：files/models/，C++ 加载路径在此目录下回退 */
+    private static File sModelsDir;
 
     public static void init(Context context) {
         sAssetManager = context.getAssets();
+        sModelsDir = new File(context.getFilesDir(), "models");
+    }
+
+    /** 内部导入模型根目录（ModelManager 使用） */
+    public static File getModelsDir() {
+        return sModelsDir;
     }
 
     /**
-     * Called from C++ side to load a file from assets.
+     * Called from C++ side to load a model file.
+     * 优先从 assets 读取；assets 中不存在时回退到内部导入模型目录
+     * files/models/<path>，从而让导入模型走同一条加载链路。
      */
     public static byte[] loadFile(String path) {
-        if (sAssetManager == null) {
-            Log.e(TAG, "AssetManager not initialized");
-            return null;
+        if (path == null) return null;
+        if (sAssetManager != null) {
+            try {
+                InputStream is = sAssetManager.open(path);
+                return readAll(is);
+            } catch (Exception ignored) {
+                // assets 无此文件，回退到内部目录
+            }
         }
+        if (sModelsDir != null) {
+            try {
+                File f = new File(sModelsDir, path);
+                if (f.isFile()) {
+                    return readAll(new FileInputStream(f));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to load internal model file: " + path, e);
+            }
+        }
+        return null;
+    }
+
+    private static byte[] readAll(InputStream is) throws Exception {
         try {
-            InputStream is = sAssetManager.open(path);
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
             while ((n = is.read(buf)) > 0) {
                 out.write(buf, 0, n);
             }
-            is.close();
             return out.toByteArray();
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load: " + path, e);
-            return null;
+        } finally {
+            try { is.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -80,4 +108,6 @@ public class Live2DNative {
     public static native void nativeChangeScene(int index);
     public static native int nativeGetModelCount();
     public static native String nativeGetModelDirName(int index);
+    /** 运行时注册导入的模型目录（位于 files/models/ 下） */
+    public static native void nativeAddModelDir(String dir, String jsonBase);
 }
