@@ -1,4 +1,4 @@
-package com.maiden.pet.memory;
+package com.digitallife.util;
 
 import android.content.ContentValues;
 import android.content.Context;

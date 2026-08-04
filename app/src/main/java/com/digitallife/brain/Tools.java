@@ -1,4 +1,4 @@
-package com.maiden.pet.brain;
+package com.digitallife.brain;
 
 import org.json.JSONObject;
 

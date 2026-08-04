@@ -1,4 +1,4 @@
-package com.maiden.pet;
+package com.digitallife.util;
 
 import android.content.Context;
 import android.util.Log;
@@ -14,7 +14,7 @@ import java.util.Locale;
 public class CrashHandler implements Thread.UncaughtExceptionHandler {
 
     private static final String TAG = "CrashHandler";
-    private static final String CRASH_FILE = "maiden_crash.log";
+    private static final String CRASH_FILE = "digitallife_crash.log";
     private static String sCrashPath;
     private static boolean sInited = false;
     private final Thread.UncaughtExceptionHandler defaultHandler;

@@ -184,7 +184,7 @@ jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)
         return JNI_ERR;
     }
 
-    jclass clazz = env->FindClass("com/maiden/pet/render/Live2DNative");
+    jclass clazz = env->FindClass("com/digitallife/render/Live2DNative");
     g_JniBridgeJavaClass = reinterpret_cast<jclass>(env->NewGlobalRef(clazz));
     g_LoadFileMethodId = env->GetStaticMethodID(g_JniBridgeJavaClass, "loadFile", "(Ljava/lang/String;)[B");
     g_MoveTaskToBackMethodId = env->GetStaticMethodID(g_JniBridgeJavaClass, "moveTaskToBack", "()V");
@@ -227,7 +227,7 @@ void JniBridgeC::MoveTaskToBack()
 extern "C"
 {
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_CrashHandler_nativeInit(JNIEnv *env, jclass type, jstring crashPath)
+    Java_com_digitallife_util_CrashHandler_nativeInit(JNIEnv *env, jclass type, jstring crashPath)
     {
         const char* path = env->GetStringUTFChars(crashPath, NULL);
         strncpy(g_crashPath, path, sizeof(g_crashPath) - 1);
@@ -237,67 +237,67 @@ extern "C"
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnStart(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnStart(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->OnStart();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnPause(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnPause(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->OnPause();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnStop(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnStop(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->OnStop();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnDestroy(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnDestroy(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->OnDestroy();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnSurfaceCreated(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnSurfaceCreated(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->OnSurfaceCreate();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnSurfaceChanged(JNIEnv *env, jclass type, jint width, jint height)
+    Java_com_digitallife_render_Live2DNative_nativeOnSurfaceChanged(JNIEnv *env, jclass type, jint width, jint height)
     {
         LAppDelegate::GetInstance()->OnSurfaceChanged(width, height);
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnDrawFrame(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeOnDrawFrame(JNIEnv *env, jclass type)
     {
         LAppDelegate::GetInstance()->Run();
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnTouchesBegan(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
+    Java_com_digitallife_render_Live2DNative_nativeOnTouchesBegan(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
     {
         LAppDelegate::GetInstance()->OnTouchBegan(pointX, pointY);
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnTouchesEnded(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
+    Java_com_digitallife_render_Live2DNative_nativeOnTouchesEnded(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
     {
         LAppDelegate::GetInstance()->OnTouchEnded(pointX, pointY);
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeOnTouchesMoved(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
+    Java_com_digitallife_render_Live2DNative_nativeOnTouchesMoved(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
     {
         LAppDelegate::GetInstance()->OnTouchMoved(pointX, pointY);
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeSetExpression(JNIEnv *env, jclass type, jstring expressionId)
+    Java_com_digitallife_render_Live2DNative_nativeSetExpression(JNIEnv *env, jclass type, jstring expressionId)
     {
         const char* expr = env->GetStringUTFChars(expressionId, NULL);
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
@@ -306,7 +306,7 @@ extern "C"
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeStartMotion(JNIEnv *env, jclass type, jstring groupName, jint index, jint priority)
+    Java_com_digitallife_render_Live2DNative_nativeStartMotion(JNIEnv *env, jclass type, jstring groupName, jint index, jint priority)
     {
         const char* group = env->GetStringUTFChars(groupName, NULL);
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
@@ -317,7 +317,7 @@ extern "C"
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeSetMouth(JNIEnv *env, jclass type, jfloat open)
+    Java_com_digitallife_render_Live2DNative_nativeSetMouth(JNIEnv *env, jclass type, jfloat open)
     {
         using namespace Live2D::Cubism::Framework::DefaultParameterId;
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
@@ -332,7 +332,7 @@ extern "C"
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeSetParameterValue(JNIEnv *env, jclass type, jstring paramId, jfloat value)
+    Java_com_digitallife_render_Live2DNative_nativeSetParameterValue(JNIEnv *env, jclass type, jstring paramId, jfloat value)
     {
         const char* pid = env->GetStringUTFChars(paramId, NULL);
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
@@ -343,7 +343,7 @@ extern "C"
     }
 
     JNIEXPORT jboolean JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeIsMotionPlaying(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeIsMotionPlaying(JNIEnv *env, jclass type)
     {
         LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
         if (model && model->IsExternalActionPlaying()) {
@@ -353,19 +353,19 @@ extern "C"
     }
 
     JNIEXPORT void JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeChangeScene(JNIEnv *env, jclass type, jint index)
+    Java_com_digitallife_render_Live2DNative_nativeChangeScene(JNIEnv *env, jclass type, jint index)
     {
         LAppLive2DManager::GetInstance()->ChangeScene(index);
     }
 
     JNIEXPORT jint JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeGetModelCount(JNIEnv *env, jclass type)
+    Java_com_digitallife_render_Live2DNative_nativeGetModelCount(JNIEnv *env, jclass type)
     {
         return LAppDefine::ModelDirSize;
     }
 
     JNIEXPORT jstring JNICALL
-    Java_com_maiden_pet_render_Live2DNative_nativeGetModelDirName(JNIEnv *env, jclass type, jint index)
+    Java_com_digitallife_render_Live2DNative_nativeGetModelDirName(JNIEnv *env, jclass type, jint index)
     {
         if (index < 0 || index >= LAppDefine::ModelDirSize) {
             return env->NewStringUTF("");

@@ -1,4 +1,4 @@
-package com.maiden.pet.accessibility;
+package com.digitallife.service;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;

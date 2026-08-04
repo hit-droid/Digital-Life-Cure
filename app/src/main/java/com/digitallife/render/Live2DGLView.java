@@ -1,4 +1,4 @@
-package com.maiden.pet.render;
+package com.digitallife.render;
 
 import android.content.Context;
 import android.opengl.GLSurfaceView;

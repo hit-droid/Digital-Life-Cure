@@ -1,4 +1,4 @@
-package com.maiden.pet.overlay;
+package com.digitallife.ui;
 
 import android.content.Context;
 import android.graphics.Color;
@@ -18,8 +18,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.maiden.pet.render.Pose;
-import com.maiden.pet.render.Live2DGLView;
+import com.digitallife.render.Pose;
+import com.digitallife.render.Live2DGLView;
 
 /**
  * 悬浮窗 Live2D 视图 + 桌面聊天输入框。
@@ -106,7 +106,7 @@ public class PetOverlayView extends FrameLayout {
 
         // 桌面聊天输入框
         chatInput = new EditText(context);
-        chatInput.setHint("跟小汐说句话...");
+        chatInput.setHint("跟她说句话...");
         chatInput.setTextSize(13f);
         chatInput.setTextColor(Color.rgb(40, 30, 60));
         chatInput.setHintTextColor(Color.argb(120, 100, 80, 140));
