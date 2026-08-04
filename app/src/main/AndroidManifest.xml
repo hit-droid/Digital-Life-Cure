@@ -28,7 +28,7 @@
 
         <!-- 桌宠控制面板（启动入口） -->
         <activity
-            android:name="com.maiden.pet.ui.MainActivity"
+            android:name="com.digitallife.ui.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden"
@@ -41,7 +41,7 @@
 
         <!-- 悬浮窗前台服务 -->
         <service
-            android:name="com.maiden.pet.PetService"
+            android:name="com.digitallife.service.PetService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -51,7 +51,7 @@
 
         <!-- 无障碍服务：辅助点击/读屏协作（可选授权，不影响主功能） -->
         <service
-            android:name="com.maiden.pet.accessibility.PetAccessibilityService"
+            android:name="com.digitallife.service.PetAccessibilityService"
             android:exported="false"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

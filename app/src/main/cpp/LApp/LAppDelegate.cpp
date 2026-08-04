@@ -13,6 +13,7 @@
 #include "LAppDefine.hpp"
 #include "LAppLive2DManager.hpp"
 #include "LAppTextureManager.hpp"
+#include "Rendering/OpenGL/CubismShader_OpenGLES2.hpp"
 #include "JniBridgeC.hpp"
 
 using namespace Csm;
@@ -73,6 +74,10 @@ void LAppDelegate::OnStop()
     LAppLive2DManager::ReleaseInstance();
 
     CubismFramework::Dispose();
+
+    // 同一プロセス内で再起動したとき、旧GLコンテキストのprogram IDが新コンテキストで無効になるため、
+    // シェーダ単体を破棄して次回StartUp時に再生成させる。
+    Rendering::CubismShader_OpenGLES2::DeleteInstance();
 }
 
 void LAppDelegate::OnDestroy()
@@ -104,10 +109,6 @@ void LAppDelegate::Run()
 
 void LAppDelegate::OnSurfaceCreate()
 {
-    //テクスチャサンプリング設定
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
     //透過設定
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -115,11 +116,19 @@ void LAppDelegate::OnSurfaceCreate()
     //Initialize cubism
     CubismFramework::Initialize();
 
-    _view->InitializeShader();
+    LAppPal::PrintLog("[APP]surface created: gl=%s renderer=%s",
+        reinterpret_cast<const char*>(glGetString(GL_VERSION)),
+        reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+
+    if (_view != NULL)
+    {
+        _view->InitializeShader();
+    }
 }
 
 void LAppDelegate::OnSurfaceChanged(float width, float height)
 {
+    LAppPal::PrintLog("[APP]surface changed: %.0fx%.0f", width, height);
     glViewport(0, 0, width, height);
     _width = width;
     _height = height;
@@ -150,6 +159,8 @@ LAppDelegate::LAppDelegate():
     // Setup Cubism
     _cubismOption.LogFunction = LAppPal::PrintMessage;
     _cubismOption.LoggingLevel = LAppDefine::CubismLoggingLevel;
+    _cubismOption.LoadFileFunction = LAppPal::LoadFileAsBytes;
+    _cubismOption.ReleaseBytesFunction = LAppPal::ReleaseBytes;
     CubismFramework::CleanUp();
     CubismFramework::StartUp(&_cubismAllocator, &_cubismOption);
 }

@@ -38,6 +38,7 @@ namespace LAppDefine {
 
     // モデル定義--------------------------------------------
     extern const csmChar* ModelDir[];               ///< モデルを配置したディレクトリ名の配列. ディレクトリ名とmodel3.jsonの名前を一致させておく.
+    extern const csmChar* ModelJsonName[];          ///< 各モデルの model.json / model3.json のファイル名（拡張子除く）. ModelDir と一致する場合は NULL.
     extern const csmInt32 ModelDirSize;             ///< モデルディレクトリ配列のサイズ
 
                                                     // 外部定義ファイル(json)と合わせる
