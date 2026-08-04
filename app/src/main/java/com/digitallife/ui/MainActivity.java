@@ -124,6 +124,14 @@ public class MainActivity extends Activity {
         careSection = new ProfileSection(root, "护理大脑配置", ApiManager.SCOPE_CARE, "护理大脑");
         careSection.tvResult.setHint("护理大脑负责模型校验修复/动作创作，可与对话大脑使用不同 API。");
 
+        Button btnCareChat = button(root, "打开护理大脑对话界面");
+        btnCareChat.setBackgroundColor(Color.rgb(96, 74, 210));
+        btnCareChat.setTextColor(Color.WHITE);
+        btnCareChat.setOnClickListener(v -> {
+            Intent intent = new Intent(this, com.digitallife.care.CareActivity.class);
+            startActivity(intent);
+        });
+
         // ---------- 2.2 MCP 工具服务器 ----------
         buildMcpSection(root);
 
