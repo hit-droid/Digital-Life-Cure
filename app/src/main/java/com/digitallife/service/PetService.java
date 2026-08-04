@@ -465,6 +465,13 @@ public class PetService extends Service implements AICore.Output,
     public String getApiKey() { return settings != null ? settings.getApiKey() : ""; }
     public String getModel() { return settings != null ? settings.getModel() : ""; }
 
+    /** 热切换大脑配置：按 Settings 当前值重建 LLM 客户端 */
+    public void reconfigureBrain() {
+        if (aiCore != null) {
+            aiCore.applyConfig();
+        }
+    }
+
     private void openSettings() {
         try {
             Intent i = new Intent(this, com.digitallife.ui.MainActivity.class);

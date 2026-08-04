@@ -21,10 +21,13 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.digitallife.util.ApiManager;
+import com.digitallife.util.ApiProfile;
 import com.digitallife.util.CrashHandler;
 import com.digitallife.service.PetService;
 import com.digitallife.brain.AICore;
@@ -34,6 +37,9 @@ import com.digitallife.util.Settings;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 桌宠控制面板：悬浮窗授权引导 + API 配置 + 连接测试 + 语音引擎诊断 + 模型导入 + 启停控制。
  */
@@ -42,12 +48,13 @@ public class MainActivity extends Activity {
     private static final String TAG = "AI_PET";
     private static final int REQ_IMPORT_MODEL = 1001;
     private Settings settings;
-    private EditText etBase, etKey, etName;
-    private AutoCompleteTextView etModel;
+    private ApiManager apiManager;
+    private ProfileSection chatSection;   // 对话大脑
+    private ProfileSection careSection;   // 护理大脑
     private Switch swVoice, swProactive;
-    private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnSave, btnClear, btnTest, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck, btnImportModel;
-    private EditText etChat;
-    private TextView tvStatus, tvCrashPath, tvTestResult, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus;
+    private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnClear, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck, btnImportModel;
+    private EditText etChat, etPetName;
+    private TextView tvStatus, tvCrashPath, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -61,6 +68,16 @@ public class MainActivity extends Activity {
         ModelManager.registerImportedModels(this);
 
         settings = new Settings(this);
+        apiManager = new ApiManager(this);
+        // 迁移：旧版单配置尚未存入 Profile 时，以默认名导入
+        if (apiManager.list(ApiManager.SCOPE_CHAT).isEmpty()
+                && settings.isConfigured()) {
+            ApiProfile legacy = new ApiProfile(apiManager.newId(), "默认配置",
+                    settings.getApiBase(), settings.getApiKey(), settings.getModel());
+            apiManager.save(ApiManager.SCOPE_CHAT, legacy);
+        }
+        // 把当前生效配置同步回 Settings，供桌宠启动时读取
+        apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);
         buildUi();
     }
 
@@ -94,55 +111,17 @@ public class MainActivity extends Activity {
         btnOverlay = button(cOverlay, "授予悬浮窗权限 / 检查授权");
         btnOverlay.setOnClickListener(v -> requestOverlayPermission());
 
-        // ---------- 2. AI 大脑配置 ----------
-        LinearLayout cApi = card(root, "AI 大脑配置");
-        etBase = input(cApi, "API Base URL（如 https://api.deepseek.com/v1）", settings.getApiBase());
-        etKey = input(cApi, "API Key", settings.getApiKey());
-        etKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        // 模型名：AutoCompleteTextView，支持常用模型下拉 + 自定义输入
-        etModel = new AutoCompleteTextView(this);
-        etModel.setHint("模型名（可下拉选择或自定义）");
-        if (settings.getModel() != null) etModel.setText(settings.getModel());
-        etModel.setTextSize(14f);
-        etModel.setBackground(getEditBg());
-        etModel.setPadding(dp(10), dp(8), dp(10), dp(8));
-        cApi.addView(etModel, lp(8));
-        // 常用模型下拉提示（可自由输入自定义模型名）
-        String[] commonModels = {
-                "deepseek-chat",
-                "deepseek-reasoner",
-                "deepseek-v4-flash-0731",
-                "gpt-4o",
-                "gpt-4o-mini",
-                "gpt-4.1",
-                "gpt-4.1-mini",
-                "claude-3-5-sonnet",
-                "claude-3-5-haiku",
-                "qwen-plus",
-                "qwen-turbo",
-                "glm-4",
-                "glm-4-flash",
-                "moonshot-v1-8k",
-                "kimi-k2"
-        };
-        etModel.setAdapter(new android.widget.ArrayAdapter<>(this,
-                android.R.layout.simple_dropdown_item_1line, commonModels));
-        etModel.setThreshold(0);
-        etName = input(cApi, "角色名字（默认 小汐）", settings.getPetName());
-        btnSave = button(cApi, "保存配置");
-        btnSave.setOnClickListener(v -> saveConfig());
-        btnTest = button(cApi, "测试 API 连接");
-        btnTest.setOnClickListener(v -> testConnection());
-        tvTestResult = new TextView(this);
-        tvTestResult.setTextSize(12f);
-        tvTestResult.setLineSpacing(2f, 1f);
-        tvTestResult.setPadding(0, dp(6), 0, 0);
-        tvTestResult.setText("填写后点「测试 API 连接」，这里会显示详细结果。");
-        tvTestResult.setTextColor(Color.rgb(130, 125, 150));
-        cApi.addView(tvTestResult, lp(0));
+        // ---------- 2. 对话大脑配置（多 Profile） ----------
+        chatSection = new ProfileSection(root, "对话大脑配置", ApiManager.SCOPE_CHAT, "AI 大脑");
+        chatSection.tvResult.setHint("填写后点「测试 API 连接」，这里会显示详细结果。");
+
+        // ---------- 2.1 护理大脑配置（多 Profile） ----------
+        careSection = new ProfileSection(root, "护理大脑配置", ApiManager.SCOPE_CARE, "护理大脑");
+        careSection.tvResult.setHint("护理大脑负责模型校验修复/动作创作，可与对话大脑使用不同 API。");
 
         // ---------- 3. 功能开关 ----------
         LinearLayout cSwitch = card(root, "功能设置");
+        etPetName = input(cSwitch, "角色名字（默认 小汐）", settings.getPetName());
         swVoice = switchRow(cSwitch, "语音互动（说话+发声）", settings.isVoiceEnabled());
         swProactive = switchRow(cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
         // 模型切换按钮（仅在桌宠启动后可用）
@@ -358,36 +337,25 @@ public class MainActivity extends Activity {
 
     // ================= 逻辑 =================
     private void saveConfig() {
-        settings.setApiBase(etBase.getText().toString().trim());
-        settings.setApiKey(etKey.getText().toString().trim());
-        settings.setModel(etModel.getText().toString().trim());
-        settings.setPetName(etName.getText().toString().trim());
+        // 角色名与功能开关为全局设置，独立于大脑 Profile
+        settings.setPetName(etPetName != null ? etPetName.getText().toString().trim() : settings.getPetName());
         settings.setVoiceEnabled(swVoice.isChecked());
         settings.setProactiveEnabled(swProactive.isChecked());
-        Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show();
+        chatSection.saveProfile();
+        careSection.saveProfile();
+        // 桌宠运行中则热切换大脑配置
+        PetService svc = PetService.getInstance();
+        if (svc != null) {
+            apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);
+            svc.reconfigureBrain();
+            Toast.makeText(this, "配置已保存，大脑已热切换", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void testConnection() {
-        String base = etBase.getText().toString().trim();
-        String key = etKey.getText().toString().trim();
-        String model = etModel.getText().toString().trim();
-        if (base.isEmpty() || key.isEmpty() || model.isEmpty()) {
-            tvTestResult.setTextColor(Color.rgb(200, 70, 70));
-            tvTestResult.setText("请先填写 Base URL / API Key / 模型名");
-            return;
-        }
-        tvTestResult.setTextColor(Color.rgb(130, 125, 150));
-        tvTestResult.setText("正在测试，请稍候…");
-        LLMClient.testConnection(base, key, model, (text, err) -> handler.post(() -> {
-            if (err == null) {
-                tvTestResult.setTextColor(Color.rgb(60, 160, 80));
-                tvTestResult.setText("✓ " + text);
-            } else {
-                tvTestResult.setTextColor(Color.rgb(200, 70, 70));
-                String hint = friendlyApiError(err, base, model);
-                tvTestResult.setText("✗ " + err + "\n" + hint);
-            }
-        }));
+        chatSection.testConnection();
     }
 
     /** 将常见 HTTP 错误转换为可操作的排查提示 */
@@ -687,8 +655,13 @@ public class MainActivity extends Activity {
         sb.append("悬浮窗权限：").append(overlay ? "✓ 已授权" : "✗ 未授权\n");
         sb.append("无障碍感知：").append(isAccessibilityServiceEnabled() ? "✓ 已开启" : "○ 未开启\n");
         sb.append("API 配置：").append(configured ? "✓ 已配置" : "✗ 未配置\n");
-        sb.append("Base URL：").append(settings.getApiBase().isEmpty() ? "（空）" : settings.getApiBase()).append("\n");
-        sb.append("模型：").append(settings.getModel().isEmpty() ? "（空）" : settings.getModel());
+        ApiProfile cur = apiManager.getCurrent(ApiManager.SCOPE_CHAT);
+        if (cur != null) {
+            sb.append("对话大脑：").append(cur.name.isEmpty() ? "（未命名）" : cur.name).append("\n");
+            sb.append("模型：").append(cur.model.isEmpty() ? "（空）" : cur.model);
+        } else {
+            sb.append("模型：").append(settings.getModel().isEmpty() ? "（空）" : settings.getModel());
+        }
         tvStatus.setText(sb.toString());
     }
 
@@ -702,5 +675,190 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         super.onDestroy();
+    }
+
+    /**
+     * 一个大脑的 API Profile 编辑区。
+     * 顶部下拉选择已有配置，下方表单编辑；支持保存/新建/删除/测试。
+     */
+    private class ProfileSection {
+        final String scope;
+        final LinearLayout card;
+        final Spinner spinner;
+        final EditText etName, etBase, etKey, etModel;
+        final TextView tvResult;
+        final List<ApiProfile> profiles = new ArrayList<>();
+        boolean fromUser = false;
+
+        ProfileSection(LinearLayout root, String title, String scope, String roleLabel) {
+            this.scope = scope;
+            card = card(root, title);
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            spinner = new Spinner(MainActivity.this);
+            row.addView(spinner, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            Button btnNew = new Button(MainActivity.this);
+            btnNew.setText("新建");
+            btnNew.setTextSize(13f);
+            btnNew.setOnClickListener(v -> newProfile());
+            row.addView(btnNew, lp(4));
+            Button btnDel = new Button(MainActivity.this);
+            btnDel.setText("删除");
+            btnDel.setTextSize(13f);
+            btnDel.setOnClickListener(v -> deleteProfile());
+            row.addView(btnDel, lp(4));
+            card.addView(row, lp(0));
+            spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (!fromUser || position < 0 || position >= profiles.size()) return;
+                    loadProfile(profiles.get(position));
+                }
+
+                @Override
+                public void onNothingSelected(android.widget.AdapterView<?> parent) {
+                }
+            });
+            etName = input(card, roleLabel + " 配置名称（如：主用 DeepSeek）", "");
+            etBase = input(card, "API Base URL（如 https://api.deepseek.com/v1）", "");
+            etKey = input(card, "API Key", "");
+            etKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            etModel = input(card, "模型名（如 deepseek-chat）", "");
+            Button btnSave = button(card, "保存此配置");
+            btnSave.setOnClickListener(v -> saveProfile());
+            Button btnTest = button(card, "测试此 API 连接");
+            btnTest.setOnClickListener(v -> testConnection());
+            tvResult = new TextView(MainActivity.this);
+            tvResult.setTextSize(12f);
+            tvResult.setLineSpacing(2f, 1f);
+            tvResult.setPadding(0, dp(6), 0, 0);
+            tvResult.setTextColor(Color.rgb(130, 125, 150));
+            card.addView(tvResult, lp(0));
+            refreshSpinner();
+        }
+
+        void refreshSpinner() {
+            profiles.clear();
+            profiles.addAll(apiManager.list(scope));
+            List<String> names = new ArrayList<>();
+            for (ApiProfile p : profiles) {
+                names.add(p.name == null || p.name.trim().isEmpty() ? "（未命名）" : p.name);
+            }
+            fromUser = false;
+            spinner.setAdapter(new android.widget.ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.simple_spinner_dropdown_item, names));
+            // 定位到当前生效配置
+            String curId = apiManager.getCurrentId(scope);
+            int idx = 0;
+            for (int i = 0; i < profiles.size(); i++) {
+                if (profiles.get(i).id.equals(curId)) {
+                    idx = i;
+                    break;
+                }
+            }
+            spinner.setSelection(idx, false);
+            fromUser = true;
+            if (!profiles.isEmpty()) {
+                loadProfile(profiles.get(idx));
+            } else {
+                clearForm();
+            }
+        }
+
+        void newProfile() {
+            clearForm();
+            fromUser = false;
+            spinner.setSelection(Math.max(0, spinner.getCount() - 1), false);
+            fromUser = true;
+        }
+
+        void deleteProfile() {
+            String curId = apiManager.getCurrentId(scope);
+            if (curId.isEmpty() || findProfile(curId) == null) {
+                tvResult.setTextColor(Color.rgb(200, 70, 70));
+                tvResult.setText("没有可删除的配置");
+                return;
+            }
+            apiManager.remove(scope, curId);
+            if (ApiManager.SCOPE_CHAT.equals(scope)) {
+                apiManager.syncCurrentToSettings(scope, settings);
+            }
+            refreshSpinner();
+            tvResult.setTextColor(Color.rgb(90, 150, 100));
+            tvResult.setText("已删除配置");
+        }
+
+        void saveProfile() {
+            String name = etName.getText().toString().trim();
+            String base = etBase.getText().toString().trim();
+            String key = etKey.getText().toString().trim();
+            String model = etModel.getText().toString().trim();
+            if (name.isEmpty()) {
+                tvResult.setTextColor(Color.rgb(200, 70, 70));
+                tvResult.setText("请先填写配置名称");
+                return;
+            }
+            ApiProfile p = findProfile(apiManager.getCurrentId(scope));
+            if (p == null) {
+                p = new ApiProfile(apiManager.newId(), name, base, key, model);
+            } else {
+                p.name = name;
+                p.baseUrl = base;
+                p.apiKey = key;
+                p.model = model;
+            }
+            apiManager.save(scope, p);
+            apiManager.setCurrent(scope, p.id);
+            if (ApiManager.SCOPE_CHAT.equals(scope)) {
+                apiManager.syncCurrentToSettings(scope, settings);
+            }
+            refreshSpinner();
+            tvResult.setTextColor(Color.rgb(60, 160, 80));
+            tvResult.setText("已保存：" + name);
+        }
+
+        void testConnection() {
+            String base = etBase.getText().toString().trim();
+            String key = etKey.getText().toString().trim();
+            String model = etModel.getText().toString().trim();
+            if (base.isEmpty() || key.isEmpty() || model.isEmpty()) {
+                tvResult.setTextColor(Color.rgb(200, 70, 70));
+                tvResult.setText("请先填写 Base URL / API Key / 模型名");
+                return;
+            }
+            tvResult.setTextColor(Color.rgb(130, 125, 150));
+            tvResult.setText("正在测试，请稍候…");
+            LLMClient.testConnection(base, key, model, (text, err) -> handler.post(() -> {
+                if (err == null) {
+                    tvResult.setTextColor(Color.rgb(60, 160, 80));
+                    tvResult.setText("✓ " + text);
+                } else {
+                    tvResult.setTextColor(Color.rgb(200, 70, 70));
+                    tvResult.setText("✗ " + err + "\n" + friendlyApiError(err, base, model));
+                }
+            }));
+        }
+
+        private void loadProfile(ApiProfile p) {
+            etName.setText(p.name);
+            etBase.setText(p.baseUrl);
+            etKey.setText(p.apiKey);
+            etModel.setText(p.model);
+        }
+
+        private void clearForm() {
+            etName.setText("");
+            etBase.setText("");
+            etKey.setText("");
+            etModel.setText("");
+        }
+
+        private ApiProfile findProfile(String id) {
+            for (ApiProfile p : profiles) {
+                if (p.id.equals(id)) return p;
+            }
+            return null;
+        }
     }
 }
