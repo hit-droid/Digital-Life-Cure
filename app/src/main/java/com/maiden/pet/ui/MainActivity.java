@@ -428,7 +428,14 @@ public class MainActivity extends Activity {
         }
         int count = Live2DNative.nativeGetModelCount();
         currentModelIndex = (currentModelIndex + 1) % count;
-        Live2DNative.nativeChangeScene(currentModelIndex);
+        final int idx = currentModelIndex;
+        // 在 GL 线程执行切换，避免主线程/GL 线程纹理资源竞争
+        com.maiden.pet.render.Live2DGLView glView = svc.getOverlayView().getLive2DView();
+        if (glView != null) {
+            glView.queueEvent(() -> Live2DNative.nativeChangeScene(idx));
+        } else {
+            Live2DNative.nativeChangeScene(idx);
+        }
         Toast.makeText(this, "已切换至: " + getCurrentModelName(), Toast.LENGTH_SHORT).show();
     }
 

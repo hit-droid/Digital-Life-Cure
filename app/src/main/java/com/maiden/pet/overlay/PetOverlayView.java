@@ -41,6 +41,8 @@ public class PetOverlayView extends FrameLayout {
 
     private final Pose pose = new Pose();
     private final Live2DGLView live2DView;
+
+    public Live2DGLView getLive2DView() { return live2DView; }
     private final LinearLayout bubbleContainer;
     private final TextView bubbleView;
     private final View bubbleTail;
