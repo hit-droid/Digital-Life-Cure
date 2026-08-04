@@ -361,16 +361,27 @@ extern "C"
     JNIEXPORT jint JNICALL
     Java_com_digitallife_render_Live2DNative_nativeGetModelCount(JNIEnv *env, jclass type)
     {
-        return LAppDefine::ModelDirSize;
+        return LAppLive2DManager::GetModelDirCount();
     }
 
     JNIEXPORT jstring JNICALL
     Java_com_digitallife_render_Live2DNative_nativeGetModelDirName(JNIEnv *env, jclass type, jint index)
     {
-        if (index < 0 || index >= LAppDefine::ModelDirSize) {
+        const char* name = LAppLive2DManager::GetModelDirName(index);
+        if (name == NULL) {
             return env->NewStringUTF("");
         }
-        return env->NewStringUTF(LAppDefine::ModelDir[index]);
+        return env->NewStringUTF(name);
+    }
+
+    JNIEXPORT void JNICALL
+    Java_com_digitallife_render_Live2DNative_nativeAddModelDir(JNIEnv *env, jclass type, jstring dir, jstring jsonBase)
+    {
+        const char* dirChars = dir != NULL ? env->GetStringUTFChars(dir, NULL) : NULL;
+        const char* jsonChars = jsonBase != NULL ? env->GetStringUTFChars(jsonBase, NULL) : NULL;
+        LAppLive2DManager::AddModelDir(dirChars, jsonChars);
+        if (dirChars != NULL) env->ReleaseStringUTFChars(dir, dirChars);
+        if (jsonChars != NULL) env->ReleaseStringUTFChars(jsonBase, jsonChars);
     }
 }
 

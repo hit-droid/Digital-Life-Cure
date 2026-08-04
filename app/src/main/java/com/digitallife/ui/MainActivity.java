@@ -29,22 +29,25 @@ import com.digitallife.util.CrashHandler;
 import com.digitallife.service.PetService;
 import com.digitallife.brain.AICore;
 import com.digitallife.brain.LLMClient;
+import com.digitallife.model.ModelManager;
 import com.digitallife.util.Settings;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.render.Live2DGLView;
 
 /**
- * 桌宠控制面板：悬浮窗授权引导 + API 配置 + 连接测试 + 语音引擎诊断 + 启停控制。
+ * 桌宠控制面板：悬浮窗授权引导 + API 配置 + 连接测试 + 语音引擎诊断 + 模型导入 + 启停控制。
  */
 public class MainActivity extends Activity {
 
     private static final String TAG = "AI_PET";
+    private static final int REQ_IMPORT_MODEL = 1001;
     private Settings settings;
     private EditText etBase, etKey, etName;
     private AutoCompleteTextView etModel;
     private Switch swVoice, swProactive;
-    private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnSave, btnClear, btnTest, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck;
+    private Button btnOverlay, btnVoice, btnChat, btnStart, btnStop, btnSave, btnClear, btnTest, btnVoiceDiag, btnMemoryDebug, btnMemorySelfCheck, btnImportModel;
     private EditText etChat;
-    private TextView tvStatus, tvCrashPath, tvTestResult, tvVoiceDiag, tvMemoryDebug;
+    private TextView tvStatus, tvCrashPath, tvTestResult, tvVoiceDiag, tvMemoryDebug, tvModelList, tvModelStatus;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -53,6 +56,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         CrashHandler.init(this);
+        // 初始化资产/内部模型目录，并恢复已导入的模型注册（供模型列表展示）
+        Live2DNative.init(this);
+        ModelManager.registerImportedModels(this);
 
         settings = new Settings(this);
         buildUi();
@@ -145,6 +151,24 @@ public class MainActivity extends Activity {
             switchModel();
             btnSwitchModel.setText("切换模型（当前: " + getCurrentModelName() + "）");
         });
+
+        // ---------- 模型管理（导入模型） ----------
+        btnImportModel = button(cSwitch, "导入模型（zip）");
+        btnImportModel.setOnClickListener(v -> pickModelZip());
+        tvModelStatus = new TextView(this);
+        tvModelStatus.setTextSize(12f);
+        tvModelStatus.setLineSpacing(2f, 1f);
+        tvModelStatus.setPadding(0, dp(4), 0, 0);
+        tvModelStatus.setTextColor(Color.rgb(130, 125, 150));
+        tvModelStatus.setText("导入 Live2D 模型 zip 包，解压后立即可切换使用。");
+        cSwitch.addView(tvModelStatus, lp(0));
+        tvModelList = new TextView(this);
+        tvModelList.setTextSize(11f);
+        tvModelList.setLineSpacing(2f, 1f);
+        tvModelList.setPadding(0, dp(2), 0, 0);
+        tvModelList.setTextColor(Color.rgb(150, 140, 160));
+        cSwitch.addView(tvModelList, lp(0));
+        refreshModelList();
 
         btnVoiceDiag = button(cSwitch, "检查语音引擎");
         btnVoiceDiag.setOnClickListener(v -> checkVoiceDiag());
@@ -427,16 +451,87 @@ public class MainActivity extends Activity {
             return;
         }
         int count = Live2DNative.nativeGetModelCount();
+        if (count <= 0) return;
         currentModelIndex = (currentModelIndex + 1) % count;
         final int idx = currentModelIndex;
         // 在 GL 线程执行切换，避免主线程/GL 线程纹理资源竞争
-        com.digitallife.render.Live2DGLView glView = svc.getOverlayView().getLive2DView();
+        Live2DGLView glView = svc.getOverlayView().getLive2DView();
         if (glView != null) {
             glView.queueEvent(() -> Live2DNative.nativeChangeScene(idx));
         } else {
             Live2DNative.nativeChangeScene(idx);
         }
         Toast.makeText(this, "已切换至: " + getCurrentModelName(), Toast.LENGTH_SHORT).show();
+    }
+
+    // ================= 模型导入 =================
+
+    /** 打开系统文件选择器挑选模型 zip */
+    private void pickModelZip() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed"});
+            startActivityForResult(i, REQ_IMPORT_MODEL);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IMPORT_MODEL && resultCode == RESULT_OK && data != null) {
+            final Uri uri = data.getData();
+            if (uri == null) return;
+            tvModelStatus.setTextColor(Color.rgb(90, 150, 100));
+            tvModelStatus.setText("正在导入模型，请稍候…");
+            new Thread(() -> {
+                final ModelManager.ImportResult result = ModelManager.importFromUri(this, uri);
+                handler.post(() -> {
+                    if (result.ok) {
+                        tvModelStatus.setTextColor(Color.rgb(60, 160, 80));
+                        tvModelStatus.setText(result.message + "\n已加入可用模型列表，可点击「切换模型」查看。");
+                        // 若桌宠已启动，立即切换到新导入的模型
+                        PetService svc = PetService.getInstance();
+                        if (svc != null) {
+                            int last = Live2DNative.nativeGetModelCount() - 1;
+                            currentModelIndex = last;
+                            Live2DGLView glView = svc.getOverlayView().getLive2DView();
+                            if (glView != null) {
+                                glView.queueEvent(() -> Live2DNative.nativeChangeScene(last));
+                            }
+                            Toast.makeText(this, "已切换至新模型: " + result.modelDir, Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        tvModelStatus.setTextColor(Color.rgb(200, 70, 70));
+                        tvModelStatus.setText(result.message);
+                    }
+                    refreshModelList();
+                });
+            }).start();
+        }
+    }
+
+    /** 刷新模型列表显示（内置 + 已导入） */
+    private void refreshModelList() {
+        if (tvModelList == null) return;
+        StringBuilder sb = new StringBuilder();
+        int count = Live2DNative.nativeGetModelCount();
+        for (int i = 0; i < count; i++) {
+            String name = Live2DNative.nativeGetModelDirName(i);
+            if (name == null || name.isEmpty()) continue;
+            sb.append(i == currentModelIndex ? "● " : "○ ").append(name);
+            if (ModelManager.listImportedModelDirs(this).contains(name)) {
+                sb.append("（已导入）");
+            } else if (i < 2) {
+                sb.append("（内置）");
+            }
+            sb.append("\n");
+        }
+        if (sb.length() == 0) sb.append("（无可用模型）");
+        tvModelList.setText(sb.toString());
     }
 
     private void checkVoiceDiag() {
