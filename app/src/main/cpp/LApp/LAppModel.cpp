@@ -124,6 +124,7 @@ void LAppModel::LoadAssets(const csmChar* dir, const csmChar* fileName)
     CreateRenderer(LAppDelegate::GetInstance()->GetWindowWidth(), LAppDelegate::GetInstance()->GetWindowHeight());
 
     SetupTextures();
+    LAppPal::PrintLog("[APP]model ready: %s (textures=%d)", fileName, _modelSetting->GetTextureCount());
 }
 
 
@@ -151,6 +152,12 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         buffer = CreateBuffer(path.GetRawString(), &size);
         LoadModel(buffer, size);
         DeleteBuffer(buffer, path.GetRawString());
+
+        if (_model == NULL)
+        {
+            LAppPal::PrintLog("[APP]failed to create model: %s", setting->GetModelFileName());
+            return;
+        }
     }
 
     //Expression
@@ -575,6 +582,13 @@ void LAppModel::DoDraw()
         return;
     }
 
+    static csmUint32 s_drawFrameCount = 0;
+    if ((s_drawFrameCount % 90) == 0)
+    {
+        LAppPal::PrintLog("[APP]drawing model (frame=%u)", s_drawFrameCount);
+    }
+    s_drawFrameCount++;
+
     GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->DrawModel();
 }
 
@@ -675,6 +689,11 @@ void LAppModel::SetupTextures()
         texturePath = _modelHomeDir + texturePath;
 
         LAppTextureManager::TextureInfo* texture = LAppDelegate::GetInstance()->GetTextureManager()->CreateTextureFromPngFile(texturePath.GetRawString());
+        if (texture == NULL)
+        {
+            LAppPal::PrintLog("[APP]failed to bind model texture: %s", texturePath.GetRawString());
+            continue;
+        }
         const csmInt32 glTextueNumber = texture->id;
 
         //OpenGL

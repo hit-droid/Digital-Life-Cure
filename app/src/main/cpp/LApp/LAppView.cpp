@@ -105,6 +105,10 @@ void LAppView::Initialize()
         ViewLogicalMaxBottom,
         ViewLogicalMaxTop
     );
+
+    // 将布局（缩放/位移）同步给模型渲染投影，否则渲染使用的 viewMatrix 恒为单位阵，
+    // 模型会无视悬浮窗布局直接全幅居中，悬浮窗预留的气泡区域也会失效。
+    LAppLive2DManager::GetInstance()->SetViewMatrix(_viewMatrix);
 }
 
 void LAppView::InitializeShader()

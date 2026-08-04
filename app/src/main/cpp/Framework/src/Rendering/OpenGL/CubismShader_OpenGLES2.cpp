@@ -1074,6 +1074,8 @@ GLuint CubismShader_OpenGLES2::LoadShaderProgram(const csmChar* vertShaderSrc, c
         glDeleteShader(fragShader);
     }
 
+    CubismLogInfo("[APP]shader program created: %d", shaderProgram);
+
     return shaderProgram;
 }
 
@@ -1098,7 +1100,10 @@ void CubismShader_OpenGLES2::SetupTexture(CubismRenderer_OpenGLES2* renderer, co
     glBindTexture(GL_TEXTURE_2D, textureId);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    // The Android texture loader intentionally uploads only level 0 to keep
+    // floating-window memory use bounded. Requiring mipmaps makes the texture
+    // incomplete and causes transparent model output on OpenGL ES.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glUniform1i(shaderSet->SamplerTexture0Location, 0);
 }

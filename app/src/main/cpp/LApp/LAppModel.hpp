@@ -137,6 +137,8 @@ public:
      */
     bool IsExternalActionPlaying() const { return _externalActionPlaying.load(); }
 
+    Csm::ICubismModelSetting* GetModelSetting() const { return _modelSetting; }
+
 protected:
     /**
      *  @brief  モデルを描画する処理。モデルを描画する空間のView-Projection行列を渡す。

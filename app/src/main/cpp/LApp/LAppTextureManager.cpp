@@ -33,13 +33,18 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
         }
     }
 
-    GLuint textureId;
+    GLuint textureId = 0;
     int width, height, channels;
     unsigned int size;
     unsigned char* png;
     unsigned char* address;
 
     address = LAppPal::LoadFileAsBytes(fileName, &size);
+    if (address == NULL || size == 0)
+    {
+        LAppPal::PrintLog("[APP]texture asset load failed: %s", fileName.c_str());
+        return NULL;
+    }
 
     // png情報を取得する
     png = stbi_load_from_memory(
@@ -49,6 +54,12 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
         &height,
         &channels,
         STBI_rgb_alpha);
+    if (png == NULL)
+    {
+        LAppPal::PrintLog("[APP]texture decode failed: %s", fileName.c_str());
+        LAppPal::ReleaseBytes(address);
+        return NULL;
+    }
     {
 #ifdef PREMULTIPLIED_ALPHA_ENABLE
         unsigned int* fourBytes = reinterpret_cast<unsigned int*>(png);
@@ -60,12 +71,38 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
 #endif
     }
 
+    GLint maxTextureSize = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+    if (width > maxTextureSize || height > maxTextureSize)
+    {
+        LAppPal::PrintLog("[APP]texture exceeds GPU limit: %s (%dx%d, max=%d)", fileName.c_str(), width, height, maxTextureSize);
+        stbi_image_free(png);
+        LAppPal::ReleaseBytes(address);
+        return NULL;
+    }
+
     // OpenGL用のテクスチャを生成する
     glGenTextures(1, &textureId);
+    if (textureId == 0)
+    {
+        LAppPal::PrintLog("[APP]texture creation failed: %s", fileName.c_str());
+        stbi_image_free(png);
+        LAppPal::ReleaseBytes(address);
+        return NULL;
+    }
     glBindTexture(GL_TEXTURE_2D, textureId);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, png);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    const GLenum uploadError = glGetError();
+    if (uploadError != GL_NO_ERROR)
+    {
+        LAppPal::PrintLog("[APP]texture upload failed: %s (error=0x%x)", fileName.c_str(), uploadError);
+        glDeleteTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_image_free(png);
+        LAppPal::ReleaseBytes(address);
+        return NULL;
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -82,6 +119,7 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
         textureInfo->id = textureId;
 
         _textures.PushBack(textureInfo);
+        LAppPal::PrintLog("[APP]texture ready: %s (%dx%d, id=%u)", fileName.c_str(), width, height, textureId);
     }
 
     return textureInfo;
@@ -92,6 +130,7 @@ void LAppTextureManager::ReleaseTextures()
 {
     for (Csm::csmUint32 i = 0; i < _textures.GetSize(); i++)
     {
+        glDeleteTextures(1, &_textures[i]->id);
         delete _textures[i];
     }
 
@@ -106,6 +145,7 @@ void LAppTextureManager::ReleaseTexture(Csm::csmUint32 textureId)
         {
             continue;
         }
+        glDeleteTextures(1, &_textures[i]->id);
         delete _textures[i];
         _textures.Remove(i);
         break;
@@ -118,6 +158,7 @@ void LAppTextureManager::ReleaseTexture(std::string fileName)
     {
         if (_textures[i]->fileName == fileName)
         {
+            glDeleteTextures(1, &_textures[i]->id);
             delete _textures[i];
             _textures.Remove(i);
             break;
