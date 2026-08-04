@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AI 桌宠 · 小汐</string>
+    <string name="app_name">数字生命</string>
     <string name="channel_overlay">桌宠悬浮窗</string>
-    <string name="channel_overlay_desc">保持小汐常驻在桌面上</string>
-    <string name="notify_overlay_title">小汐正住在桌面上</string>
+    <string name="channel_overlay_desc">保持数字生命常驻在桌面上</string>
+    <string name="notify_overlay_title">数字生命正住在桌面上</string>
     <string name="notify_overlay_text">点击通知回到设置面板</string>
     <string name="action_open">打开设置</string>
     <string name="action_stop">停止桌宠</string>

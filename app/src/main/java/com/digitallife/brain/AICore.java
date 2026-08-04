@@ -1,10 +1,10 @@
-package com.maiden.pet.brain;
+package com.digitallife.brain;
 
 import android.os.Handler;
 import android.os.Looper;
 
-import com.maiden.pet.memory.MemoryStore;
-import com.maiden.pet.memory.Settings;
+import com.digitallife.util.MemoryStore;
+import com.digitallife.util.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -114,8 +114,8 @@ public class AICore {
         });
         tools.setAnimationListener(a -> {
             if (out == null) return;
-            int[] m = com.maiden.pet.overlay.PetOverlayView.resolveMotion(a);
-            String group = com.maiden.pet.overlay.PetOverlayView.MOTION_GROUPS[m[0]];
+            int[] m = com.digitallife.ui.PetOverlayView.resolveMotion(a);
+            String group = com.digitallife.ui.PetOverlayView.MOTION_GROUPS[m[0]];
             out.onMotion(group, m[1], 3);
         });
         tools.setSpeakListener(text -> { if (out != null) out.onSpeak(text); });

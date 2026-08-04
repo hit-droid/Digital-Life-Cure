@@ -1,4 +1,4 @@
-package com.maiden.pet.memory;
+package com.digitallife.util;
 
 import android.content.Context;
 import android.content.SharedPreferences;

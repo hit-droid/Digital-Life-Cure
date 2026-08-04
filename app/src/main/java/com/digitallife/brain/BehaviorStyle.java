@@ -1,4 +1,4 @@
-package com.maiden.pet.brain;
+package com.digitallife.brain;
 
 /**
  * BehaviorStyle：AI 行为风格包。

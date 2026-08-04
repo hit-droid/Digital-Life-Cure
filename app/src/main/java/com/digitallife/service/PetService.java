@@ -1,4 +1,4 @@
-package com.maiden.pet;
+package com.digitallife.service;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -18,15 +18,16 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 
-import com.maiden.dungeon.R;
-import com.maiden.pet.brain.AICore;
-import com.maiden.pet.brain.Heartbeat;
-import com.maiden.pet.memory.MemoryStore;
-import com.maiden.pet.memory.Settings;
-import com.maiden.pet.overlay.PetOverlayView;
-import com.maiden.pet.render.Live2DNative;
-import com.maiden.pet.speech.STTEngine;
-import com.maiden.pet.speech.TTSEngine;
+import com.digitallife.R;
+import com.digitallife.brain.AICore;
+import com.digitallife.brain.Heartbeat;
+import com.digitallife.util.CrashHandler;
+import com.digitallife.util.MemoryStore;
+import com.digitallife.util.Settings;
+import com.digitallife.ui.PetOverlayView;
+import com.digitallife.render.Live2DNative;
+import com.digitallife.speech.STTEngine;
+import com.digitallife.speech.TTSEngine;
 
 /**
  * PetService：桌面伴侣前台服务。
@@ -36,9 +37,9 @@ import com.maiden.pet.speech.TTSEngine;
 public class PetService extends Service implements AICore.Output,
         PetOverlayView.Listener, TTSEngine.Listener {
 
-    public static final String ACTION_START = "com.maiden.pet.START";
-    public static final String ACTION_STOP = "com.maiden.pet.STOP";
-    public static final String ACTION_TOGGLE_VOICE = "com.maiden.pet.TOGGLE_VOICE";
+    public static final String ACTION_START = "com.digitallife.START";
+    public static final String ACTION_STOP = "com.digitallife.STOP";
+    public static final String ACTION_TOGGLE_VOICE = "com.digitallife.TOGGLE_VOICE";
 
     private static final String CHANNEL_ID = "pet_overlay";
     private static final int NOTIFY_ID = 1001;
@@ -211,8 +212,8 @@ public class PetService extends Service implements AICore.Output,
         heartbeat.start();
 
         // 无障碍感知：前台 App 变化 / 通知到达 → 写入记忆，择机主动搭话
-        com.maiden.pet.accessibility.PetAccessibilityService.setListener(
-                new com.maiden.pet.accessibility.PetAccessibilityService.Listener() {
+        com.digitallife.service.PetAccessibilityService.setListener(
+                new com.digitallife.service.PetAccessibilityService.Listener() {
                     @Override
                     public void onForegroundAppChanged(String packageName) {
                         if (memory == null || packageName == null) return;
@@ -463,7 +464,7 @@ public class PetService extends Service implements AICore.Output,
 
     private void openSettings() {
         try {
-            Intent i = new Intent(this, com.maiden.pet.ui.MainActivity.class);
+            Intent i = new Intent(this, com.digitallife.ui.MainActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
         } catch (Exception ignored) {}
@@ -483,7 +484,7 @@ public class PetService extends Service implements AICore.Output,
     }
 
     private Notification buildNotification() {
-        Intent open = new Intent(this, com.maiden.pet.ui.MainActivity.class);
+        Intent open = new Intent(this, com.digitallife.ui.MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
 

@@ -1,7 +1,7 @@
-package com.maiden.pet.brain;
+package com.digitallife.brain;
 
-import com.maiden.pet.memory.MemoryStore;
-import com.maiden.pet.memory.Settings;
+import com.digitallife.util.MemoryStore;
+import com.digitallife.util.Settings;
 
 import android.content.Context;
 
@@ -99,7 +99,7 @@ public class AgentBrain {
     /** 用户消息入口：维护上下文 + 发起对话 */
     public void userSays(String text) {
         if (busy) {
-            if (listener != null) listener.onError("小汐还在想事情呢，稍等一下哦");
+            if (listener != null) listener.onError("她还在想事情呢，稍等一下哦");
             return;
         }
         if (text == null || text.trim().isEmpty()) return;

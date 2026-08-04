@@ -1,4 +1,4 @@
-package com.maiden.pet.ui;
+package com.digitallife.ui;
 
 import android.Manifest;
 import android.app.Activity;
@@ -25,12 +25,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.maiden.pet.CrashHandler;
-import com.maiden.pet.PetService;
-import com.maiden.pet.brain.AICore;
-import com.maiden.pet.brain.LLMClient;
-import com.maiden.pet.memory.Settings;
-import com.maiden.pet.render.Live2DNative;
+import com.digitallife.util.CrashHandler;
+import com.digitallife.service.PetService;
+import com.digitallife.brain.AICore;
+import com.digitallife.brain.LLMClient;
+import com.digitallife.util.Settings;
+import com.digitallife.render.Live2DNative;
 
 /**
  * 桌宠控制面板：悬浮窗授权引导 + API 配置 + 连接测试 + 语音引擎诊断 + 启停控制。
@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
 
         // 标题
         TextView title = new TextView(this);
-        title.setText("AI 桌宠 · 小汐");
+        title.setText("数字生命");
         title.setTextSize(26f);
         title.setTextColor(Color.rgb(96, 74, 210));
         title.setGravity(Gravity.CENTER);
@@ -165,7 +165,7 @@ public class MainActivity extends Activity {
         tvAccessibility.setLineSpacing(2f, 1f);
         tvAccessibility.setPadding(0, dp(4), 0, 0);
         tvAccessibility.setTextColor(Color.rgb(130, 125, 150));
-        tvAccessibility.setText("授权后小汐能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
+        tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
         cSwitch.addView(tvAccessibility, lp(0));
 
         // ---------- 4. 启停控制 ----------
@@ -205,7 +205,7 @@ public class MainActivity extends Activity {
         LinearLayout chatRow = new LinearLayout(this);
         chatRow.setOrientation(LinearLayout.HORIZONTAL);
         etChat = new EditText(this);
-        etChat.setHint("输入一句话和小汐聊天…");
+        etChat.setHint("输入一句话和她聊天…");
         etChat.setSingleLine(true);
         chatRow.addView(etChat, new LinearLayout.LayoutParams(0, dp(48), 1));
         btnChat = new Button(this);
@@ -430,7 +430,7 @@ public class MainActivity extends Activity {
         currentModelIndex = (currentModelIndex + 1) % count;
         final int idx = currentModelIndex;
         // 在 GL 线程执行切换，避免主线程/GL 线程纹理资源竞争
-        com.maiden.pet.render.Live2DGLView glView = svc.getOverlayView().getLive2DView();
+        com.digitallife.render.Live2DGLView glView = svc.getOverlayView().getLive2DView();
         if (glView != null) {
             glView.queueEvent(() -> Live2DNative.nativeChangeScene(idx));
         } else {
@@ -492,7 +492,7 @@ public class MainActivity extends Activity {
 
     /** 检测本应用的无障碍服务是否已启用 */
     private boolean isAccessibilityServiceEnabled() {
-        String expected = getPackageName() + "/" + "com.maiden.pet.accessibility.PetAccessibilityService";
+        String expected = getPackageName() + "/" + "com.digitallife.service.PetAccessibilityService";
         String enabledServices = android.provider.Settings.Secure.getString(getContentResolver(),
                 android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (enabledServices == null) return false;
@@ -531,7 +531,7 @@ public class MainActivity extends Activity {
         } else {
             startService(i);
         }
-        Toast.makeText(this, "小汐正在醒来…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "数字生命正在醒来…", Toast.LENGTH_SHORT).show();
         handler.postDelayed(this::updateStatus, 1500);
     }
 
@@ -539,7 +539,7 @@ public class MainActivity extends Activity {
         Intent i = new Intent(this, PetService.class);
         i.setAction(PetService.ACTION_STOP);
         startService(i);
-        Toast.makeText(this, "小汐已休息", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "数字生命已休息", Toast.LENGTH_SHORT).show();
         handler.postDelayed(this::updateStatus, 800);
     }
 
@@ -559,7 +559,7 @@ public class MainActivity extends Activity {
         AICore ai = getAiCore();
         if (ai != null) {
             ai.onUserSays(text);
-            Toast.makeText(this, "已发送给小汐", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "已发送", Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, "请先启动桌宠", Toast.LENGTH_SHORT).show();
         }
