@@ -475,15 +475,22 @@ public class PetService extends Service implements AICore.Output,
         }
     }
 
-    private final com.digitallife.mcp.McpServerManager mcpManager = new com.digitallife.mcp.McpServerManager(this);
+    private com.digitallife.mcp.McpServerManager mcpManager;
+
+    private com.digitallife.mcp.McpServerManager getMcpManager() {
+        if (mcpManager == null) {
+            mcpManager = new com.digitallife.mcp.McpServerManager(this);
+        }
+        return mcpManager;
+    }
 
     /** 后台连接已保存的 MCP 服务器；完成后热刷新大脑工具 */
     private void connectMcpServersAsync() {
-        if (mcpManager.list().isEmpty()) return;
+        com.digitallife.mcp.McpServerManager mgr = getMcpManager();
+        if (mgr.list().isEmpty()) return;
         new Thread(() -> {
             try {
-                mcpManager.connectAll();
-                // 工具已注册，通知大脑刷新工具集
+                mgr.connectAll();
                 android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
                 h.post(() -> reconfigureBrain());
             } catch (Exception e) {
