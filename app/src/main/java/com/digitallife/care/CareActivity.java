@@ -3,14 +3,15 @@ package com.digitallife.care;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -18,18 +19,15 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.digitallife.util.ApiManager;
-
 import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.util.Locale;
 
 /**
- * 护理大脑对话界面。
- * 独立于主配置界面，通过聊天与 AI 交互管理模型和动作。
+ * 护理大脑对话界面（独立页面）。
+ * 气泡聊天 UI：用户消息右对齐、AI 消息左对齐。支持上传模型 zip 自动解压分析。
  */
 public class CareActivity extends Activity {
 
@@ -38,17 +36,15 @@ public class CareActivity extends Activity {
     private CareAI careAI;
     private LinearLayout chatContainer;
     private EditText etInput;
-    private Button btnSend, btnAttach, btnBack, btnClear;
+    private Button btnSend, btnAttach, btnClear;
     private ScrollView scrollView;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private TextView tvStatus;
     private volatile boolean destroyed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         destroyed = false;
-
         careAI = CareAI.getInstance(this);
         careAI.setListener(new CareAI.CareListener() {
             @Override
@@ -58,60 +54,46 @@ public class CareActivity extends Activity {
 
             @Override
             public void onToolCall(String toolName, JSONObject args, String toolCallId) {
-                safeRun(() -> addMessage("system", "调用工具: " + toolName + "(" + args.toString() + ")", Color.rgb(200, 180, 100)));
+                safeRun(() -> addToolBubble(toolName));
             }
 
             @Override
             public void onDone(String fullText) {
                 safeRun(() -> {
-                    setStatus("就绪");
                     btnSend.setEnabled(true);
+                    btnSend.setText("发送");
                 });
             }
 
             @Override
             public void onError(String error) {
                 safeRun(() -> {
-                    addMessage("system", "错误: " + error, Color.rgb(220, 80, 80));
-                    setStatus("出错");
+                    addAiBubble("⚠ " + error);
                     btnSend.setEnabled(true);
+                    btnSend.setText("发送");
                 });
             }
         });
-
         buildUi();
-        addMessage("system", "你好，我是护理大脑。\n我可以帮你管理 Live2D 模型、创建/修改动作、管理工作流和定时任务。\n发一个消息开始吧。", Color.rgb(130, 125, 150));
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        destroyed = true;
-        if (careAI != null) careAI.cancel();
-    }
-
-    private void safeRun(Runnable r) {
-        handler.post(() -> {
-            if (!destroyed) r.run();
-        });
+        addAiBubble("你好，我是护理大脑 🤖\n\n我可以帮你：\n· 上传模型 zip，自动解压并检查\n· 分析模型完整性（纹理/骨骼/动作）\n· 查看和编辑模型动作\n· 管理工作流和定时任务\n\n直接发消息，或点右下角上传模型压缩包。");
     }
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(247, 246, 251));
+        root.setBackgroundColor(Color.rgb(238, 240, 245));
 
         // 顶部栏
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setPadding(dp(12), dp(12), dp(12), dp(8));
+        topBar.setPadding(dp(8), dp(12), dp(8), dp(12));
         topBar.setBackgroundColor(Color.rgb(96, 74, 210));
 
-        btnBack = new Button(this);
-        btnBack.setText("← 返回");
+        Button btnBack = new Button(this);
+        btnBack.setText("←");
+        btnBack.setTextSize(18f);
         btnBack.setTextColor(Color.WHITE);
         btnBack.setBackgroundColor(Color.TRANSPARENT);
-        btnBack.setPadding(dp(8), dp(4), dp(8), dp(4));
         btnBack.setOnClickListener(v -> finish());
         topBar.addView(btnBack, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -121,19 +103,18 @@ public class CareActivity extends Activity {
         title.setTextSize(18f);
         title.setTextColor(Color.WHITE);
         title.setGravity(Gravity.CENTER);
-        title.setPadding(dp(16), 0, 0, 0);
-        topBar.addView(title, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        topBar.addView(title, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         btnClear = new Button(this);
         btnClear.setText("清空");
-        btnClear.setTextColor(Color.rgb(200, 200, 255));
+        btnClear.setTextSize(13f);
+        btnClear.setTextColor(Color.rgb(210, 205, 255));
         btnClear.setBackgroundColor(Color.TRANSPARENT);
-        btnClear.setPadding(dp(8), dp(4), dp(8), dp(4));
         btnClear.setOnClickListener(v -> {
             careAI.clearHistory();
             chatContainer.removeAllViews();
-            addMessage("system", "对话已清空。", Color.rgb(130, 125, 150));
+            addAiBubble("对话已清空，重新开始吧。");
         });
         topBar.addView(btnClear, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -141,29 +122,27 @@ public class CareActivity extends Activity {
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 聊天区域
+        // 消息区
         scrollView = new ScrollView(this);
-        scrollView.setPadding(dp(12), dp(8), dp(12), dp(8));
-
         chatContainer = new LinearLayout(this);
         chatContainer.setOrientation(LinearLayout.VERTICAL);
+        chatContainer.setPadding(dp(10), dp(10), dp(10), dp(10));
         scrollView.addView(chatContainer, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
         root.addView(scrollView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // 底部输入区
+        // 输入区
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+        bottomBar.setPadding(dp(8), dp(6), dp(8), dp(10));
         bottomBar.setBackgroundColor(Color.WHITE);
 
         btnAttach = new Button(this);
         btnAttach.setText("📎");
         btnAttach.setTextSize(18f);
         btnAttach.setBackgroundColor(Color.TRANSPARENT);
-        btnAttach.setPadding(dp(8), dp(8), dp(8), dp(8));
+        btnAttach.setPadding(dp(10), dp(6), dp(10), dp(6));
         btnAttach.setOnClickListener(v -> pickZip());
         bottomBar.addView(btnAttach, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -171,8 +150,11 @@ public class CareActivity extends Activity {
         etInput = new EditText(this);
         etInput.setHint("输入消息…");
         etInput.setTextSize(14f);
-        etInput.setPadding(dp(8), dp(8), dp(8), dp(8));
         etInput.setBackgroundResource(android.R.drawable.edit_text);
+        etInput.setSingleLine(false);
+        etInput.setMinLines(1);
+        etInput.setMaxLines(4);
+        etInput.setPadding(dp(10), dp(8), dp(10), dp(8));
         bottomBar.addView(etInput, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -185,15 +167,6 @@ public class CareActivity extends Activity {
         bottomBar.addView(btnSend, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 状态提示
-        tvStatus = new TextView(this);
-        tvStatus.setText("就绪");
-        tvStatus.setTextSize(11f);
-        tvStatus.setTextColor(Color.rgb(130, 125, 150));
-        tvStatus.setPadding(dp(8), 0, dp(8), 0);
-        bottomBar.addView(tvStatus, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
         root.addView(bottomBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -202,12 +175,13 @@ public class CareActivity extends Activity {
 
     private void sendMessage() {
         String text = etInput.getText().toString().trim();
-        if (text.isEmpty() || btnSend.isEnabled() == false) return;
+        if (text.isEmpty() || !btnSend.isEnabled()) return;
         etInput.setText("");
         btnSend.setEnabled(false);
-        addMessage("user", text, Color.rgb(60, 60, 80));
-        setStatus("思考中…");
+        btnSend.setText("…");
+        addUserBubble(text);
         careAI.sendMessage(text);
+        hideKeyboard();
     }
 
     private void pickZip() {
@@ -229,13 +203,14 @@ public class CareActivity extends Activity {
         if (requestCode == REQ_PICK_ZIP && resultCode == RESULT_OK && data != null) {
             final Uri uri = data.getData();
             if (uri == null) return;
-            Toast.makeText(this, "正在处理文件…", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "正在读取文件…", Toast.LENGTH_SHORT).show();
+            btnSend.setEnabled(false);
+            btnSend.setText("…");
             new Thread(() -> {
                 try {
-                    // 复制到临时文件
                     File tempDir = new File(getCacheDir(), "care_uploads");
                     tempDir.mkdirs();
-                    String fileName = "upload_" + System.currentTimeMillis() + ".zip";
+                    String fileName = "model_" + System.currentTimeMillis() + ".zip";
                     File tempFile = new File(tempDir, fileName);
                     try (InputStream in = getContentResolver().openInputStream(uri);
                          FileOutputStream out = new FileOutputStream(tempFile)) {
@@ -244,61 +219,147 @@ public class CareActivity extends Activity {
                         while ((n = in.read(buf)) != -1) out.write(buf);
                     }
                     final String path = tempFile.getAbsolutePath();
+                    final long size = tempFile.length();
                     handler.post(() -> {
-                        addMessage("user", "[上传文件: " + fileName + "]", Color.rgb(60, 60, 80));
-                        setStatus("处理中…");
-                        careAI.handleFile(fileName, path);
+                        addUserBubble("📦 上传模型包\n" + fileName + " (" + formatSize(size) + ")");
+                        // 主动触发：先解压分析，让 AI 立即反馈，不等用户询问
+                        careAI.analyzeUploadedZip(fileName, path);
                     });
                 } catch (Exception e) {
                     handler.post(() -> {
-                        Toast.makeText(this, "文件处理失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        btnSend.setEnabled(true);
+                        btnSend.setText("发送");
+                        Toast.makeText(this, "文件读取失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
                     });
                 }
             }).start();
         }
     }
 
-    // ============ UI 辅助 ============
+    // ============ 气泡渲染 ============
 
-    private void addMessage(String role, String text, int color) {
+    private void addUserBubble(String text) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.RIGHT);
+        TextView tv = makeBubble(text, Color.rgb(96, 74, 210), Color.WHITE, false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(5);
+        lp.bottomMargin = dp(5);
+        lp.leftMargin = dp(60);
+        tv.setMaxWidth(dp(280));
+        row.addView(tv, lp);
+        chatContainer.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollToBottom();
+    }
+
+    private void addAiBubble(String text) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.LEFT);
+        TextView tv = makeBubble(text, Color.WHITE, Color.rgb(50, 50, 70), true);
+        tv.setTag("ai");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(5);
+        lp.bottomMargin = dp(5);
+        lp.rightMargin = dp(60);
+        tv.setMaxWidth(dp(280));
+        row.addView(tv, lp);
+        chatContainer.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollToBottom();
+    }
+
+    private void addToolBubble(String toolName) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.LEFT);
+        TextView tv = new TextView(this);
+        tv.setText("⚙ " + toolName + " …");
+        tv.setTextSize(11f);
+        tv.setTextColor(Color.rgb(140, 130, 165));
+        tv.setPadding(dp(10), dp(4), dp(10), dp(4));
+        tv.setTag("tool");
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(Color.rgb(235, 232, 248));
+        gd.setCornerRadius(dp(10));
+        tv.setBackground(gd);
+        row.addView(tv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        chatContainer.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollToBottom();
+    }
+
+    private TextView makeBubble(String text, int bg, int fg, boolean isAi) {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(14f);
         tv.setLineSpacing(4f, 1f);
-        tv.setTextColor(color);
-        tv.setPadding(dp(12), dp(8), dp(12), dp(8));
-        tv.setBackgroundColor(Color.rgb(255, 255, 255));
-        tv.setAlpha(role.equals("user") ? 0.95f : 0.85f);
-        // 设置圆角背景
-        tv.setBackgroundResource(android.R.drawable.editbox_background);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, dp(4), 0, dp(4));
-        chatContainer.addView(tv, lp);
-        scrollToBottom();
+        tv.setTextColor(fg);
+        tv.setPadding(dp(14), dp(10), dp(14), dp(10));
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(bg);
+        gd.setCornerRadii(new float[]{
+                dp(isAi ? 4 : 14), dp(isAi ? 4 : 14),
+                dp(14), dp(14),
+                dp(isAi ? 14 : 4), dp(isAi ? 14 : 4),
+                dp(14), dp(14)});
+        tv.setBackground(gd);
+        return tv;
     }
 
-    /** 追加文本到最后一条消息 */
     private void appendToLastMessage(String text) {
         int count = chatContainer.getChildCount();
         if (count > 0) {
             View last = chatContainer.getChildAt(count - 1);
-            if (last instanceof TextView) {
-                TextView tv = (TextView) last;
-                tv.setText(tv.getText() + text);
-                scrollToBottom();
+            if (last instanceof LinearLayout) {
+                LinearLayout row = (LinearLayout) last;
+                if (row.getChildCount() > 0 && row.getChildAt(0) instanceof TextView) {
+                    TextView tv = (TextView) row.getChildAt(0);
+                    if ("ai".equals(tv.getTag())) {
+                        tv.setText(tv.getText() + text);
+                        scrollToBottom();
+                        return;
+                    }
+                }
             }
         }
+        // 若当前最后不是 AI 气泡（如刚发完用户消息），则新开一个 AI 气泡
+        addAiBubble(text);
     }
 
     private void scrollToBottom() {
-        if (scrollView != null) {
-            scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
+        scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
+    }
+
+    private void hideKeyboard() {
+        try {
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(etInput.getWindowToken(), 0);
+        } catch (Exception ignored) {
         }
     }
 
-    private void setStatus(String text) {
-        if (tvStatus != null) tvStatus.setText(text);
+    private String formatSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0);
+        return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        destroyed = true;
+    }
+
+    private void safeRun(Runnable r) {
+        handler.post(() -> {
+            if (!destroyed) r.run();
+        });
     }
 
     private int dp(float dp) {
