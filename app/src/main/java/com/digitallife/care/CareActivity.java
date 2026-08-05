@@ -3,31 +3,39 @@ package com.digitallife.care;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.json.JSONObject;
+
+import com.digitallife.R;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * 护理大脑对话界面（独立页面）。
- * 气泡聊天 UI：用户消息右对齐、AI 消息左对齐。支持上传模型 zip 自动解压分析。
+ * 现代聊天 UI：彩色顶栏 + 时间戳 + 用户/AI/工具三类气泡 + 快捷设置切换。
  */
 public class CareActivity extends Activity {
 
@@ -36,8 +44,9 @@ public class CareActivity extends Activity {
     private CareAI careAI;
     private LinearLayout chatContainer;
     private EditText etInput;
-    private Button btnSend, btnAttach, btnClear;
+    private ImageButton btnSend, btnAttach;
     private ScrollView scrollView;
+    private TextView tvTitle;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private volatile boolean destroyed = false;
 
@@ -59,113 +68,107 @@ public class CareActivity extends Activity {
 
             @Override
             public void onDone(String fullText) {
-                safeRun(() -> {
-                    btnSend.setEnabled(true);
-                    btnSend.setText("发送");
-                });
+                safeRun(() -> btnSend.setEnabled(true));
             }
 
             @Override
             public void onError(String error) {
                 safeRun(() -> {
-                    addAiBubble("⚠ " + error);
+                    addAiBubble("⚠ 出错了：" + error);
                     btnSend.setEnabled(true);
-                    btnSend.setText("发送");
                 });
             }
         });
         buildUi();
-        addAiBubble("你好，我是护理大脑 🤖\n\n我可以帮你：\n· 上传模型 zip，自动解压并检查\n· 分析模型完整性（纹理/骨骼/动作）\n· 查看和编辑模型动作\n· 管理工作流和定时任务\n\n直接发消息，或点右下角上传模型压缩包。");
+        addAiBubble("你好，我是护理大脑，负责照料你的数字生命。\n\n我可以帮你：\n· 上传模型包，自动解压并体检\n· 分析模型完整性，修复缺失文件\n· 查看、创作、编辑角色动作\n· 管理工作流和定时任务\n\n直接发消息，或点左下角上传模型压缩包。");
     }
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(238, 240, 245));
+        root.setBackgroundColor(getColorCompat(R.color.page_bg));
 
-        // 顶部栏
+        // ===== 顶部栏（品牌渐变 + 设置切换） =====
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setPadding(dp(8), dp(12), dp(8), dp(12));
-        topBar.setBackgroundColor(Color.rgb(96, 74, 210));
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setBackgroundResource(R.drawable.bg_top_bar);
+        topBar.setPadding(dp(6), dp(12), dp(6), dp(12));
 
-        Button btnBack = new Button(this);
-        btnBack.setText("←");
-        btnBack.setTextSize(18f);
-        btnBack.setTextColor(Color.WHITE);
-        btnBack.setBackgroundColor(Color.TRANSPARENT);
+        ImageButton btnBack = iconButton(R.drawable.ic_back);
+        btnBack.setContentDescription("返回");
         btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        topBar.addView(btnBack, btnLp(40, 40));
 
-        TextView title = new TextView(this);
-        title.setText("护理大脑");
-        title.setTextSize(18f);
-        title.setTextColor(Color.WHITE);
-        title.setGravity(Gravity.CENTER);
-        topBar.addView(title, new LinearLayout.LayoutParams(0,
+        tvTitle = new TextView(this);
+        tvTitle.setText("护理大脑");
+        tvTitle.setTextSize(17f);
+        tvTitle.setTextColor(Color.WHITE);
+        tvTitle.setGravity(Gravity.CENTER);
+        tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        btnClear = new Button(this);
-        btnClear.setText("清空");
-        btnClear.setTextSize(13f);
-        btnClear.setTextColor(Color.rgb(210, 205, 255));
-        btnClear.setBackgroundColor(Color.TRANSPARENT);
-        btnClear.setOnClickListener(v -> {
-            careAI.clearHistory();
-            chatContainer.removeAllViews();
-            addAiBubble("对话已清空，重新开始吧。");
+        // 快捷切换到配置界面
+        ImageButton btnSettings = iconButton(R.drawable.ic_settings);
+        btnSettings.setContentDescription("打开设置");
+        btnSettings.setOnClickListener(v -> {
+            try {
+                Intent i = new Intent(this, com.digitallife.ui.MainActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+                startActivity(i);
+            } catch (Exception e) {
+                toast("无法打开设置：" + e.getMessage());
+            }
         });
-        topBar.addView(btnClear, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        topBar.addView(btnSettings, btnLp(40, 40));
 
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 消息区
+        // ===== 消息区 =====
         scrollView = new ScrollView(this);
+        scrollView.setVerticalScrollBarEnabled(false);
         chatContainer = new LinearLayout(this);
         chatContainer.setOrientation(LinearLayout.VERTICAL);
-        chatContainer.setPadding(dp(10), dp(10), dp(10), dp(10));
+        chatContainer.setPadding(dp(12), dp(14), dp(12), dp(10));
         scrollView.addView(chatContainer, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(scrollView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // 输入区
+        // ===== 输入区 =====
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setPadding(dp(8), dp(6), dp(8), dp(10));
+        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBar.setPadding(dp(10), dp(8), dp(10), dp(10));
         bottomBar.setBackgroundColor(Color.WHITE);
 
-        btnAttach = new Button(this);
-        btnAttach.setText("📎");
-        btnAttach.setTextSize(18f);
+        btnAttach = new ImageButton(this);
+        btnAttach.setImageResource(R.drawable.ic_attach);
         btnAttach.setBackgroundColor(Color.TRANSPARENT);
-        btnAttach.setPadding(dp(10), dp(6), dp(10), dp(6));
+        btnAttach.setContentDescription("上传模型包");
+        btnAttach.setPadding(dp(6), dp(6), dp(6), dp(6));
         btnAttach.setOnClickListener(v -> pickZip());
-        bottomBar.addView(btnAttach, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        bottomBar.addView(btnAttach, btnLp(40, 40));
 
         etInput = new EditText(this);
         etInput.setHint("输入消息…");
         etInput.setTextSize(14f);
-        etInput.setBackgroundResource(android.R.drawable.edit_text);
-        etInput.setSingleLine(false);
+        etInput.setBackgroundResource(R.drawable.bg_input);
+        etInput.setPadding(dp(12), dp(9), dp(12), dp(9));
         etInput.setMinLines(1);
         etInput.setMaxLines(4);
-        etInput.setPadding(dp(10), dp(8), dp(10), dp(8));
         bottomBar.addView(etInput, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        btnSend = new Button(this);
-        btnSend.setText("发送");
-        btnSend.setTextColor(Color.WHITE);
-        btnSend.setBackgroundColor(Color.rgb(96, 74, 210));
-        btnSend.setPadding(dp(16), dp(8), dp(16), dp(8));
+        btnSend = new ImageButton(this);
+        btnSend.setImageResource(R.drawable.ic_send);
+        btnSend.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnSend.setContentDescription("发送");
+        btnSend.setPadding(dp(10), dp(10), dp(10), dp(10));
         btnSend.setOnClickListener(v -> sendMessage());
-        bottomBar.addView(btnSend, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        bottomBar.addView(btnSend, btnLp(44, 44));
 
         root.addView(bottomBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -173,12 +176,13 @@ public class CareActivity extends Activity {
         setContentView(root);
     }
 
+    // ============ 发送 ============
+
     private void sendMessage() {
         String text = etInput.getText().toString().trim();
         if (text.isEmpty() || !btnSend.isEnabled()) return;
         etInput.setText("");
         btnSend.setEnabled(false);
-        btnSend.setText("…");
         addUserBubble(text);
         careAI.sendMessage(text);
         hideKeyboard();
@@ -193,7 +197,7 @@ public class CareActivity extends Activity {
                     new String[]{"application/zip", "application/x-zip-compressed"});
             startActivityForResult(i, REQ_PICK_ZIP);
         } catch (Exception e) {
-            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+            toast("无法打开文件选择器");
         }
     }
 
@@ -203,9 +207,8 @@ public class CareActivity extends Activity {
         if (requestCode == REQ_PICK_ZIP && resultCode == RESULT_OK && data != null) {
             final Uri uri = data.getData();
             if (uri == null) return;
-            Toast.makeText(this, "正在读取文件…", Toast.LENGTH_SHORT).show();
+            toast("正在读取文件…");
             btnSend.setEnabled(false);
-            btnSend.setText("…");
             new Thread(() -> {
                 try {
                     File tempDir = new File(getCacheDir(), "care_uploads");
@@ -221,15 +224,13 @@ public class CareActivity extends Activity {
                     final String path = tempFile.getAbsolutePath();
                     final long size = tempFile.length();
                     handler.post(() -> {
-                        addUserBubble("📦 上传模型包\n" + fileName + " (" + formatSize(size) + ")");
-                        // 主动触发：先解压分析，让 AI 立即反馈，不等用户询问
+                        addUserBubble("上传模型包 " + fileName + "（" + formatSize(size) + "）");
                         careAI.analyzeUploadedZip(fileName, path);
                     });
                 } catch (Exception e) {
                     handler.post(() -> {
                         btnSend.setEnabled(true);
-                        btnSend.setText("发送");
-                        Toast.makeText(this, "文件读取失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        toast("文件读取失败：" + e.getMessage());
                     });
                 }
             }).start();
@@ -239,16 +240,23 @@ public class CareActivity extends Activity {
     // ============ 气泡渲染 ============
 
     private void addUserBubble(String text) {
+        addTimestamp();
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.RIGHT);
-        TextView tv = makeBubble(text, Color.rgb(96, 74, 210), Color.WHITE, false);
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(14f);
+        tv.setLineSpacing(3f, 1f);
+        tv.setTextColor(Color.WHITE);
+        tv.setPadding(dp(14), dp(10), dp(14), dp(10));
+        tv.setBackgroundResource(R.drawable.bg_bubble_user);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(5);
-        lp.bottomMargin = dp(5);
+        lp.topMargin = dp(3);
+        lp.bottomMargin = dp(3);
         lp.leftMargin = dp(60);
-        tv.setMaxWidth(dp(280));
+        tv.setMaxWidth(dp(270));
         row.addView(tv, lp);
         chatContainer.addView(row, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -256,60 +264,90 @@ public class CareActivity extends Activity {
     }
 
     private void addAiBubble(String text) {
+        addTimestamp();
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.LEFT);
-        TextView tv = makeBubble(text, Color.WHITE, Color.rgb(50, 50, 70), true);
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(14f);
+        tv.setLineSpacing(3f, 1f);
+        tv.setTextColor(getColorCompat(R.color.text_primary));
+        tv.setPadding(dp(14), dp(10), dp(14), dp(10));
+        tv.setBackgroundResource(R.drawable.bg_bubble_ai);
         tv.setTag("ai");
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(5);
-        lp.bottomMargin = dp(5);
+        lp.topMargin = dp(3);
+        lp.bottomMargin = dp(3);
         lp.rightMargin = dp(60);
-        tv.setMaxWidth(dp(280));
+        tv.setMaxWidth(dp(270));
         row.addView(tv, lp);
         chatContainer.addView(row, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scrollToBottom();
     }
 
+    /** 工具调用提示：小字卡片，展示工具名与状态 */
     private void addToolBubble(String toolName) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.LEFT);
+        row.setPadding(dp(14), 0, dp(60), 0);
+
         TextView tv = new TextView(this);
-        tv.setText("⚙ " + toolName + " …");
-        tv.setTextSize(11f);
-        tv.setTextColor(Color.rgb(140, 130, 165));
-        tv.setPadding(dp(10), dp(4), dp(10), dp(4));
+        SpannableString ss = new SpannableString("◉ " + friendlyToolName(toolName));
+        ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.brand)), 0, 2,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        tv.setText(ss);
+        tv.setTextSize(12f);
+        tv.setTextColor(getColorCompat(R.color.text_secondary));
+        tv.setPadding(dp(10), dp(6), dp(10), dp(6));
+        tv.setBackgroundResource(R.drawable.bg_tool);
         tv.setTag("tool");
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.rgb(235, 232, 248));
-        gd.setCornerRadius(dp(10));
-        tv.setBackground(gd);
-        row.addView(tv, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(tv);
         chatContainer.addView(row, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scrollToBottom();
     }
 
-    private TextView makeBubble(String text, int bg, int fg, boolean isAi) {
+    private String friendlyToolName(String name) {
+        if (name == null) return "处理中";
+        switch (name) {
+            case "inspect_zip": return "解压检查模型包";
+            case "analyze_model": return "分析模型完整性";
+            case "install_model_from_zip": return "安装模型";
+            case "repair_model": return "修复模型";
+            case "list_models": return "列出模型";
+            case "list_motions": return "列出动作";
+            case "get_motion_detail": return "查看动作详情";
+            case "generate_motion": return "创作动作";
+            case "edit_motion": return "编辑动作";
+            case "delete_motion": return "删除动作";
+            case "play_motion": return "播放动作";
+            case "create_workflow": return "创建工作流";
+            case "run_workflow": return "执行工作流";
+            case "add_scheduled_task": return "添加定时任务";
+            case "health_check": return "模型健康检查";
+            default: return name;
+        }
+    }
+
+    /** 时间戳：两分钟内不再重复显示 */
+    private long lastTimestampMs = 0;
+
+    private void addTimestamp() {
+        long now = System.currentTimeMillis();
+        if (now - lastTimestampMs < 120000) return;
+        lastTimestampMs = now;
         TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextSize(14f);
-        tv.setLineSpacing(4f, 1f);
-        tv.setTextColor(fg);
-        tv.setPadding(dp(14), dp(10), dp(14), dp(10));
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(bg);
-        gd.setCornerRadii(new float[]{
-                dp(isAi ? 4 : 14), dp(isAi ? 4 : 14),
-                dp(14), dp(14),
-                dp(isAi ? 14 : 4), dp(isAi ? 14 : 4),
-                dp(14), dp(14)});
-        tv.setBackground(gd);
-        return tv;
+        tv.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(now)));
+        tv.setTextSize(11f);
+        tv.setTextColor(getColorCompat(R.color.text_hint));
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, dp(6), 0, dp(6));
+        chatContainer.addView(tv, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private void appendToLastMessage(String text) {
@@ -328,7 +366,6 @@ public class CareActivity extends Activity {
                 }
             }
         }
-        // 若当前最后不是 AI 气泡（如刚发完用户消息），则新开一个 AI 气泡
         addAiBubble(text);
     }
 
@@ -346,8 +383,8 @@ public class CareActivity extends Activity {
 
     private String formatSize(long bytes) {
         if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format(java.util.Locale.ROOT, "%.1f KB", bytes / 1024.0);
-        return String.format(java.util.Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
+        if (bytes < 1024 * 1024) return String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0);
+        return String.format(Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
     }
 
     @Override
@@ -362,7 +399,30 @@ public class CareActivity extends Activity {
         });
     }
 
-    private int dp(float dp) {
-        return (int) (dp * getResources().getDisplayMetrics().density + 0.5f);
+    private void toast(String msg) {
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    private ImageButton iconButton(int res) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(res);
+        b.setBackgroundColor(Color.TRANSPARENT);
+        b.setScaleType(ImageView.ScaleType.CENTER);
+        b.setPadding(dp(8), dp(8), dp(8), dp(8));
+        return b;
+    }
+
+    private LinearLayout.LayoutParams btnLp(int w, int h) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(w), dp(h));
+        lp.setMargins(dp(4), 0, dp(4), 0);
+        return lp;
+    }
+
+    private int getColorCompat(int res) {
+        return getResources().getColor(res);
+    }
+
+    private int dp(float v) {
+        return Math.round(getResources().getDisplayMetrics().density * v);
     }
 }
