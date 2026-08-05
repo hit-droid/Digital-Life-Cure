@@ -20,6 +20,7 @@ import android.view.WindowManager;
 
 import com.digitallife.R;
 import com.digitallife.brain.AICore;
+import com.digitallife.care.CareExecutor;
 import com.digitallife.brain.Heartbeat;
 import com.digitallife.model.ModelManager;
 import com.digitallife.util.CrashHandler;
@@ -167,6 +168,11 @@ public class PetService extends Service implements AICore.Output,
         aiCore.start();
         memory = aiCore.getMemory();
 
+        // 双层 AI 协作：注入执行层（AI-2），让大脑的行为意图落到真实动作/模型上
+        CareExecutor careExecutor = CareExecutor.getInstance(this);
+        careExecutor.setRender(careRender);
+        aiCore.setExecutor(careExecutor);
+
         // 后台连接已保存的 MCP 工具服务器，连接成功后热刷新大脑工具集
         connectMcpServersAsync();
 
@@ -312,6 +318,55 @@ public class PetService extends Service implements AICore.Output,
     }
 
     // ================= AICore.Output =================
+
+    /** CareExecutor.Render 实现：执行层（AI-2）落到与 AICore 相同的渲染目标 */
+    private final CareExecutor.Render careRender = new CareExecutor.Render() {
+        @Override
+        public void setParam(String paramId, float value) {
+            if (overlayView != null) overlayView.setParameterValue(paramId, value);
+        }
+
+        @Override
+        public void setExpression(String name) {
+            if (overlayView != null) overlayView.setExpression(name);
+        }
+
+        @Override
+        public void playMotion(String group, int index, int priority) {
+            if (overlayView != null) overlayView.setMotion(group, index, priority);
+        }
+
+        @Override
+        public boolean isMotionPlaying() {
+            return overlayView != null && overlayView.isMotionPlaying();
+        }
+
+        @Override
+        public void bubble(String text, float seconds) {
+            if (overlayView != null) overlayView.showBubble(text, seconds);
+        }
+
+        @Override
+        public void error(String msg) {
+            if (overlayView != null) overlayView.showBubble("(信号不好： " + msg + ")", 3f);
+        }
+
+        @Override
+        public void thinking(boolean thinking) {
+            if (overlayView != null && thinking) overlayView.setExpression("F01");
+        }
+
+        @Override
+        public void speak(String text) {
+            if (overlayView != null) overlayView.setSpeaking(true);
+            if (voiceEnabled && ttsAvailable && tts != null) tts.speak(text);
+        }
+
+        @Override
+        public void move(float x, float y) {
+            PetService.this.onMove(x, y);
+        }
+    };
 
     @Override
     public void onLive2DParam(String paramId, float value) {

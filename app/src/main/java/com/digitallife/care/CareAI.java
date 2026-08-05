@@ -68,7 +68,7 @@ public class CareAI {
             "请用中文回复，每次回答简洁准确。";
 
     private final Context ctx;
-    private final CareTools tools;
+    private final CareExecutor executor;
     private final List<LLMClient.ChatMessage> history;
     private final Handler handler;
     private final ExecutorService pool;
@@ -80,7 +80,7 @@ public class CareAI {
 
     public CareAI(Context ctx) {
         this.ctx = ctx.getApplicationContext();
-        this.tools = new CareTools(ctx);
+        this.executor = CareExecutor.getInstance(ctx);
         this.history = new ArrayList<>();
         this.handler = new Handler(Looper.getMainLooper());
         this.pool = Executors.newSingleThreadExecutor();
@@ -96,7 +96,29 @@ public class CareAI {
             Settings settings = new Settings(ctx);
             llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
         }
-        llm.setTools(tools.getToolSchemas());
+        JSONArray schemas = executor.getTools().getToolSchemas();
+        // 追加「实时播放动作」工具：护理大脑可直接让桌宠播放某个动作
+        try {
+            JSONObject ps = new JSONObject();
+            ps.put("type", "function");
+            JSONObject pfn = new JSONObject();
+            pfn.put("name", "play_motion");
+            pfn.put("description", "立即让桌宠播放某个动作（如挥手、拍手、跳舞、惊讶等），用于实时预览/执行");
+            JSONObject pparams = new JSONObject();
+            pparams.put("type", "object");
+            JSONObject pprops = new JSONObject();
+            JSONObject act = new JSONObject();
+            act.put("type", "string");
+            act.put("description", "动作名");
+            pprops.put("action", act);
+            pparams.put("properties", pprops);
+            pparams.put("required", new JSONArray(new String[]{"action"}));
+            pfn.put("parameters", pparams);
+            ps.put("function", pfn);
+            schemas.put(ps);
+        } catch (Exception ignored) {
+        }
+        llm.setTools(schemas);
     }
 
     public void setListener(CareListener listener) {
@@ -136,7 +158,7 @@ public class CareAI {
             try {
                 JSONObject inspectArgs = new JSONObject();
                 inspectArgs.put("zipPath", filePath);
-                String inspect = tools.execute("inspect_zip", inspectArgs);
+                String inspect = executor.getTools().execute("inspect_zip", inspectArgs);
                 if (inspect.length() > 2000) {
                     inspect = inspect.substring(0, 2000) + "\n...（结果已截断）";
                 }
@@ -150,7 +172,7 @@ public class CareAI {
                     try {
                         JSONObject anaArgs = new JSONObject();
                         anaArgs.put("modelName", modelName);
-                        String analysis = tools.execute("analyze_model", anaArgs);
+                        String analysis = executor.getTools().execute("analyze_model", anaArgs);
                         if (analysis.length() > 2000) {
                             analysis = analysis.substring(0, 2000) + "\n...（结果已截断）";
                         }
@@ -182,6 +204,32 @@ public class CareAI {
             }
         }
         return null;
+    }
+
+    /**
+     * 工具执行成功后落地到执行层（AI-2）：
+     *  - 模型健康检查类：执行层可据此更新自身状态
+     *  - 动作生成类：执行层记录最新动作
+     *  - 模型安装/修复类：执行层注册新模型（引擎已启动时生效）
+     */
+    private void notifyExecutorResult(String toolName, JSONObject args, String result) {
+        try {
+            switch (toolName) {
+                case "install_model_from_zip":
+                    executor.installModel(args.optString("zipPath", ""));
+                    break;
+                case "repair_model":
+                    executor.repairModel(args.optString("modelName", ""));
+                    break;
+                case "generate_motion":
+                case "edit_motion":
+                    // 动作文件已写入，执行层无需额外处理（下次读取生效）
+                    break;
+                default:
+                    break;
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     /**
@@ -217,9 +265,19 @@ public class CareAI {
             public void onToolCall(String name, JSONObject args, String toolCallId) {
                 postToolCall(name, args, toolCallId);
                 try {
-                    String result = tools.execute(name, args);
-                    if (result.length() > 2000) {
-                        result = result.substring(0, 2000) + "\n...（结果已截断）";
+                    String result;
+                    if ("play_motion".equals(name)) {
+                        // 实时播放动作：走执行层，桌宠立即响应
+                        String action = args.optString("action", "");
+                        executor.playAction(action);
+                        result = "已在桌宠上播放动作: " + action;
+                    } else {
+                        result = executor.getTools().execute(name, args);
+                        if (result.length() > 2000) {
+                            result = result.substring(0, 2000) + "\n...（结果已截断）";
+                        }
+                        // 工具执行成功后，通知执行层（AI-2）落地：模型/动作变更实时生效
+                        notifyExecutorResult(name, args, result);
                     }
                     // 添加 assistant 消息（含 tool_calls）到历史
                     JSONArray tcs = new JSONArray();
