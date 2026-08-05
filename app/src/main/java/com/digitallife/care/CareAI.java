@@ -346,6 +346,14 @@ public class CareAI {
         history.clear();
     }
 
+    /**
+     * 记录一条自动化事件到对话上下文（不触发 LLM）。
+     * 让护理大脑在后续对话中知道刚刚自动做过什么。
+     */
+    public void logAutomationEvent(String text) {
+        history.add(new LLMClient.ChatMessage("assistant", "【自动化记录】" + text));
+    }
+
     // ============ 回调 ============
 
     private void postDelta(final String text) {

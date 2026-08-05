@@ -20,6 +20,8 @@ import android.view.WindowManager;
 
 import com.digitallife.R;
 import com.digitallife.brain.AICore;
+import com.digitallife.care.CareAI;
+import com.digitallife.care.CareAutomation;
 import com.digitallife.care.CareExecutor;
 import com.digitallife.brain.Heartbeat;
 import com.digitallife.model.ModelManager;
@@ -52,6 +54,7 @@ public class PetService extends Service implements AICore.Output,
     private WindowManager.LayoutParams overlayParams;
 
     private AICore aiCore;
+    private CareAutomation careAutomation;
     private TTSEngine tts;
     private STTEngine stt;
     private Settings settings;
@@ -172,6 +175,16 @@ public class PetService extends Service implements AICore.Output,
         CareExecutor careExecutor = CareExecutor.getInstance(this);
         careExecutor.setRender(careRender);
         aiCore.setExecutor(careExecutor);
+
+        // 自动化引擎：自动体检 + 定时任务 + 异常自动修复，结果气泡主动反馈
+        CareAI careAI = CareAI.getInstance(this);
+        careAutomation = new CareAutomation(this, careExecutor, careAI, new CareAutomation.Report() {
+            @Override
+            public void onAutoReport(String text) {
+                if (overlayView != null) overlayView.showBubble(text, Math.max(4f, text.length() * 0.06f));
+            }
+        });
+        careAutomation.start();
 
         // 后台连接已保存的 MCP 工具服务器，连接成功后热刷新大脑工具集
         connectMcpServersAsync();
@@ -609,6 +622,7 @@ public class PetService extends Service implements AICore.Output,
     @Override
     public void onDestroy() {
         instance = null;
+        if (careAutomation != null) careAutomation.stop();
         if (heartbeat != null) heartbeat.stop();
         if (aiCore != null) aiCore.stop();
         if (tts != null) { tts.stop(); tts.destroy(); }
