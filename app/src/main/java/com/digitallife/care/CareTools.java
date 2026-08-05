@@ -370,6 +370,8 @@ public class CareTools {
 
     /**
      * 真正解压模型 zip 到模型目录并注册。
+     * 直接在 zip 内扫描 .model3.json/.model.json，确定模型根目录前缀并精准解压，
+     * 不再依赖「解压后逐层找根目录」（原逻辑遇 README/预览图目录会找不到模型）。
      */
     public String installModelFromZip(String zipPath) {
         if (zipPath.isEmpty()) return "请提供 zip 文件路径。";
@@ -379,54 +381,88 @@ public class CareTools {
             return "不是 zip 文件: " + zipPath;
         }
         try {
-            // 先解压到临时目录分析
-            File tmp = new File(ctx.getCacheDir(), "care_install_" + System.currentTimeMillis());
-            tmp.mkdirs();
-            long[] sizes = {0};
-            int[] counts = {0};
-            extractZip(zipFile, tmp, sizes, counts);
-
-            // 找模型根目录（含 model3.json 的目录）
-            File modelRoot = findModelRoot(tmp);
-            if (modelRoot == null) {
-                return "⚠ 压缩包内未找到模型文件（.model3.json / .model.json），无法安装。\n可以用 inspect_zip 先查看内容。";
+            // 第一遍：扫描 zip 内的模型定义文件，取最浅的 json 作为主模型
+            String jsonPath = null;
+            try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    if (entry.isDirectory()) continue;
+                    String name = entry.getName();
+                    String lower = name.toLowerCase(Locale.ROOT);
+                    if (lower.endsWith(".model3.json") || lower.endsWith(".model.json")) {
+                        if (jsonPath == null || name.length() < jsonPath.length()) {
+                            jsonPath = name;
+                        }
+                    }
+                }
+            }
+            if (jsonPath == null) {
+                return "⚠ 压缩包内未找到模型定义文件（.model3.json / .model.json），无法安装。\n可以用 inspect_zip 先查看内容。";
             }
 
-            // 模型名 = 模型根目录名
-            String modelName = modelRoot.getName();
-            // 若根目录就是临时目录，用 zip 文件名
-            if (modelRoot.equals(tmp)) {
-                modelName = zipFile.getName().replace(".zip", "").replaceAll("[^a-zA-Z0-9_\\-\\u4e00-\\u9fa5]", "_");
+            // 模型根目录前缀（json 所在目录）
+            String rootPrefix = jsonPath.substring(0, jsonPath.lastIndexOf('/'));
+            if (rootPrefix.endsWith("/")) {
+                rootPrefix = rootPrefix.substring(0, rootPrefix.length() - 1);
             }
+
+            // 模型目录名 = json 所在最外层目录名；无目录时用 json 文件名 base
+            String modelName = extractTopDirName(rootPrefix, jsonPath);
+
+            // json base 名（C++ 自己拼扩展名）
+            String jsonBase = stripModelJsonSuffix(jsonPath.substring(jsonPath.lastIndexOf('/') + 1));
 
             File modelsDir = getModelsDirSafe();
-            File targetDir = new File(modelsDir, modelName);
+            if (modelsDir == null) return "模型目录未初始化。";
+            File targetDir = new File(modelsDir, sanitizeDirName(modelName));
             if (targetDir.exists()) {
                 deleteRecursive(targetDir);
             }
-            targetDir.mkdirs();
-            copyRecursive(modelRoot, targetDir);
+            if (!targetDir.exists() && !targetDir.mkdirs()) {
+                return "无法创建模型目录: " + targetDir.getName();
+            }
+
+            // 第二遍：只解压模型根目录下的文件（去掉 rootPrefix 前缀）
+            long total = 0;
+            int fileCount = 0;
+            try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    if (entry.isDirectory()) continue;
+                    String name = entry.getName();
+                    if (rootPrefix.isEmpty()) {
+                        if (name.contains("/")) continue; // 只取顶层文件
+                    } else if (!name.startsWith(rootPrefix + "/")) {
+                        continue;
+                    }
+                    String rel = rootPrefix.isEmpty() ? name : name.substring(rootPrefix.length() + 1);
+                    if (rel.isEmpty()) continue;
+                    File outFile = new File(targetDir, rel);
+                    File parent = outFile.getParentFile();
+                    if (parent != null && !parent.exists()) parent.mkdirs();
+                    long size = writeZipEntry(zis, outFile);
+                    total += size;
+                    fileCount++;
+                    if (total > MAX_ZIP_SIZE) {
+                        throw new Exception("解压内容过大，已取消");
+                    }
+                }
+            }
+
+            if (fileCount == 0) {
+                throw new Exception("未解压到任何模型文件");
+            }
 
             // 注册到 native（如果引擎已启动）
             try {
-                File model3 = firstFile(targetDir, ".model3.json");
-                if (model3 != null) {
-                    String base = model3.getName().replace(".model3.json", "");
-                    Live2DNative.nativeAddModelDir(modelName, base);
-                }
+                Live2DNative.nativeAddModelDir(targetDir.getName(), jsonBase);
             } catch (Throwable ignored) {
                 // 引擎未启动时跳过注册，下次启动 PetService 会重新注册
             }
 
-            deleteRecursive(tmp);
-            StringBuilder sb = new StringBuilder("✅ 模型安装成功: " + modelName + "\n");
-            sb.append("   文件数: ").append(counts[0]).append("，大小: ").append(formatSize(sizes[0])).append("\n");
-            File model3 = firstFile(targetDir, ".model3.json");
-            if (model3 == null) {
-                sb.append("   ⚠ 请确认模型包含 .model3.json 定义。\n");
-            } else {
-                sb.append("   定义文件: ").append(model3.getName()).append("\n");
-            }
+            StringBuilder sb = new StringBuilder("✅ 模型安装成功: " + targetDir.getName() + "\n");
+            sb.append("   文件数: ").append(fileCount).append("，大小: ").append(formatSize(total)).append("\n");
+            sb.append("   定义文件: ").append(jsonPath).append("\n");
             sb.append("   现在可以在桌宠中切换到这个模型了。\n");
             return sb.toString();
         } catch (Exception e) {
@@ -434,30 +470,45 @@ public class CareTools {
         }
     }
 
-    /** 找到包含模型 json 的目录（向上回溯） */
-    private File findModelRoot(File dir) {
-        File modelRoot = findModelRootRecursive(dir);
-        return modelRoot;
-    }
-
-    private File findModelRootRecursive(File dir) {
-        File[] files = dir.listFiles();
-        if (files == null) return null;
-        boolean hasModelJson = false;
-        File firstSub = null;
-        for (File f : files) {
-            if (f.isDirectory()) {
-                if (firstSub == null) firstSub = f;
-            } else if (f.getName().endsWith(".model3.json") || f.getName().endsWith(".model.json")) {
-                hasModelJson = true;
+    private long writeZipEntry(ZipInputStream zis, File outFile) throws Exception {
+        long size = 0;
+        byte[] buf = new byte[8192];
+        try (OutputStream os = new FileOutputStream(outFile)) {
+            int n;
+            while ((n = zis.read(buf)) != -1) {
+                size += n;
+                if (size > MAX_ENTRY_SIZE) {
+                    throw new Exception("单文件过大: " + outFile.getName());
+                }
+                os.write(buf, 0, n);
             }
         }
-        if (hasModelJson) return dir;
-        if (firstSub != null) {
-            File r = findModelRootRecursive(firstSub);
-            if (r != null) return r;
+        return size;
+    }
+
+    private String extractTopDirName(String rootPrefix, String jsonPath) {
+        if (rootPrefix != null && !rootPrefix.isEmpty()) {
+            String[] parts = rootPrefix.split("/");
+            if (parts.length > 0 && !parts[0].isEmpty()) return parts[0];
         }
-        return null;
+        String f = jsonPath.substring(jsonPath.lastIndexOf('/') + 1);
+        return stripModelJsonSuffix(f);
+    }
+
+    private String stripModelJsonSuffix(String fileName) {
+        String lower = fileName.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".model3.json")) {
+            return fileName.substring(0, fileName.length() - ".model3.json".length());
+        }
+        if (lower.endsWith(".model.json")) {
+            return fileName.substring(0, fileName.length() - ".model.json".length());
+        }
+        return fileName;
+    }
+
+    private String sanitizeDirName(String name) {
+        if (name == null || name.trim().isEmpty()) return "model";
+        return name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
     private String repairModel(String modelName) {
@@ -865,25 +916,6 @@ public class CareTools {
             while ((line = r.readLine()) != null) sb.append(line).append('\n');
         }
         return sb.toString().trim();
-    }
-
-    private static void copyRecursive(File src, File dst) throws Exception {
-        if (src.isDirectory()) {
-            if (!dst.exists()) dst.mkdirs();
-            File[] files = src.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    copyRecursive(f, new File(dst, f.getName()));
-                }
-            }
-        } else {
-            try (FileInputStream in = new FileInputStream(src);
-                 FileOutputStream out = new FileOutputStream(dst)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
-            }
-        }
     }
 
     private static void deleteRecursive(File dir) {

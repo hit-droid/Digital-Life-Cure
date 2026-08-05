@@ -46,6 +46,8 @@ public class CareAI {
     public interface CareListener {
         void onDelta(String text);
         void onToolCall(String toolName, JSONObject args, String toolCallId);
+        /** 工具执行完成，反馈结果摘要给 UI（避免干等） */
+        void onToolResult(String toolName, boolean ok, String result);
         void onDone(String fullText);
         void onError(String error);
     }
@@ -145,63 +147,91 @@ public class CareAI {
     }
 
     /**
-     * 上传模型 zip 后主动分析：先解压检查，若发现模型文件则进一步分析完整性和动作列表，
-     * 把结果注入对话历史，并让 AI 立即主动总结反馈（无需用户追问）。
+     * 上传模型 zip 后全自动处理：真正安装到模型目录 → 注册 → 分析完整性 → 动作列表，
+     * 每步结果实时反馈 UI，最后让 AI 主动总结（无需用户追问、不再死循环）。
      */
     public void analyzeUploadedZip(String fileName, String filePath) {
-        if (!running.compareAndSet(false, true)) {
-            history.add(new LLMClient.ChatMessage("user", "我上传了模型包 " + fileName + "，请分析。"));
-            doConverse();
-            return;
-        }
         pool.execute(() -> {
             try {
-                JSONObject inspectArgs = new JSONObject();
-                inspectArgs.put("zipPath", filePath);
-                String inspect = executor.getTools().execute("inspect_zip", inspectArgs);
-                if (inspect.length() > 2000) {
-                    inspect = inspect.substring(0, 2000) + "\n...（结果已截断）";
+                if (!running.compareAndSet(false, true)) {
+                    // 已有对话在跑：把上传信息排队进历史，由现有循环继续
+                    history.add(new LLMClient.ChatMessage("user",
+                            "我上传了模型包 " + fileName + "，路径 " + filePath + "，请立即安装并分析。"));
+                    return;
                 }
+                // 第 1 步：真正安装（解压到模型目录并注册），不再只解压到临时目录
+                String install = executor.getTools().execute("install_model_from_zip", jsonArgs("zipPath", filePath));
+                boolean installOk = install.contains("安装成功") || install.contains("✅");
+                postToolResult("install_model_from_zip", installOk, install);
                 history.add(new LLMClient.ChatMessage("user",
-                        "我上传了模型包 " + fileName + "，请主动检查并给出完整分析报告。"));
-                history.add(new LLMClient.ChatMessage("assistant",
-                        "好的，我先检查压缩包内容。\n\n" + inspect));
-                // 若识别出模型文件，进一步深入分析，让 AI 主动报告
-                String modelName = findModelName(inspect);
-                if (modelName != null && !modelName.isEmpty()) {
-                    try {
-                        JSONObject anaArgs = new JSONObject();
-                        anaArgs.put("modelName", modelName);
-                        String analysis = executor.getTools().execute("analyze_model", anaArgs);
-                        if (analysis.length() > 2000) {
-                            analysis = analysis.substring(0, 2000) + "\n...（结果已截断）";
-                        }
-                        history.add(new LLMClient.ChatMessage("user",
-                                "继续分析模型 " + modelName + " 的完整性："));
-                        history.add(new LLMClient.ChatMessage("assistant", analysis));
-                    } catch (Exception e) {
-                        history.add(new LLMClient.ChatMessage("assistant",
-                                "深入分析失败: " + e.getMessage()));
-                    }
+                        "我上传了模型包 " + fileName + "，请检查安装结果并给出完整分析报告。"));
+                history.add(new LLMClient.ChatMessage("assistant", install));
+
+                if (!installOk) {
+                    history.add(new LLMClient.ChatMessage("assistant",
+                            "⚠ 模型安装未成功，请根据上面的提示检查压缩包内容（是否包含 .model3.json 定义、纹理、moc 骨骼等），并告诉我如何解决。"));
+                    doConverse();
+                    return;
                 }
+
+                // 第 2 步：分析已安装的模型完整性
+                String modelName = extractInstalledModelName(install);
+                if (modelName == null || modelName.isEmpty()) {
+                    modelName = firstInstalledModelName();
+                }
+                if (modelName != null && !modelName.isEmpty()) {
+                    String analysis = executor.getTools().execute("analyze_model", jsonArgs("modelName", modelName));
+                    postToolResult("analyze_model", !analysis.contains("⚠") && !analysis.contains("❌"), analysis);
+                    history.add(new LLMClient.ChatMessage("assistant", analysis));
+
+                    // 第 3 步：列出动作
+                    String motions = executor.getTools().execute("list_motions", jsonArgs("modelName", modelName));
+                    postToolResult("list_motions", !motions.contains("未找到") && !motions.contains("失败"), motions);
+                    history.add(new LLMClient.ChatMessage("assistant", motions));
+                }
+
+                // 第 4 步：AI 主动总结
+                history.add(new LLMClient.ChatMessage("user",
+                        "请总结这次模型安装和分析的最终结果：模型是否已成功安装可用、完整性问题、可用的动作。"));
                 doConverse();
             } catch (Exception e) {
-                postError("解压分析失败: " + e.getMessage());
-                history.add(new LLMClient.ChatMessage("assistant", "解压分析失败: " + e.getMessage()));
+                postError("处理失败: " + e.getMessage());
+                postToolResult("install_model_from_zip", false, e.getMessage());
+                history.add(new LLMClient.ChatMessage("assistant", "处理失败: " + e.getMessage()));
                 running.set(false);
             }
         });
     }
 
-    /** 从 inspect_zip 结果中粗提取模型名（模型文件 .model3.json 所在顶层目录） */
-    private String findModelName(String inspectResult) {
-        for (String line : inspectResult.split("\n")) {
+    private JSONObject jsonArgs(String k, String v) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put(k, v);
+        } catch (Exception ignored) {
+        }
+        return o;
+    }
+
+    /** 从安装成功结果文本中提取模型名 */
+    private String extractInstalledModelName(String install) {
+        for (String line : install.split("\n")) {
             String t = line.trim();
-            if (t.contains(".model3.json") || t.contains(".model.json")) {
-                t = t.replaceAll("^[\\u2713\\u2716!\\s✅⚠]+", "");
-                int slash = t.indexOf('/');
-                if (slash > 0) return t.substring(0, slash);
+            if (t.startsWith("✅ 模型安装成功") && t.contains(":")) {
+                return t.substring(t.indexOf(':') + 1).trim();
             }
+        }
+        return null;
+    }
+
+    /** 取第一个已安装模型名（native 模型列表） */
+    private String firstInstalledModelName() {
+        try {
+            int count = com.digitallife.render.Live2DNative.nativeGetModelCount();
+            if (count > 0) {
+                String name = com.digitallife.render.Live2DNative.nativeGetModelDirName(0);
+                if (name != null && !name.isEmpty()) return name;
+            }
+        } catch (Throwable ignored) {
         }
         return null;
     }
@@ -216,7 +246,14 @@ public class CareAI {
         try {
             switch (toolName) {
                 case "install_model_from_zip":
-                    executor.installModel(args.optString("zipPath", ""));
+                    // 安装已由工具本身完成（解压+注册）。若桌宠运行中，让 native 重新注册全部模型，
+                    // 使新模型立即可切换；未运行时下次启动 PetService 自动注册。
+                    if (com.digitallife.service.PetService.getInstance() != null) {
+                        try {
+                            com.digitallife.model.ModelManager.registerImportedModels(ctx);
+                        } catch (Throwable ignored) {
+                        }
+                    }
                     break;
                 case "repair_model":
                     executor.repairModel(args.optString("modelName", ""));
@@ -279,6 +316,8 @@ public class CareAI {
                         // 工具执行成功后，通知执行层（AI-2）落地：模型/动作变更实时生效
                         notifyExecutorResult(name, args, result);
                     }
+                    // 结果实时反馈到 UI，避免用户干等
+                    postToolResult(name, isToolResultOk(result), result);
                     // 添加 assistant 消息（含 tool_calls）到历史
                     JSONArray tcs = new JSONArray();
                     JSONObject tc = new JSONObject();
@@ -297,6 +336,7 @@ public class CareAI {
                     toolMsg.toolCallId = toolCallId;
                     history.add(toolMsg);
                 } catch (Exception e) {
+                    postToolResult(name, false, "执行失败: " + e.getMessage());
                     history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + e.getMessage()));
                 }
             }
@@ -366,6 +406,24 @@ public class CareAI {
         handler.post(() -> {
             if (listener != null) listener.onToolCall(name, args, toolCallId);
         });
+    }
+
+    private void postToolResult(final String name, final boolean ok, final String result) {
+        handler.post(() -> {
+            if (listener != null) listener.onToolResult(name, ok, result);
+        });
+    }
+
+    /** 简单判断工具结果文本是否表示成功 */
+    private boolean isToolResultOk(String result) {
+        if (result == null) return false;
+        String r = result.trim();
+        if (r.startsWith("⚠") || r.startsWith("❌") || r.startsWith("✗")) return false;
+        if (r.contains("失败") || r.contains("未找到") || r.contains("不存在")
+                || r.contains("无法") || r.contains("错误")) return false;
+        return r.startsWith("✅") || r.startsWith("✔") || r.startsWith("成功")
+                || r.startsWith("已在") || r.startsWith("已") || r.startsWith("▶")
+                || r.startsWith("解压完成") || r.startsWith("模型");
     }
 
     private void postDone(final String fullText) {
