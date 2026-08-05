@@ -53,16 +53,18 @@ public class CareAI {
     private static final String SYSTEM_PROMPT =
             "你是数字生命的护理大脑，负责管理桌面上的 Live2D 虚拟角色。\n\n" +
             "你的能力：\n" +
-            "1. 模型管理：列出、检查、安装、修复 Live2D 模型\n" +
-            "2. 动作管理：列出、创建、修改、删除模型动作（.motion3.json）\n" +
+            "1. 模型管理：列出、检查、分析、安装、修复 Live2D 模型\n" +
+            "2. 动作管理：列出、创建、修改、删除模型动作（.motion3.json），可指定参数曲线\n" +
             "3. 工作流：创建、列出、执行自动化工作流\n" +
             "4. 定时任务：添加、列出、删除定时任务\n\n" +
             "使用规则：\n" +
-            "- 当用户发送模型 zip 文件时，先调用 install_model 安装，再检查完整性\n" +
-            "- 模型检查时详细列出缺失文件，并给出修复建议\n" +
-            "- 动作创建时，询问用户需要的动作参数（时长、循环、参数曲线等）\n" +
+            "- 当用户上传模型 zip 或请求检查模型时，必须主动调用 analyze_model 进行完整分析，并主动输出检查结论（通过/缺失文件/修复建议），不要等用户追问\n" +
+            "- 安装模型前先检查完整性，缺失关键文件要明确指出\n" +
+            "- 创建动作时主动询问动作参数（名称、时长、是否循环），或按用户描述直接创建\n" +
+            "- 编辑动作时先查看动作详情再修改\n" +
             "- 工作流可以包含多个步骤，每个步骤调用一个工具\n" +
-            "- 定时任务使用 cron 表达式定义触发时间\n\n" +
+            "- 定时任务使用 cron 表达式定义触发时间\n" +
+            "- 工具执行完成后，用中文主动总结执行结果和下一步建议\n\n" +
             "请用中文回复，每次回答简洁准确。";
 
     private final Context ctx;
@@ -118,6 +120,68 @@ public class CareAI {
             msg += "\n这是一个压缩包，请检查并尝试安装其中的模型。";
         }
         sendMessage(msg);
+    }
+
+    /**
+     * 上传模型 zip 后主动分析：先解压检查，若发现模型文件则进一步分析完整性和动作列表，
+     * 把结果注入对话历史，并让 AI 立即主动总结反馈（无需用户追问）。
+     */
+    public void analyzeUploadedZip(String fileName, String filePath) {
+        if (!running.compareAndSet(false, true)) {
+            history.add(new LLMClient.ChatMessage("user", "我上传了模型包 " + fileName + "，请分析。"));
+            doConverse();
+            return;
+        }
+        pool.execute(() -> {
+            try {
+                JSONObject inspectArgs = new JSONObject();
+                inspectArgs.put("zipPath", filePath);
+                String inspect = tools.execute("inspect_zip", inspectArgs);
+                if (inspect.length() > 2000) {
+                    inspect = inspect.substring(0, 2000) + "\n...（结果已截断）";
+                }
+                history.add(new LLMClient.ChatMessage("user",
+                        "我上传了模型包 " + fileName + "，请主动检查并给出完整分析报告。"));
+                history.add(new LLMClient.ChatMessage("assistant",
+                        "好的，我先检查压缩包内容。\n\n" + inspect));
+                // 若识别出模型文件，进一步深入分析，让 AI 主动报告
+                String modelName = findModelName(inspect);
+                if (modelName != null && !modelName.isEmpty()) {
+                    try {
+                        JSONObject anaArgs = new JSONObject();
+                        anaArgs.put("modelName", modelName);
+                        String analysis = tools.execute("analyze_model", anaArgs);
+                        if (analysis.length() > 2000) {
+                            analysis = analysis.substring(0, 2000) + "\n...（结果已截断）";
+                        }
+                        history.add(new LLMClient.ChatMessage("user",
+                                "继续分析模型 " + modelName + " 的完整性："));
+                        history.add(new LLMClient.ChatMessage("assistant", analysis));
+                    } catch (Exception e) {
+                        history.add(new LLMClient.ChatMessage("assistant",
+                                "深入分析失败: " + e.getMessage()));
+                    }
+                }
+                doConverse();
+            } catch (Exception e) {
+                postError("解压分析失败: " + e.getMessage());
+                history.add(new LLMClient.ChatMessage("assistant", "解压分析失败: " + e.getMessage()));
+                running.set(false);
+            }
+        });
+    }
+
+    /** 从 inspect_zip 结果中粗提取模型名（模型文件 .model3.json 所在顶层目录） */
+    private String findModelName(String inspectResult) {
+        for (String line : inspectResult.split("\n")) {
+            String t = line.trim();
+            if (t.contains(".model3.json") || t.contains(".model.json")) {
+                t = t.replaceAll("^[\\u2713\\u2716!\\s✅⚠]+", "");
+                int slash = t.indexOf('/');
+                if (slash > 0) return t.substring(0, slash);
+            }
+        }
+        return null;
     }
 
     /**
