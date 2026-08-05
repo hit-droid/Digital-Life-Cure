@@ -1,4 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#241634</color>
+
+    <!-- 统一主题色 -->
+    <color name="brand">#6C5CE7</color>
+    <color name="brand_dark">#5A4BD4</color>
+    <color name="brand_light">#EDEBFA</color>
+    <color name="page_bg">#F4F5FB</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="text_primary">#1F2033</color>
+    <color name="text_secondary">#8A8B9C</color>
+    <color name="text_hint">#B4B5C4</color>
+    <color name="divider">#EEEEF4</color>
+    <color name="bubble_user">#6C5CE7</color>
+    <color name="bubble_ai">#FFFFFF</color>
 </resources>

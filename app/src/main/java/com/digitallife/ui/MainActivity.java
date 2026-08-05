@@ -26,6 +26,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.digitallife.R;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.CrashHandler;
@@ -91,20 +92,45 @@ public class MainActivity extends Activity {
 
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.rgb(247, 246, 251));
+        scroll.setBackgroundColor(getColorCompat(R.color.page_bg));
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 标题
+        // 标题栏
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), 0, dp(8), dp(8));
+
         TextView title = new TextView(this);
         title.setText("数字生命");
-        title.setTextSize(26f);
-        title.setTextColor(Color.rgb(96, 74, 210));
-        title.setGravity(Gravity.CENTER);
-        root.addView(title, lp(0));
+        title.setTextSize(22f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(getColorCompat(R.color.text_primary));
+        header.addView(title, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // 快捷打开护理大脑对话
+        Button btnCareOpen = new Button(this);
+        btnCareOpen.setText("护理大脑");
+        btnCareOpen.setTextSize(12f);
+        btnCareOpen.setTextColor(Color.WHITE);
+        btnCareOpen.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnCareOpen.setAllCaps(false);
+        btnCareOpen.setPadding(dp(12), dp(6), dp(12), dp(6));
+        btnCareOpen.setOnClickListener(v -> {
+            try {
+                Intent i = new Intent(this, com.digitallife.care.CareActivity.class);
+                startActivity(i);
+            } catch (Exception e) {
+                Toast.makeText(this, "无法打开护理大脑: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+        header.addView(btnCareOpen);
+        root.addView(header, lp(0));
 
         TextView subtitle = new TextView(this);
         subtitle.setText("住在桌面上的二次元生命。配置好后点击「启动桌宠」，她就会出现在桌面上。");
@@ -285,21 +311,17 @@ public class MainActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(14), dp(12), dp(14), dp(14));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dp(16));
-        bg.setColor(Color.WHITE);
-        bg.setStroke(dp(1), Color.argb(60, 180, 170, 200));
-        c.setBackground(bg);
+        c.setBackgroundResource(R.drawable.bg_card);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        clp.topMargin = dp(14);
+        clp.topMargin = dp(12);
         root.addView(c, clp);
 
         TextView t = new TextView(this);
         t.setText(title);
-        t.setTextSize(15f);
-        t.setTextColor(Color.rgb(96, 74, 210));
+        t.setTextSize(14f);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setTextColor(getColorCompat(R.color.brand));
         t.setPadding(0, 0, 0, dp(8));
         c.addView(t, lp(0));
         return c;
@@ -308,27 +330,37 @@ public class MainActivity extends Activity {
     private EditText input(LinearLayout root, String hint, String value) {
         EditText et = new EditText(this);
         et.setHint(hint);
+        et.setHintTextColor(getColorCompat(R.color.text_hint));
         if (value != null) et.setText(value);
         et.setTextSize(14f);
-        et.setBackground(getEditBg());
-        et.setPadding(dp(10), dp(8), dp(10), dp(8));
+        et.setTextColor(getColorCompat(R.color.text_primary));
+        et.setBackgroundResource(R.drawable.bg_input);
+        et.setPadding(dp(12), dp(9), dp(12), dp(9));
         root.addView(et, lp(8));
         return et;
-    }
-
-    private GradientDrawable getEditBg() {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dp(10));
-        bg.setColor(Color.rgb(248, 247, 252));
-        bg.setStroke(dp(1), Color.argb(60, 160, 140, 200));
-        return bg;
     }
 
     private Button button(LinearLayout root, String text) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(14f);
+        b.setTextColor(Color.WHITE);
+        b.setBackgroundResource(R.drawable.bg_btn_primary);
+        b.setAllCaps(false);
+        b.setPadding(dp(14), dp(8), dp(14), dp(8));
+        root.addView(b, lp(8));
+        return b;
+    }
+
+    /** 次级按钮（浅紫底） */
+    private Button secondaryButton(LinearLayout root, String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(13f);
+        b.setTextColor(getColorCompat(R.color.brand));
+        b.setBackgroundResource(R.drawable.bg_btn_secondary);
+        b.setAllCaps(false);
+        b.setPadding(dp(14), dp(8), dp(14), dp(8));
         root.addView(b, lp(8));
         return b;
     }
@@ -340,6 +372,7 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(label);
         t.setTextSize(14f);
+        t.setTextColor(getColorCompat(R.color.text_primary));
         row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Switch sw = new Switch(this);
         sw.setChecked(checked);
@@ -350,6 +383,10 @@ public class MainActivity extends Activity {
 
     private int dp(int v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
+    }
+
+    private int getColorCompat(int res) {
+        return getResources().getColor(res);
     }
 
     // ================= 逻辑 =================
@@ -835,30 +872,14 @@ refreshModelList();
         super.onDestroy();
     }
 
-    // ============ 护理大脑对话入口（独立页面） ============
+    // ============ 护理大脑对话入口（顶栏快捷按钮已提供，此处仅保留引导说明） ============
 
     private void buildCareChatEntry(LinearLayout root) {
         LinearLayout cEntry = card(root, "护理大脑对话");
-        Button btnOpen = new Button(this);
-        btnOpen.setText("打开对话界面");
-        btnOpen.setTextSize(14f);
-        btnOpen.setTextColor(Color.WHITE);
-        btnOpen.setBackgroundColor(Color.rgb(96, 74, 210));
-        btnOpen.setPadding(dp(14), dp(10), dp(14), dp(10));
-        btnOpen.setOnClickListener(v -> {
-            try {
-                Intent i = new Intent(this, com.digitallife.care.CareActivity.class);
-                startActivity(i);
-            } catch (Exception e) {
-                Toast.makeText(this, "无法打开护理大脑: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
-        cEntry.addView(btnOpen, lp(0));
-
         TextView tip = new TextView(this);
-        tip.setText("在独立页面中与护理大脑对话：上传模型 zip 会自动解压并分析完整性，还可创作和管理动作。");
+        tip.setText("与护理大脑对话：上传模型 zip 自动解压体检、分析完整性、创作与编辑动作。点右上角「护理大脑」按钮，在独立对话界面中使用。");
         tip.setTextSize(12f);
-        tip.setTextColor(Color.rgb(130, 125, 150));
+        tip.setTextColor(getColorCompat(R.color.text_secondary));
         tip.setPadding(dp(4), dp(6), dp(4), dp(4));
         tip.setLineSpacing(3f, 1f);
         cEntry.addView(tip, lp(0));
