@@ -198,15 +198,24 @@ public class PetOverlayView extends FrameLayout {
     }
 
     public void showBubble(String text, float seconds) {
+        final String display;
+        if (text == null || text.isEmpty()) {
+            display = "";
+        } else if (text.length() > 300) {
+            display = text.substring(0, 300) + "…";
+        } else {
+            display = text;
+        }
+        final float duration = (seconds > 0 && seconds <= 30f) ? seconds : 30f;
         mainHandler.post(() -> {
-            if (text == null || text.isEmpty()) {
+            if (display.isEmpty()) {
                 bubbleContainer.setVisibility(View.GONE);
                 return;
             }
-            bubbleView.setText(text);
+            bubbleView.setText(display);
             bubbleContainer.setVisibility(View.VISIBLE);
             bubbleContainer.removeCallbacks(null);
-            bubbleContainer.postDelayed(() -> bubbleContainer.setVisibility(View.GONE), (long) (seconds * 1000));
+            bubbleContainer.postDelayed(() -> bubbleContainer.setVisibility(View.GONE), (long) (duration * 1000));
         });
     }
 

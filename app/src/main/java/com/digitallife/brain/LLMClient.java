@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -147,6 +148,15 @@ public class LLMClient {
                     chatStreamInner(messages, extraSystem, listener, false);
                     return;
                 }
+                // 上下文超长（token 超限）：截断早期历史后重试一次，避免长对话卡死
+                if (isContextOverflow(err)) {
+                    List<ChatMessage> trimmed = trimHistory(messages);
+                    if (trimmed.size() < messages.size()) {
+                        conn.disconnect();
+                        chatStreamInner(trimmed, extraSystem, listener, withTools);
+                        return;
+                    }
+                }
                 listener.onError("HTTP " + code + ": " + err);
                 return;
             }
@@ -244,7 +254,17 @@ public class LLMClient {
                 }
                 int code = conn.getResponseCode();
                 if (code != 200) {
-                    cb.onResult(null, "HTTP " + code + ": " + readStream(conn.getErrorStream()));
+                    String err = readStream(conn.getErrorStream());
+                    // 上下文超长（token 超限）：截断早期历史后重试一次
+                    if (isContextOverflow(err)) {
+                        List<ChatMessage> trimmed = trimHistory(messages);
+                        if (trimmed.size() < messages.size()) {
+                            conn.disconnect();
+                            chatOnce(trimmed, extraSystem, cb);
+                            return;
+                        }
+                    }
+                    cb.onResult(null, "HTTP " + code + ": " + err);
                     return;
                 }
                 String resp = readStream(conn.getInputStream());
@@ -262,6 +282,32 @@ public class LLMClient {
 
     public interface Callback {
         void onResult(String text, String error);
+    }
+
+    /** 判断 HTTP 错误是否由上下文超长（token 超限）引起 */
+    private boolean isContextOverflow(String err) {
+        if (err == null) return false;
+        String e = err.toLowerCase(Locale.ROOT);
+        return e.contains("context length") || e.contains("maximum context")
+                || e.contains("context_length") || e.contains("too many tokens")
+                || e.contains("token limit") || e.contains("context overflow")
+                || e.contains("prompt is too long") || e.contains("max context")
+                || e.contains("exceeded its max tokens");
+    }
+
+    /** 截断历史：保留末尾最多 16 条消息，并裁剪掉开头孤立的 tool/带工具调用的 assistant 消息 */
+    private List<ChatMessage> trimHistory(List<ChatMessage> messages) {
+        if (messages == null || messages.size() <= 16) return messages;
+        List<ChatMessage> out = new ArrayList<>(messages.subList(messages.size() - 16, messages.size()));
+        while (!out.isEmpty()) {
+            ChatMessage first = out.get(0);
+            boolean isTool = "tool".equals(first.role);
+            boolean isAssistantWithCalls = "assistant".equals(first.role)
+                    && first.toolCalls != null && first.toolCalls.length() > 0;
+            if (!isTool && !isAssistantWithCalls) break;
+            out.remove(0);
+        }
+        return out;
     }
 
     private String buildSystemPrompt(JSONObject extra) {

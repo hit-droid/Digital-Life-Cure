@@ -67,6 +67,11 @@ public class CareActivity extends Activity {
             }
 
             @Override
+            public void onToolResult(String toolName, boolean ok, String result) {
+                safeRun(() -> markLastToolResult(toolName, ok, result));
+            }
+
+            @Override
             public void onDone(String fullText) {
                 safeRun(() -> btnSend.setEnabled(true));
             }
@@ -311,6 +316,40 @@ public class CareActivity extends Activity {
         scrollToBottom();
     }
 
+    /** 更新最后一个工具气泡为执行结果 */
+    private void markLastToolResult(String toolName, boolean ok, String result) {
+        for (int i = chatContainer.getChildCount() - 1; i >= 0; i--) {
+            View child = chatContainer.getChildAt(i);
+            if (!(child instanceof LinearLayout)) continue;
+            LinearLayout row = (LinearLayout) child;
+            if (row.getChildCount() > 0 && row.getChildAt(0) instanceof TextView) {
+                TextView tv = (TextView) row.getChildAt(0);
+                if ("tool".equals(tv.getTag())) {
+                    String status = ok ? "✓" : "✗";
+                    int color = ok ? getColorCompat(R.color.text_secondary) : Color.rgb(200, 70, 70);
+                    String summary = summarizeToolResult(result);
+                    SpannableString ss = new SpannableString(status + " " + friendlyToolName(toolName));
+                    ss.setSpan(new ForegroundColorSpan(color), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    tv.setText(ss);
+                    if (summary != null && !summary.isEmpty()) {
+                        tv.append("\n" + summary);
+                    }
+                    scrollToBottom();
+                    return;
+                }
+            }
+        }
+    }
+
+    private String summarizeToolResult(String result) {
+        if (result == null) return "";
+        String text = result.trim();
+        if (text.isEmpty()) return "完成";
+        String first = text.split("\n")[0].trim();
+        if (first.length() > 80) first = first.substring(0, 80) + "…";
+        return first;
+    }
+
     private String friendlyToolName(String name) {
         if (name == null) return "处理中";
         switch (name) {
@@ -370,7 +409,10 @@ public class CareActivity extends Activity {
     }
 
     private void scrollToBottom() {
-        scrollView.post(() -> scrollView.fullScroll(ScrollView.FOCUS_DOWN));
+        if (scrollView == null) return;
+        scrollView.post(() -> {
+            if (scrollView != null) scrollView.fullScroll(ScrollView.FOCUS_DOWN);
+        });
     }
 
     private void hideKeyboard() {

@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -52,6 +53,7 @@ public class PetService extends Service implements AICore.Output,
     private WindowManager windowManager;
     private PetOverlayView overlayView;
     private WindowManager.LayoutParams overlayParams;
+    private DisplayManager.DisplayListener displayListener;
 
     private AICore aiCore;
     private CareAutomation careAutomation;
@@ -164,6 +166,26 @@ public class PetService extends Service implements AICore.Output,
             windowManager.addView(overlayView, overlayParams);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        // 屏幕方向/尺寸变化时（横竖屏切换）自适应窗口大小与位置，避免窗口过小或跑出屏幕
+        DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        if (dm != null) {
+            displayListener = new DisplayManager.DisplayListener() {
+                @Override
+                public void onDisplayAdded(int displayId) {
+                }
+
+                @Override
+                public void onDisplayRemoved(int displayId) {
+                }
+
+                @Override
+                public void onDisplayChanged(int displayId) {
+                    if (displayId == Display.DEFAULT_DISPLAY) resizeOverlayForDisplay();
+                }
+            };
+            dm.registerDisplayListener(displayListener, mainHandler);
         }
 
         aiCore = new AICore(settings);
@@ -328,6 +350,30 @@ public class PetService extends Service implements AICore.Output,
             windowManager.updateViewLayout(overlayView, overlayParams);
         } catch (Exception ignored) {}
         settings.setOverlayPos(overlayParams.x, overlayParams.y);
+    }
+
+    /** 屏幕尺寸/方向变化时重新计算窗口宽高，并等比迁移位置避免越界 */
+    private void resizeOverlayForDisplay() {
+        if (windowManager == null || overlayView == null || overlayParams == null) return;
+        try {
+            Point size = new Point();
+            windowManager.getDefaultDisplay().getRealSize(size);
+            float scale = settings.getScale() / 100f;
+            int overlayW = (int) (size.x * 0.35f * scale);
+            int overlayH = (int) (size.y * 0.57f * scale);
+            int oldW = overlayParams.width;
+            int oldH = overlayParams.height;
+            if (oldW > 0 && oldH > 0 && (oldW != overlayW || oldH != overlayH)) {
+                overlayParams.x = (int) (overlayParams.x * (float) overlayW / oldW);
+                overlayParams.y = (int) (overlayParams.y * (float) overlayH / oldH);
+            }
+            overlayParams.width = overlayW;
+            overlayParams.height = overlayH;
+            overlayParams.x = Math.max(0, Math.min(overlayParams.x, Math.max(0, size.x - overlayW)));
+            overlayParams.y = Math.max(0, Math.min(overlayParams.y, Math.max(0, size.y - overlayH)));
+            windowManager.updateViewLayout(overlayView, overlayParams);
+        } catch (Exception ignored) {
+        }
     }
 
     // ================= AICore.Output =================
@@ -622,6 +668,13 @@ public class PetService extends Service implements AICore.Output,
     @Override
     public void onDestroy() {
         instance = null;
+        if (displayListener != null) {
+            try {
+                DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+                if (dm != null) dm.unregisterDisplayListener(displayListener);
+            } catch (Exception ignored) {}
+            displayListener = null;
+        }
         if (careAutomation != null) careAutomation.stop();
         if (heartbeat != null) heartbeat.stop();
         if (aiCore != null) aiCore.stop();
