@@ -3,6 +3,7 @@ package com.digitallife.brain;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.digitallife.care.CareExecutor;
 import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 
@@ -61,6 +62,7 @@ public class AICore {
     private final Tools tools = new Tools();
     private LLMClient llm;
     private final BehaviorStyle style = new BehaviorStyle();
+    private CareExecutor executor; // 执行层（AI-2），行为包/动作最终交给它落地
 
     private Output out;
     private boolean running = false;
@@ -124,6 +126,11 @@ public class AICore {
     }
 
     public void setOutput(Output o) { this.out = o; }
+
+    /** 注入执行层（CareExecutor）。行为包应用后，表情/动作交给执行层落地并执行。 */
+    public void setExecutor(CareExecutor executor) {
+        this.executor = executor;
+    }
 
     public MemoryStore getMemory() { return memory; }
     public EmotionState getEmotion() { return emotion; }
@@ -648,8 +655,14 @@ public class AICore {
         style.gazeMode = s.gazeMode;
         style.posture = s.posture;
         style.expression = s.expression;
-        if (out != null && s.expression != null && !s.expression.isEmpty()) {
-            out.onExpression(s.expression);
+        // 落地表情
+        if (s.expression != null && !s.expression.isEmpty()) {
+            if (out != null) out.onExpression(s.expression);
+            if (executor != null) executor.setExpression(s.expression);
+        }
+        // 执行层根据行为包决定是否播放动作（高能量/情绪动作等）
+        if (executor != null) {
+            executor.executeBehavior(s);
         }
     }
 
