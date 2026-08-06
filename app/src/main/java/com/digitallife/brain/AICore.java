@@ -52,6 +52,10 @@ public class AICore {
         void onError(String msg);
         /** 移动 */
         void onMove(float x, float y);
+        /** 行为风格 → L1 程序化微动引擎（能量/警觉度/速度/幅度） */
+        void onStyle(float energy, float alertness, float speed, float amplitude);
+        /** 视线意图基准 → L1 saccade 偏移（follow/avert/fixed） */
+        void onGazeBias(float x, float y);
     }
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -73,23 +77,6 @@ public class AICore {
     // 快速循环
     private static final int FAST_MS = 100;
     private int fastTick = 0;
-
-    // 眨眼状态机
-    private float blinkTimer = 0;
-    private boolean blinking = false;
-    private float blinkPhase = 0;
-
-    // 呼吸
-    private float breathPhase = 0;
-
-    // 视线漫游
-    private float gazeTimer = 0;
-    private float gazeTargetX = 0, gazeTargetY = 0;
-    private float gazeCurX = 0, gazeCurY = 0;
-
-    // 身体微动
-    private float bodyPhase = 0;
-    private float bodyCurX = 0;
 
     // 空闲计时器
     private long lastInteractionMs = System.currentTimeMillis();
@@ -212,12 +199,8 @@ public class AICore {
             fastTick++;
             float dt = FAST_MS / 1000f;
 
-            // 非待机动作播放中，AI 的待机微动全部让位，避免覆盖动作动画
-            boolean actionPlaying = out != null && out.isMotionPlaying();
-            updateBlink(dt, actionPlaying);
-            updateBreath(dt);
-            updateGaze(dt, actionPlaying);
-            updateBodySway(dt, actionPlaying);
+            // 呼吸/视线/眨眼/身体微动已移交 ContinuousMotionEngine（GL 线程逐帧驱动），
+            // AICore 快速循环只负责情绪演化与调度
             updateEmotion(dt);
 
             // 定期检查是否需要 LLM 刷新
@@ -237,102 +220,27 @@ public class AICore {
         }
     };
 
-    // ============ 本地物理引擎（由 BehaviorStyle 驱动） ============
-
-    private void updateBlink(float dt, boolean actionPlaying) {
-        if (actionPlaying) return;
-        float blinkSpeed = 0.6f + style.alertness * 0.8f;
-        blinkTimer -= dt * blinkSpeed;
-        if (blinkTimer <= 0) {
-            blinking = true;
-            blinkPhase = 0;
-            blinkTimer = 2.5f + rnd.nextFloat() * 4f;
-        }
-        if (blinking) {
-            blinkPhase += dt * 12f;
-            float blinkVal;
-            if (blinkPhase < 0.3f) {
-                blinkVal = blinkPhase / 0.3f;
-            } else if (blinkPhase < 0.4f) {
-                blinkVal = 1f;
-            } else if (blinkPhase < 0.7f) {
-                blinkVal = 1f - (blinkPhase - 0.4f) / 0.3f;
-            } else {
-                blinkVal = 0;
-                blinking = false;
-            }
-            if (out != null) {
-                out.onLive2DParam("ParamEyeLOpen", 1f - blinkVal);
-                out.onLive2DParam("ParamEyeROpen", 1f - blinkVal);
-            }
-        }
-    }
-
-    private void updateBreath(float dt) {
-        float deep = 0.2f + style.energy * 0.6f;
-        float speed = 0.5f + style.energy * 0.8f * style.speed;
-        breathPhase += dt * 2.5f * speed;
-        float breathVal = 0.5f + deep * 0.5f * (float) Math.sin(breathPhase);
-        if (out != null) out.onLive2DParam("ParamBreath", breathVal);
-    }
-
-    private void updateGaze(float dt, boolean actionPlaying) {
-        if (actionPlaying) return;
+    /** 把当前行为风格与视线意图推送到 L1 程序化微动引擎（GL 线程读取） */
+    private void pushStyleToEngine() {
+        if (out == null) return;
+        out.onStyle(style.energy, style.alertness, style.speed, style.amplitude);
+        float biasX = 0f, biasY = 0f;
         switch (style.gazeMode) {
             case BehaviorStyle.GAZE_FOLLOW:
-                // 注视用户：视线稳定在中间偏下（用户方向）
-                gazeTargetX = 0f;
-                gazeTargetY = -0.4f;
+                biasX = 0f;
+                biasY = -0.4f; // 注视用户：视线稳定在中间偏下
                 break;
             case BehaviorStyle.GAZE_AVERT:
-                // 避开视线：看向侧下方
-                gazeTargetX = -0.6f;
-                gazeTargetY = -0.3f;
-                break;
-            case BehaviorStyle.GAZE_FIXED:
-                // 定住前方
-                gazeTargetX = 0f;
-                gazeTargetY = 0f;
+                biasX = -0.6f; // 避开视线：看向侧下方
+                biasY = -0.3f;
                 break;
             default:
-                // 漫游：随机切换目标
-                gazeTimer -= dt;
-                if (gazeTimer <= 0) {
-                    gazeTargetX = (rnd.nextFloat() - 0.5f) * 2f * (0.3f + style.alertness * 0.7f);
-                    gazeTargetY = (rnd.nextFloat() - 0.5f) * 1.5f * (0.3f + style.alertness * 0.7f);
-                    gazeTimer = 1.5f + rnd.nextFloat() * 3f;
-                }
-                break;
+                break; // 漫游/定住：saccade 自行随机
         }
-        float speed = 2f;
-        gazeCurX += (gazeTargetX - gazeCurX) * Math.min(1f, dt * speed);
-        gazeCurY += (gazeTargetY - gazeCurY) * Math.min(1f, dt * speed);
-        if (out != null) {
-            out.onLive2DParam("ParamEyeBallX", gazeCurX);
-            out.onLive2DParam("ParamEyeBallY", gazeCurY);
-        }
+        out.onGazeBias(biasX, biasY);
     }
 
-    private void updateBodySway(float dt, boolean actionPlaying) {
-        if (actionPlaying) return;
-        float amp = style.amplitude * (0.1f + style.energy * 0.4f);
-        float speed = 0.8f + style.speed * 0.8f;
-        bodyPhase += dt * 1.2f * speed;
-        float target = amp * (float) Math.sin(bodyPhase);
-        bodyCurX += (target - bodyCurX) * Math.min(1f, dt * 3f);
-        if (out != null) {
-            out.onLive2DParam("ParamBodyAngleX", bodyCurX);
-            out.onLive2DParam("ParamBodyAngleZ", bodyCurX * 0.5f);
-        }
-        // 头部随身体微动，警觉时头微抬
-        float headTilt = style.alertness * 0.1f;
-        float headVal = bodyCurX * 0.6f;
-        if (out != null) {
-            out.onLive2DParam("ParamAngleX", headVal);
-            out.onLive2DParam("ParamAngleY", headTilt);
-            out.onLive2DParam("ParamAngleZ", headVal * 0.3f);
-        }
-    }
+    // ============ 情绪演化（微动渲染已移交 L1 引擎） ============
 
     private void updateEmotion(float dt) {
         emotion.tick(dt);
@@ -372,6 +280,7 @@ public class AICore {
             style.amplitude = 0.4f;
             style.sociability = 0.5f;
         }
+        pushStyleToEngine();
     }
 
     // ============ LLM 慢速循环（自主刷新） ============
@@ -664,6 +573,8 @@ public class AICore {
         if (executor != null) {
             executor.executeBehavior(s);
         }
+        // 行为风格同步到 L1 程序化微动引擎
+        pushStyleToEngine();
     }
 
     private JSONObject tryParseJson(String text) {
