@@ -30,6 +30,7 @@ public class PetOverlayView extends FrameLayout {
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public interface Listener {
+        void onModelReady();
         void onTap();
         void onDoubleTap();
         void onLongPress();
@@ -67,6 +68,8 @@ public class PetOverlayView extends FrameLayout {
             public void onReady() {
                 live2DReady = true;
                 Log.d(TAG, "Live2D GL ready");
+                // 转发给外层（PetService）：应用默认模型 + 更新 L1 能力感知
+                if (listener != null) listener.onModelReady();
             }
 
             @Override

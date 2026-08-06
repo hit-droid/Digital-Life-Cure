@@ -151,8 +151,13 @@ public class ModelManager {
             // 注册到 C++ 侧
             Live2DNative.nativeAddModelDir(targetDir.getName(), jsonBase);
 
+            // 导入后自动补动作：零动作模型注册 Idle/TapBody，让新模型立即可表演
+            String patch = autoPatchMotions(ctx, targetDir);
+            if (patch == null) patch = "模型自带动作";
+
             Log.i(TAG, "imported model: " + targetDir.getName() + " files=" + fileCount);
-            return new ImportResult(true, "导入成功：" + targetDir.getName() + "（" + fileCount + " 个文件）",
+            return new ImportResult(true,
+                    "导入成功：" + targetDir.getName() + "（" + fileCount + " 个文件）\n" + patch,
                     targetDir.getName());
         } catch (Exception ex) {
             deleteRecursively(targetDir);
@@ -206,6 +211,133 @@ public class ModelManager {
             }
         }
         return fileName;
+    }
+
+    /**
+     * 导入后自动补动作：若模型 json 未声明 Idle/TapBody 动作组（或声明了但文件缺失），
+     * 从内置 huohuo 模型拷贝兼容动作并注册到模型 json，让"零动作"模型也能表演。
+     * 返回补丁描述；无需修补时返回 null。
+     */
+    public static String autoPatchMotions(Context ctx, File modelDir) {
+        if (modelDir == null || !modelDir.isDirectory()) return null;
+        try {
+            // 找模型 json（.model.json 优先）
+            File jsonFile = null;
+            for (String suffix : MODEL_JSON_NAMES) {
+                jsonFile = findJsonFile(modelDir, suffix);
+                if (jsonFile != null) break;
+            }
+            if (jsonFile == null) return null;
+
+            org.json.JSONObject root = new org.json.JSONObject(readFileString(jsonFile));
+            boolean isModel3 = jsonFile.getName().toLowerCase(Locale.ROOT).endsWith(".model3.json");
+            org.json.JSONObject fr = isModel3 ? root.optJSONObject("FileReferences") : null;
+            org.json.JSONObject motions = fr != null ? fr.optJSONObject("Motions") : null;
+            if (motions == null) motions = root.optJSONObject("Motions");
+            if (motions == null) motions = root.optJSONObject("motions");
+
+            if (motions == null) {
+                motions = new org.json.JSONObject();
+            }
+            boolean idleOk = hasUsableGroup(modelDir, motions, "Idle");
+            boolean tapOk = hasUsableGroup(modelDir, motions, "TapBody");
+            if (idleOk && tapOk) return null; // 无需修补
+
+            StringBuilder patched = new StringBuilder();
+            String idleFile = copyCompatMotion(ctx, modelDir, "keshui.motion3.json", "compat_idle.motion3.json");
+            if (!idleOk && idleFile != null) {
+                org.json.JSONArray arr = new org.json.JSONArray();
+                org.json.JSONObject m = new org.json.JSONObject();
+                m.put("File", idleFile);
+                m.put("Loop", true);
+                arr.put(m);
+                motions.put("Idle", arr);
+                patched.append("Idle");
+            }
+            String tapFile = copyCompatMotion(ctx, modelDir, "yaotou.motion3.json", "compat_tap.motion3.json");
+            if (!tapOk && tapFile != null) {
+                org.json.JSONArray arr = new org.json.JSONArray();
+                org.json.JSONObject m = new org.json.JSONObject();
+                m.put("File", tapFile);
+                arr.put(m);
+                motions.put("TapBody", arr);
+                if (patched.length() > 0) patched.append("、");
+                patched.append("TapBody");
+            }
+            if (patched.length() == 0) return null;
+
+            if (isModel3) {
+                if (fr == null) {
+                    fr = new org.json.JSONObject();
+                    root.put("FileReferences", fr);
+                }
+                fr.put("Motions", motions);
+            } else {
+                root.put("Motions", motions);
+            }
+            writeFileString(jsonFile, root.toString(2));
+            Log.i(TAG, "autoPatchMotions: " + jsonFile.getName() + " added [" + patched + "]");
+            return "已自动注册动作组: [" + patched + "]（从内置模型复制兼容动作，使零动作模型也能表演）";
+        } catch (Exception e) {
+            Log.w(TAG, "autoPatchMotions failed", e);
+            return null;
+        }
+    }
+
+    private static boolean hasUsableGroup(File modelDir, org.json.JSONObject motions, String group) {
+        org.json.JSONArray arr = motions.optJSONArray(group);
+        if (arr == null || arr.length() == 0) return false;
+        for (int i = 0; i < arr.length(); i++) {
+            org.json.JSONObject m = arr.optJSONObject(i);
+            if (m == null) continue;
+            String file = m.optString("File", "");
+            if (!file.isEmpty() && new File(modelDir, file).isFile()) return true;
+        }
+        return false;
+    }
+
+    /** 从 assets/huohuo 拷贝一个动作文件到模型目录（重命名），成功返回目标文件名 */
+    private static String copyCompatMotion(Context ctx, File modelDir, String srcName, String dstName) {
+        try (InputStream in = ctx.getAssets().open("huohuo/" + srcName);
+             java.io.FileOutputStream fos = new java.io.FileOutputStream(new File(modelDir, dstName))) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+            return dstName;
+        } catch (Exception e) {
+            Log.w(TAG, "copyCompatMotion failed: " + srcName, e);
+            return null;
+        }
+    }
+
+    private static File findJsonFile(File dir, String suffix) {
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                File sub = findJsonFile(f, suffix);
+                if (sub != null) return sub;
+            } else if (f.getName().toLowerCase(Locale.ROOT).endsWith(suffix)) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    private static String readFileString(File f) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(f), java.nio.charset.StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line).append('\n');
+        }
+        return sb.toString().trim();
+    }
+
+    private static void writeFileString(File f, String content) throws Exception {
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+            fos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
     }
 
     private static String sanitizeDirName(String name) {

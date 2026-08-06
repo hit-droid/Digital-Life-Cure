@@ -50,6 +50,10 @@ public class Settings {
     public float getOverlayY() { return sp.getFloat("overlay_y", -1f); }
     public void setOverlayPos(float x, float y) { sp.edit().putFloat("overlay_x", x).putFloat("overlay_y", y).apply(); }
 
+    /** 默认模型目录名（启动时自动加载；空 = 加载第一个内置模型） */
+    public String getDefaultModelDir() { return sp.getString("default_model_dir", ""); }
+    public void setDefaultModelDir(String v) { sp.edit().putString("default_model_dir", v == null ? "" : v).apply(); }
+
     /** 是否已配置 API */
     public boolean isConfigured() {
         return !getApiBase().trim().isEmpty() && !getApiKey().trim().isEmpty() && !getModel().trim().isEmpty();

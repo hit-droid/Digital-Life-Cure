@@ -41,12 +41,10 @@ namespace LAppDefine {
     // モデルを配置したディレクトリ名の配列
     // ディレクトリ名とmodel3.jsonの名前を一致させておくこと
     const csmChar* ModelDir[] = {
-        "huohuo",
-        "Sister Goth"
+        "huohuo"
     };
     const csmChar* ModelJsonName[] = {
-        NULL,
-        "紫色哥特剪刀妹妹 免费版"
+        NULL
     };
     const csmInt32 ModelDirSize = sizeof(ModelDir) / sizeof(const csmChar*);
 
