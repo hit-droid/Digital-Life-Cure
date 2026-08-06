@@ -7,6 +7,5 @@ app-debug.apk
 app/build/
 out/
 app/.cxx/
-app/src/main/assets/huohuo/huohuo.4096/
 .gradle/
 local.properties

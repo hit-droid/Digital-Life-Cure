@@ -2,7 +2,11 @@ package com.digitallife.care;
 
 import android.content.Context;
 
+import com.digitallife.model.ModelManager;
+import com.digitallife.render.Live2DGLView;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.service.PetService;
+import com.digitallife.util.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -53,7 +57,10 @@ public class CareTools {
             arr.put(makeSchema("inspect_zip", "解压 zip 压缩包并分析内容，返回文件树和模型文件识别结果", new String[]{"zipPath"}));
             arr.put(makeSchema("list_models", "列出所有已安装的 Live2D 模型"));
             arr.put(makeSchema("analyze_model", "完整分析模型：解析 model3.json，检查每个引用文件是否齐全，报告所有参数/纹理/动作/表情/物理信息", new String[]{"modelName"}));
-            arr.put(makeSchema("install_model_from_zip", "解压模型 zip 到模型目录并注册，可直接使用", new String[]{"zipPath"}));
+            arr.put(makeSchema("install_model_from_zip", "解压模型 zip 到模型目录并注册，零动作模型自动补动作，可直接使用", new String[]{"zipPath"}));
+            arr.put(makeSchema("switch_model", "切换到指定模型（内置或已导入），切换后自动成为默认模型", new String[]{"modelName"}));
+            arr.put(makeSchema("set_default_model", "把指定模型设为默认模型（下次启动自动加载）", new String[]{"modelName"}));
+            arr.put(makeSchema("delete_model", "删除已导入的模型（内置模型不可删除）", new String[]{"modelName"}));
             arr.put(makeSchema("repair_model", "修复模型缺失文件", new String[]{"modelName"}));
             arr.put(makeSchema("list_motions", "列出模型所有动作及详情（时长/循环/曲线数）", new String[]{"modelName"}));
             arr.put(makeSchema("get_motion_detail", "查看单个动作的完整参数曲线", new String[]{"modelName", "motionName"}));
@@ -108,6 +115,9 @@ public class CareTools {
             case "list_models": return listModels();
             case "analyze_model": return analyzeModel(args.optString("modelName", ""));
             case "install_model_from_zip": return installModelFromZip(args.optString("zipPath", ""));
+            case "switch_model": return switchModel(args.optString("modelName", ""));
+            case "set_default_model": return setDefaultModel(args.optString("modelName", ""));
+            case "delete_model": return deleteModel(args.optString("modelName", ""));
             case "repair_model": return repairModel(args.optString("modelName", ""));
             case "list_motions": return listMotions(args.optString("modelName", ""));
             case "get_motion_detail": return getMotionDetail(
@@ -481,10 +491,15 @@ public class CareTools {
                 // 引擎未启动时跳过注册，下次启动 PetService 会重新注册
             }
 
+            // 自动补动作：零动作模型注册 Idle/TapBody，让新模型立即可表演
+            String patch = ModelManager.autoPatchMotions(ctx, targetDir);
+            if (patch == null) patch = "模型自带动作";
+
             StringBuilder sb = new StringBuilder("✅ 模型安装成功: " + targetDir.getName() + "\n");
             sb.append("   文件数: ").append(fileCount).append("，大小: ").append(formatSize(total)).append("\n");
             sb.append("   定义文件: ").append(jsonPath).append("\n");
-            sb.append("   现在可以在桌宠中切换到这个模型了。\n");
+            sb.append("   ").append(patch).append("\n");
+            sb.append("   现在可以在桌宠中切换到" ).append(targetDir.getName()).append("了。\n");
             return sb.toString();
         } catch (Exception e) {
             return "安装失败: " + e.getMessage();
@@ -514,6 +529,71 @@ public class CareTools {
         }
         String f = jsonPath.substring(jsonPath.lastIndexOf('/') + 1);
         return stripModelJsonSuffix(f);
+    }
+
+    // ============ 模型统一管理（护理大脑） ============
+
+    /** 切换到指定模型（内置或已导入），并记为新默认 */
+    private String switchModel(String modelName) {
+        if (modelName.isEmpty()) return "请指定模型名称。";
+        int count = Live2DNative.nativeGetModelCount();
+        String matched = null;
+        for (int i = 0; i < count; i++) {
+            String n = Live2DNative.nativeGetModelDirName(i);
+            if (n == null) continue;
+            if (n.equalsIgnoreCase(modelName)
+                    || n.toLowerCase(Locale.ROOT).contains(modelName.toLowerCase(Locale.ROOT))) {
+                matched = n;
+                break;
+            }
+        }
+        if (matched == null) {
+            return "未找到模型: " + modelName + "。可用 list_models 查看全部模型。";
+        }
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            return "桌宠未启动，无法切换。请先启动桌宠再让护理大脑切换模型。";
+        }
+        svc.switchToModelByName(matched);
+        return "已切换模型至: " + matched + "（已设为默认，下次启动自动加载）";
+    }
+
+    /** 设置默认模型：下次启动自动加载 */
+    private String setDefaultModel(String modelName) {
+        if (modelName.isEmpty()) return "请指定模型名称。";
+        int count = Live2DNative.nativeGetModelCount();
+        String matched = null;
+        for (int i = 0; i < count; i++) {
+            String n = Live2DNative.nativeGetModelDirName(i);
+            if (n == null) continue;
+            if (n.equalsIgnoreCase(modelName)
+                    || n.toLowerCase(Locale.ROOT).contains(modelName.toLowerCase(Locale.ROOT))) {
+                matched = n;
+                break;
+            }
+        }
+        if (matched == null) {
+            return "未找到模型: " + modelName + "。可用 list_models 查看全部模型。";
+        }
+        new Settings(ctx).setDefaultModelDir(matched);
+        return "已将「" + matched + "」设为默认模型，下次启动自动加载。";
+    }
+
+    /** 删除已导入的模型（内置 assets 模型不可删除） */
+    private String deleteModel(String modelName) {
+        if (modelName.isEmpty()) return "请指定模型名称。";
+        File modelDir = findModelDir(modelName);
+        if (modelDir == null || !modelDir.exists()) {
+            return "未找到已导入的模型: " + modelName + "（内置模型不可删除）";
+        }
+        String name = modelDir.getName();
+        deleteRecursive(modelDir);
+        // 若默认模型被删除，清除默认记录
+        Settings settings = new Settings(ctx);
+        if (name.equals(settings.getDefaultModelDir())) {
+            settings.setDefaultModelDir("");
+        }
+        return "已删除模型: " + name + "。\n下次启动后将从可用列表消失。";
     }
 
     private String stripModelJsonSuffix(String fileName) {

@@ -52,6 +52,12 @@ public class ContinuousMotionEngine {
     private volatile float gazeBiasY = 0f;
     /** 非待机动作播放中：让位，仅保留呼吸背景 */
     private volatile boolean actionPlaying = false;
+    /**
+     * 模型自带动作组（Idle 等）且动作文件齐全：L1 全让位，
+     * 交给模型自带的动画/自动眨眼/自动呼吸（Cubism 引擎原生行为）。
+     * 无动作模型（VTS 型）：L1 全量接管并调大幅度，营造活物感。
+     */
+    private volatile boolean modelHasMotions = false;
 
     /** 由 AICore 行为包/状态机更新（任意线程） */
     public void setStyle(float energy, float alertness, float speed, float amplitude) {
@@ -70,12 +76,23 @@ public class ContinuousMotionEngine {
         this.actionPlaying = playing;
     }
 
+    /** 由模型能力感知写入：true=模型自带动作动画，L1 角度/视线/眨眼让位 */
+    public void setModelHasMotions(boolean hasMotions) {
+        this.modelHasMotions = hasMotions;
+    }
+
     /**
      * 必须在 GL 线程 onDrawFrame() 中每帧调用。
      */
     public void update(PhysicalController physics, float dt) {
         clock += dt;
         if (dt <= 0f) return;
+
+        if (modelHasMotions) {
+            // 模型自带动作动画 + Cubism 自动眨眼/呼吸：L1 全让位。
+            // L2 生理状态机的主动姿态走 physics.setTarget，不依赖本引擎，不受影响。
+            return;
+        }
 
         float amp = amplitude * (0.35f + energy * 0.65f);
 
@@ -99,12 +116,13 @@ public class ContinuousMotionEngine {
         headPhaseZ += dt * 1.6f * sp;
 
         // 身体：0.3Hz 低频 + 0.8Hz 中频叠加，相位错开的不规则晃动
+        // 幅度加大到峰值 ~3.5°*amp：无动作模型靠 L1 全量接管制造"活"感
         float body = (float) (Math.sin(bodyPhase * 0.3f * 2 * Math.PI) * 2.5f
-                + Math.sin(bodyPhase * 0.8f * 2 * Math.PI) * 1.0f) * amp * 0.4f;
+                + Math.sin(bodyPhase * 0.8f * 2 * Math.PI) * 1.0f) * amp;
 
-        // 头部：不同频率/相位的余弦波轻微倾斜
-        float headY = (float) Math.cos(headPhaseY * 0.4f * 2 * Math.PI) * 1.8f * amp;
-        float headZ = (float) Math.sin(headPhaseZ * 0.25f * 2 * Math.PI) * 1.2f * amp;
+        // 头部：不同频率/相位的余弦波轻微倾斜（峰值 ~3.5° / ~2.5°）
+        float headY = (float) Math.cos(headPhaseY * 0.4f * 2 * Math.PI) * 3.5f * amp;
+        float headZ = (float) Math.sin(headPhaseZ * 0.25f * 2 * Math.PI) * 2.5f * amp;
         float headX = body * 0.6f;
 
         physics.addAdditiveTarget("ParamBodyAngleX", body);

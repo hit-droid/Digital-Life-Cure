@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
@@ -29,6 +30,7 @@ import com.digitallife.care.CareAI;
 import com.digitallife.care.CareAutomation;
 import com.digitallife.care.CareExecutor;
 import com.digitallife.brain.Heartbeat;
+import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.util.CrashHandler;
 import com.digitallife.util.MemoryStore;
@@ -54,6 +56,7 @@ public class PetService extends Service implements AICore.Output,
 
     private static final String CHANNEL_ID = "pet_overlay";
     private static final int NOTIFY_ID = 1001;
+    private static final String TAG = "PetService";
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private WindowManager windowManager;
@@ -372,6 +375,18 @@ public class PetService extends Service implements AICore.Output,
     // ================= 悬浮窗交互 =================
 
     @Override
+    public void onModelReady() {
+        // 首帧渲染完成：应用默认模型 + 更新 L1 能力感知
+        String def = settings != null ? settings.getDefaultModelDir() : "";
+        if (def != null && !def.isEmpty() && !switchToModelByName(def)) {
+            // 默认模型缺失时回落到第一个内置模型
+            updateModelCapability(0);
+        } else if (def == null || def.isEmpty()) {
+            updateModelCapability(0);
+        }
+    }
+
+    @Override
     public void onTap() {
         if (aiCore == null) return;
         aiCore.onUserInteraction();
@@ -493,6 +508,63 @@ public class PetService extends Service implements AICore.Output,
             overlayParams.y = Math.max(0, Math.min(overlayParams.y, Math.max(0, size.y - overlayH)));
             windowManager.updateViewLayout(overlayView, overlayParams);
         } catch (Exception ignored) {
+        }
+    }
+
+    // ================= 模型统一管理 =================
+
+    /**
+     * 切换到指定模型（护理大脑/界面统一入口）。
+     * GL 线程执行 ChangeScene，随后按模型能力更新 L1 引擎接管策略，
+     * 并把该模型记为新默认（下次启动自动加载）。
+     */
+    public void switchToModel(int index) {
+        int count = Live2DNative.nativeGetModelCount();
+        if (index < 0 || index >= count) return;
+        String dir = Live2DNative.nativeGetModelDirName(index);
+        Live2DGLView gl = overlayView != null ? overlayView.getLive2DView() : null;
+        if (gl != null) {
+            gl.queueEvent(() -> Live2DNative.nativeChangeScene(index));
+        } else {
+            Live2DNative.nativeChangeScene(index);
+        }
+        if (settings != null && dir != null && !dir.isEmpty()) {
+            settings.setDefaultModelDir(dir);
+        }
+        updateModelCapability(index);
+    }
+
+    /** 按模型目录名切换；返回是否找到并切换 */
+    public boolean switchToModelByName(String modelDirName) {
+        if (modelDirName == null || modelDirName.isEmpty()) return false;
+        int count = Live2DNative.nativeGetModelCount();
+        for (int i = 0; i < count; i++) {
+            String n = Live2DNative.nativeGetModelDirName(i);
+            if (modelDirName.equals(n)) {
+                switchToModel(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 模型能力感知：读取模型 json 判定是否有可用动作组，
+     * 更新 L1 引擎接管策略（有动作→让位，无动作→全量接管）。
+     */
+    public void updateModelCapability(int index) {
+        try {
+            int count = Live2DNative.nativeGetModelCount();
+            if (index < 0 || index >= count) return;
+            String dir = Live2DNative.nativeGetModelDirName(index);
+            if (dir == null || dir.isEmpty()) return;
+            boolean hasMotions = ModelInspector.hasUsableMotions(this, dir);
+            Live2DGLView gl = overlayView != null ? overlayView.getLive2DView() : null;
+            ContinuousMotionEngine engine = gl != null ? gl.getMotionEngine() : null;
+            if (engine != null) engine.setModelHasMotions(hasMotions);
+            Log.d(TAG, "model capability: " + dir + " usableMotions=" + hasMotions);
+        } catch (Throwable t) {
+            Log.e(TAG, "updateModelCapability error", t);
         }
     }
 
