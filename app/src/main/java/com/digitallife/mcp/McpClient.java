@@ -120,40 +120,45 @@ private final String endpoint;
         body.put("params", params);
 
         URL url = new URL(endpoint);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("Accept", "application/json, text/event-stream");
-        if (headerName != null && !headerName.isEmpty() && headerValue != null && !headerValue.isEmpty()) {
-            conn.setRequestProperty(headerName, headerValue);
-        }
-        if (sessionId != null) {
-            conn.setRequestProperty("Mcp-Session-Id", sessionId);
-        }
-        conn.setConnectTimeout(15000);
-        conn.setReadTimeout(30000);
-        conn.setDoOutput(true);
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(body.toString().getBytes(StandardCharsets.UTF_8));
-        }
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Accept", "application/json, text/event-stream");
+            if (headerName != null && !headerName.isEmpty() && headerValue != null && !headerValue.isEmpty()) {
+                conn.setRequestProperty(headerName, headerValue);
+            }
+            if (sessionId != null) {
+                conn.setRequestProperty("Mcp-Session-Id", sessionId);
+            }
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(30000);
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
 
-        int code = conn.getResponseCode();
-        // Streamable HTTP 响应可能为 SSE；此处解析 JSON-RPC body（单块 JSON）
-        String responseText = readStream(code >= 400 ? conn.getErrorStream() : conn.getInputStream());
-        String sessionHeader = conn.getHeaderField("Mcp-Session-Id");
-        if (sessionHeader != null && !sessionHeader.isEmpty()) {
-            sessionId = sessionHeader;
-        }
-        conn.disconnect();
+            int code = conn.getResponseCode();
+            // Streamable HTTP 响应可能为 SSE；此处解析 JSON-RPC body（单块 JSON）
+            String responseText = readStream(code >= 400 ? conn.getErrorStream() : conn.getInputStream());
+            String sessionHeader = conn.getHeaderField("Mcp-Session-Id");
+            if (sessionHeader != null && !sessionHeader.isEmpty()) {
+                sessionId = sessionHeader;
+            }
 
-        if (code != 200) {
-            throw new Exception("HTTP " + code + ": " + responseText);
+            if (code != 200) {
+                throw new Exception("HTTP " + code + ": " + responseText);
+            }
+            JSONObject json = parseJsonResponse(responseText);
+            if (json.has("error") && !json.isNull("error")) {
+                throw new Exception(json.optJSONObject("error").optString("message", "MCP 错误"));
+            }
+            return json.optJSONObject("result");
+        } finally {
+            // 异常路径也必须释放连接，避免 HttpURLConnection 泄漏
+            if (conn != null) conn.disconnect();
         }
-        JSONObject json = parseJsonResponse(responseText);
-        if (json.has("error") && !json.isNull("error")) {
-            throw new Exception(json.optJSONObject("error").optString("message", "MCP 错误"));
-        }
-        return json.optJSONObject("result");
     }
 
     /** 兼容 SSE 单帧与纯 JSON */

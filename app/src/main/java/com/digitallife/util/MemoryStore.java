@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -405,6 +406,7 @@ public class MemoryStore {
         if (sp.getBoolean(KEY_MIGRATED, false)) return;
 
         String json = sp.getString(KEY_MEMORY, "");
+        boolean migratedOk = false;
         if (json != null && !json.isEmpty()) {
             try {
                 JSONObject o = new JSONObject(json);
@@ -433,11 +435,19 @@ public class MemoryStore {
                         upsertFact("profile", profile.getString(i), 1.0, now + i);
                     }
                 }
-            } catch (Exception ignored) {
+                migratedOk = true;
+            } catch (Exception e) {
+                // 迁移失败必须保留旧数据：不标记已迁移、不删除，下次启动重试
+                Log.w("MemoryStore", "旧记忆迁移失败，保留旧数据等待重试", e);
             }
+        } else {
+            // 无旧数据，无需迁移
+            migratedOk = true;
         }
 
-        sp.edit().remove(KEY_MEMORY).putBoolean(KEY_MIGRATED, true).apply();
+        if (migratedOk) {
+            sp.edit().remove(KEY_MEMORY).putBoolean(KEY_MIGRATED, true).apply();
+        }
     }
 
     private static class MemoryDbHelper extends SQLiteOpenHelper {

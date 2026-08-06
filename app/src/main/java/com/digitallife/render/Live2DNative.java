@@ -101,6 +101,8 @@ public class Live2DNative {
     public static native void nativeSetMouth(float open);
     /** 直接设置任意 Live2D 参数值（如 ParamAngleX, ParamEyeLOpen 等） */
     public static native void nativeSetParameterValue(String paramId, float value);
+    /** 批量设置外部参数：物理层每帧一次 JNI 写入，替代逐参数 queueEvent */
+    public static native void nativeSetParameterValues(String[] paramIds, float[] values);
     /** 是否有非待机动作（如 TapBody）在播放；AI 待机微动应让位 */
     public static native boolean nativeIsMotionPlaying();
 

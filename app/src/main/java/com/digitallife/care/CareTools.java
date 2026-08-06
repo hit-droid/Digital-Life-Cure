@@ -190,7 +190,11 @@ public class CareTools {
                 if (sizes[0] > MAX_ZIP_SIZE) {
                     throw new Exception("zip 总大小超限");
                 }
-                File out = new File(targetDir, entry.getName());
+                // Zip Slip 防护：拒绝绝对路径、父目录穿越，目标必须落在解压目录内
+                File out = safeResolve(targetDir, entry.getName());
+                if (out == null) {
+                    throw new Exception("zip 包含非法路径: " + entry.getName());
+                }
                 out.getParentFile().mkdirs();
                 try (OutputStream os = new FileOutputStream(out)) {
                     int n;
@@ -198,6 +202,23 @@ public class CareTools {
                 }
                 counts[0]++;
             }
+        }
+    }
+
+    /** Zip Slip 防护：把 zip 内相对路径安全解析到 base 目录下，非法路径返回 null */
+    private static File safeResolve(File base, String name) {
+        if (name == null || name.isEmpty()) return null;
+        if (name.startsWith("/") || name.contains("..")) return null;
+        File f = new File(base, name);
+        try {
+            String basePath = base.getCanonicalPath();
+            String targetPath = f.getCanonicalPath();
+            if (!targetPath.startsWith(basePath + File.separator) && !targetPath.equals(basePath)) {
+                return null;
+            }
+            return f;
+        } catch (Exception e) {
+            return null;
         }
     }
 
