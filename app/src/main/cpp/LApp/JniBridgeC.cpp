@@ -342,6 +342,32 @@ extern "C"
         env->ReleaseStringUTFChars(paramId, pid);
     }
 
+    JNIEXPORT void JNICALL
+    Java_com_digitallife_render_Live2DNative_nativeSetParameterValues(JNIEnv *env, jclass type, jobjectArray paramIds, jfloatArray values)
+    {
+        jsize n = env->GetArrayLength(paramIds);
+        if (n <= 0) {
+            return;
+        }
+        jfloat* vals = env->GetFloatArrayElements(values, NULL);
+        LAppModel* model = LAppLive2DManager::GetInstance()->GetModel(0);
+        if (model != NULL) {
+            for (jsize i = 0; i < n; i++) {
+                // NaN 哨兵：该参数未被物理层接管，跳过写入，保留 native 当前值
+                //（例如触摸拖拽、待机动作产生的角度）
+                if (vals[i] != vals[i]) {
+                    continue;
+                }
+                jstring js = (jstring) env->GetObjectArrayElement(paramIds, i);
+                const char* pid = env->GetStringUTFChars(js, NULL);
+                model->SetExternalParameterValue(pid, vals[i]);
+                env->ReleaseStringUTFChars(js, pid);
+                env->DeleteLocalRef(js);
+            }
+        }
+        env->ReleaseFloatArrayElements(values, vals, JNI_ABORT);
+    }
+
     JNIEXPORT jboolean JNICALL
     Java_com_digitallife_render_Live2DNative_nativeIsMotionPlaying(JNIEnv *env, jclass type)
     {

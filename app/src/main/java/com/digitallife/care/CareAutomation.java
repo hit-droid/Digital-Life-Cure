@@ -9,6 +9,7 @@ import com.digitallife.render.Live2DNative;
 import org.json.JSONObject;
 
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -39,6 +40,8 @@ public class CareAutomation {
     private final Report report;
     private final Handler handler;
     private boolean running = false;
+    /** 定时任务去重：taskName -> 最近一次触发的分钟键（yyyy-M-d H:m） */
+    private final Map<String, String> lastFired = new HashMap<>();
 
     public CareAutomation(Context ctx, CareExecutor executor, CareAI careAI, Report report) {
         this.ctx = ctx.getApplicationContext();
@@ -147,7 +150,9 @@ public class CareAutomation {
         int hour = cal.get(Calendar.HOUR_OF_DAY);
         int day = cal.get(Calendar.DAY_OF_MONTH);
         int month = cal.get(Calendar.MONTH) + 1;
-        int dow = cal.get(Calendar.DAY_OF_WEEK); // 1=周日
+        // 标准 cron 周字段：0/7=周日、1=周一；Calendar 是 1=周日，需转换
+        int dow = cal.get(Calendar.DAY_OF_WEEK);
+        int cronDow = dow == Calendar.SUNDAY ? 0 : dow - 1;
 
         for (String name : all.keySet()) {
             try {
@@ -155,7 +160,12 @@ public class CareAutomation {
                 String cron = task.optString("cronExpr", "");
                 String workflowName = task.optString("workflowName", "");
                 if (cron.isEmpty() || workflowName.isEmpty()) continue;
-                if (!cronMatches(cron, minute, hour, day, month, dow)) continue;
+                if (!cronMatches(cron, minute, hour, day, month, cronDow)) continue;
+
+                // 去重：同一任务同一分钟内只触发一次（检查间隔 30s 会重复命中）
+                String fireKey = name + "|" + cal.get(Calendar.YEAR) + "-" + month + "-" + day + " " + hour + ":" + minute;
+                if (fireKey.equals(lastFired.get(name))) continue;
+                lastFired.put(name, fireKey);
 
                 // 命中：执行工作流
                 String result;
@@ -173,7 +183,7 @@ public class CareAutomation {
         }
     }
 
-    /** 简化 cron 匹配：支持 分 时 日 月 周，字段支持 *、步进、具体值、a-b 范围 */
+    /** 简化 cron 匹配：支持 分 时 日 月 周，字段支持 *、步进、具体值、a-b 范围。dow 为 0=周日 */
     static boolean cronMatches(String cron, int minute, int hour, int day, int month, int dow) {
         if (cron == null) return false;
         String[] parts = cron.trim().split("\\s+");
@@ -183,11 +193,40 @@ public class CareAutomation {
             if (!fieldMatch(parts[1], hour)) return false;
             if (!parts[2].equals("*") && !fieldMatch(parts[2], day)) return false;
             if (!parts[3].equals("*") && !fieldMatch(parts[3], month)) return false;
-            if (!parts[4].equals("*") && !fieldMatch(parts[4], dow)) return false;
+            if (!parts[4].equals("*") && !dowFieldMatch(parts[4], dow)) return false;
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** 周字段匹配：dow 已归一化为 0=周日、1-6=周一到周六；标准 cron 中 7 也视为周日 */
+    private static boolean dowFieldMatch(String field, int dow) {
+        if (field.startsWith("*/")) {
+            int step = Integer.parseInt(field.substring(2));
+            if (step <= 0) return false;
+            return dow % step == 0;
+        }
+        if (field.equals("*")) return true;
+        if (field.contains(",")) {
+            for (String f : field.split(",")) {
+                if (dowFieldMatch(f.trim(), dow)) return true;
+            }
+            return false;
+        }
+        if (field.contains("-")) {
+            String[] range = field.split("-");
+            int lo = parseDow(range[0].trim());
+            int hi = parseDow(range[1].trim());
+            return dow >= lo && dow <= hi;
+        }
+        return parseDow(field.trim()) == dow;
+    }
+
+    /** 标准 cron 周值转归一化值：7 = 周日 = 0 */
+    private static int parseDow(String s) {
+        int v = Integer.parseInt(s.trim());
+        return v == 7 ? 0 : v;
     }
 
     private static boolean fieldMatch(String field, int value) throws Exception {

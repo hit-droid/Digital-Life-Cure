@@ -49,3 +49,11 @@ Entries discovered by the Agent during task execution should follow this format:
   - 远程为 GitHub（非 GitLab），git push 时不要带 `-o merge_request.create` 等 GitLab 风格 push options，否则触发 HTTP 500
   - 工作分支：`digital-life-cure-main`，目标分支 `main`
   - 提交风格：中文一行式 commit message + `Co-authored-by: monkeycode-ai <monkeycode-ai@chaitin.com>`
+
+[User Instruction Summary]
+- Date: 2026-08-05
+- Context: 用户对多次未经确认就自行写代码/改 UI 强烈不满后提出
+- Instructions:
+  - 以后凡是需要写代码、改代码或改 UI，动手前必须先向用户说明方案并征得用户明确同意，得到许可后才能开始写
+  - 用户明确叫停后立即停止，不得继续自行改动
+  - 大型重构或界面改动尤其必须先确认，不得擅自执行

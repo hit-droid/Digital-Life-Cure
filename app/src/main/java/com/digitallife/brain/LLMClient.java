@@ -269,8 +269,9 @@ public class LLMClient {
                 }
                 String resp = readStream(conn.getInputStream());
                 JSONObject o = new JSONObject(resp);
-                String content = o.optJSONArray("choices").getJSONObject(0)
-                        .optJSONObject("message").optString("content");
+                JSONArray choices = o.optJSONArray("choices");
+                String content = (choices == null || choices.length() == 0) ? ""
+                        : choices.getJSONObject(0).optJSONObject("message").optString("content");
                 cb.onResult(content, null);
             } catch (Exception ex) {
                 cb.onResult(null, ex.getMessage());

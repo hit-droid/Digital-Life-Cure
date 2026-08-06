@@ -144,7 +144,7 @@ public class PluginManager {
         try (OutputStream os = new java.io.FileOutputStream(tempZip)) {
             byte[] buf = new byte[8192];
             int n;
-            while ((n = in.read(buf)) != -1) os.write(buf);
+            while ((n = in.read(buf)) != -1) os.write(buf, 0, n);
         }
         try {
             File pluginsDir = getPluginsDir();
@@ -164,13 +164,17 @@ public class PluginManager {
                     }
                     if (entry.isDirectory()) continue;
                     String name = entry.getName();
-                    // 保持相对路径
-                    File outFile = new File(targetDir, name);
+                    // Zip Slip 防护：拒绝绝对路径、父目录穿越，目标必须落在解压目录内
+                    File outFile = safeResolve(targetDir, name);
+                    if (outFile == null) {
+                        deleteDir(targetDir);
+                        return new InstallResult(false, "插件包包含非法路径: " + name, null);
+                    }
                     outFile.getParentFile().mkdirs();
                     try (OutputStream os = new java.io.FileOutputStream(outFile)) {
                         byte[] buf2 = new byte[8192];
                         int n;
-                        while ((n = zis.read(buf2)) != -1) os.write(buf2);
+                        while ((n = zis.read(buf2)) != -1) os.write(buf2, 0, n);
                     }
                 }
             }
@@ -222,7 +226,7 @@ public class PluginManager {
             try (OutputStream os = new java.io.FileOutputStream(tempZip)) {
                 byte[] buf = new byte[8192];
                 int n;
-                while ((n = in.read(buf)) != -1) os.write(buf);
+                while ((n = in.read(buf)) != -1) os.write(buf, 0, n);
             }
             try (FileInputStream fis = new FileInputStream(tempZip)) {
                 // 自动检测 plugin.json 并安装
@@ -352,6 +356,27 @@ public class PluginManager {
             }
         }
         dir.delete();
+    }
+
+    /**
+     * Zip Slip 防护：把 zip 内相对路径安全解析到 base 目录下。
+     * 拒绝绝对路径、含 .. 的路径，并用 canonical 校验确保结果落在 base 内。
+     * 非法路径返回 null，由调用方拒绝整个压缩包。
+     */
+    private static File safeResolve(File base, String name) {
+        if (name == null || name.isEmpty()) return null;
+        if (name.startsWith("/") || name.contains("..")) return null;
+        File f = new File(base, name);
+        try {
+            String basePath = base.getCanonicalPath();
+            String targetPath = f.getCanonicalPath();
+            if (!targetPath.startsWith(basePath + File.separator) && !targetPath.equals(basePath)) {
+                return null;
+            }
+            return f;
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     private static String readFile(File f) throws Exception {

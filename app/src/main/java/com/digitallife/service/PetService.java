@@ -429,7 +429,15 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onLive2DParam(String paramId, float value) {
-        if (overlayView != null) overlayView.setParameterValue(paramId, value);
+        if (overlayView == null) return;
+        com.digitallife.render.Live2DGLView gl = overlayView.getLive2DView();
+        if (gl != null && gl.isSpringControlled(paramId)) {
+            // 行为参数（头/身体角度）走物理弹簧：GL 线程平滑到位，带惯性过冲
+            gl.setParamTarget(paramId, value);
+        } else {
+            // 生理微动（呼吸/眨眼/视线/口型）直通，保留高频瞬时响应
+            overlayView.setParameterValue(paramId, value);
+        }
     }
 
     @Override

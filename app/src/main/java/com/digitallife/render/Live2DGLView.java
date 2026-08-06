@@ -21,8 +21,24 @@ public class Live2DGLView extends GLSurfaceView {
     }
 
     private final Renderer renderer;
+    private final PhysicalController physics = new PhysicalController();
     private Listener listener;
     private boolean ready = false;
+
+    /** 物理弹簧控制器（AI 行为参数接管通道） */
+    public PhysicalController getPhysics() {
+        return physics;
+    }
+
+    /** 该参数是否由物理弹簧接管（否则走直通 queueEvent） */
+    public boolean isSpringControlled(String paramId) {
+        return physics.isControlled(paramId);
+    }
+
+    /** AI 写入行为参数目标值（任意线程安全），物理层在 GL 线程平滑到位 */
+    public void setParamTarget(String paramId, float value) {
+        physics.setTarget(paramId, value);
+    }
 
     public Live2DGLView(Context context) {
         super(context);
@@ -124,9 +140,13 @@ public class Live2DGLView extends GLSurfaceView {
     }
 
     private class Live2DRenderer implements Renderer {
+        private long lastFrameNanos = 0L;
+
         @Override
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
             Log.d(TAG, "onSurfaceCreated");
+            physics.reset();
+            lastFrameNanos = 0L;
             Live2DNative.nativeOnStart();
             Live2DNative.nativeOnSurfaceCreated();
         }
@@ -139,6 +159,15 @@ public class Live2DGLView extends GLSurfaceView {
 
         @Override
         public void onDrawFrame(GL10 gl) {
+            // EGL 垂直同步驱动每帧；用真实时间差驱动物理弹簧（首帧跳过）
+            long now = System.nanoTime();
+            float dt = lastFrameNanos == 0L ? 0f : (now - lastFrameNanos) / 1_000_000_000f;
+            lastFrameNanos = now;
+
+            // 弹簧积分：把 AI 目标值翻译成带惯性/过冲的连续运动，一次 JNI 批量写入
+            float[] values = physics.update(dt);
+            Live2DNative.nativeSetParameterValues(PhysicalController.PARAM_IDS, values);
+
             Live2DNative.nativeOnDrawFrame();
             if (!ready) {
                 ready = true;
