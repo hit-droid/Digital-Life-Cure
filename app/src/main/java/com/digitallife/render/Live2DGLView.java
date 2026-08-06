@@ -22,12 +22,18 @@ public class Live2DGLView extends GLSurfaceView {
 
     private final Renderer renderer;
     private final PhysicalController physics = new PhysicalController();
+    private final ContinuousMotionEngine motionEngine = new ContinuousMotionEngine();
     private Listener listener;
     private boolean ready = false;
 
     /** 物理弹簧控制器（AI 行为参数接管通道） */
     public PhysicalController getPhysics() {
         return physics;
+    }
+
+    /** L1 程序化连续微动引擎（GL 线程逐帧驱动呼吸/视线/身体微动） */
+    public ContinuousMotionEngine getMotionEngine() {
+        return motionEngine;
     }
 
     /** 该参数是否由物理弹簧接管（否则走直通 queueEvent） */
@@ -146,6 +152,7 @@ public class Live2DGLView extends GLSurfaceView {
         public void onSurfaceCreated(GL10 gl, EGLConfig config) {
             Log.d(TAG, "onSurfaceCreated");
             physics.reset();
+            motionEngine.reset();
             lastFrameNanos = 0L;
             Live2DNative.nativeOnStart();
             Live2DNative.nativeOnSurfaceCreated();
@@ -164,9 +171,12 @@ public class Live2DGLView extends GLSurfaceView {
             float dt = lastFrameNanos == 0L ? 0f : (now - lastFrameNanos) / 1_000_000_000f;
             lastFrameNanos = now;
 
-            // 弹簧积分：把 AI 目标值翻译成带惯性/过冲的连续运动，一次 JNI 批量写入
+            // L1：程序化噪声（正弦波/saccade/呼吸/眨眼）叠加到弹簧目标，一次 JNI 批量写入
+            motionEngine.update(physics, dt);
             float[] values = physics.update(dt);
             Live2DNative.nativeSetParameterValues(PhysicalController.PARAM_IDS, values);
+            float[] direct = physics.directValues();
+            Live2DNative.nativeSetParameterValues(PhysicalController.DIRECT_PARAM_IDS, direct);
 
             Live2DNative.nativeOnDrawFrame();
             if (!ready) {

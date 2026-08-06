@@ -21,6 +21,10 @@ import android.view.WindowManager;
 
 import com.digitallife.R;
 import com.digitallife.brain.AICore;
+import com.digitallife.brain.EnvironmentSensors;
+import com.digitallife.brain.PetState;
+import com.digitallife.brain.PetVitalsManager;
+import com.digitallife.brain.ThoughtLoopManager;
 import com.digitallife.care.CareAI;
 import com.digitallife.care.CareAutomation;
 import com.digitallife.care.CareExecutor;
@@ -31,6 +35,8 @@ import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 import com.digitallife.ui.PetOverlayView;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.render.Live2DGLView;
+import com.digitallife.render.ContinuousMotionEngine;
 import com.digitallife.speech.STTEngine;
 import com.digitallife.speech.TTSEngine;
 
@@ -62,6 +68,14 @@ public class PetService extends Service implements AICore.Output,
     private Settings settings;
     private Heartbeat heartbeat;
     private MemoryStore memory;
+
+    // L2 生理状态机 / L3 心理独白
+    private PetVitalsManager vitals;
+    private EnvironmentSensors environmentSensors;
+    private ThoughtLoopManager thoughtLoop;
+    private volatile boolean touching = false;
+    private boolean vitalsTicking = false;
+    private long lastDragTime = 0;
 
     private final STTEngine.Listener sttListener = new STTEngine.Listener() {
         @Override
@@ -258,6 +272,74 @@ public class PetService extends Service implements AICore.Output,
         });
         heartbeat.start();
 
+        // L2 生理状态机：每秒演化精力/无聊/情绪，状态切换时映射为姿态目标
+        vitals = new PetVitalsManager(state -> {
+            if (overlayView == null) return;
+            Live2DGLView gl = overlayView.getLive2DView();
+            if (gl == null) return;
+            switch (state) {
+                case SLEEPY:
+                    gl.setParamTarget("ParamAngleY", -12f);
+                    gl.setParamTarget("ParamAngleZ", 0f);
+                    gl.setMouth(0.05f);
+                    ContinuousMotionEngine m0 = gl.getMotionEngine();
+                    if (m0 != null) m0.setStyle(0.35f, 0.4f, 0.4f, 0.4f);
+                    break;
+                case BORED:
+                    gl.setParamTarget("ParamAngleY", 0f);
+                    gl.setParamTarget("ParamAngleZ", 14f);
+                    gl.setMouth(0.18f);
+                    break;
+                case ANNOYED:
+                    gl.setParamTarget("ParamAngleZ", -10f);
+                    gl.setParamTarget("ParamAngleY", 0f);
+                    gl.setMouth(0f);
+                    overlayView.setExpression("F02");
+                    break;
+                case HAPPY:
+                    gl.setParamTarget("ParamAngleY", 0f);
+                    gl.setParamTarget("ParamAngleZ", 0f);
+                    gl.setMouth(0.12f);
+                    overlayView.setExpression("F01");
+                    break;
+                default:
+                    gl.setParamTarget("ParamAngleY", 0f);
+                    gl.setParamTarget("ParamAngleZ", 0f);
+                    gl.setMouth(0f);
+                    break;
+            }
+        });
+        vitalsTicking = true;
+        startVitalsTick();
+
+        // L3 心理独白：8~12 分钟静默采集环境+生理状态，LLM 产生内心独白并触发动作/气泡
+        environmentSensors = new EnvironmentSensors(this);
+        thoughtLoop = new ThoughtLoopManager(settings, environmentSensors, vitals, (tag, text) -> {
+            if (overlayView == null) return;
+            overlayView.showBubble(text, Math.max(3f, text.length() * 0.12f));
+            switch (tag) {
+                case "happy":
+                    overlayView.setMotion("Tap", 0, 2);
+                    break;
+                case "sleepy":
+                    overlayView.setMotion("Idle", 0, 1);
+                    break;
+                case "nod":
+                    overlayView.setMotion("Idle", 1, 2);
+                    break;
+                case "shake":
+                    overlayView.setMotion("Idle", 1, 2);
+                    break;
+                case "annoyed":
+                    overlayView.setMotion("Tap", 1, 2);
+                    break;
+                default:
+                    overlayView.setMotion("Idle", 1, 2);
+                    break;
+            }
+        });
+        thoughtLoop.start();
+
         // 无障碍感知：前台 App 变化 / 通知到达 → 写入记忆，择机主动搭话
         com.digitallife.service.PetAccessibilityService.setListener(
                 new com.digitallife.service.PetAccessibilityService.Listener() {
@@ -276,12 +358,24 @@ public class PetService extends Service implements AICore.Output,
                 });
     }
 
+    private void startVitalsTick() {
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!vitalsTicking) return;
+                if (vitals != null) vitals.tick(PetVitalsManager.currentHour(), touching);
+                mainHandler.postDelayed(this, 1000L);
+            }
+        }, 1000L);
+    }
+
     // ================= 悬浮窗交互 =================
 
     @Override
     public void onTap() {
         if (aiCore == null) return;
         aiCore.onUserInteraction();
+        noteUserInteraction();
         if (voiceEnabled && tts != null && tts.isSpeaking()) {
             tts.stop();
             aiCore.cancel();
@@ -300,6 +394,7 @@ public class PetService extends Service implements AICore.Output,
     public void onDoubleTap() {
         if (aiCore == null) return;
         aiCore.onUserInteraction();
+        noteUserInteraction();
         overlayView.setExpression("F02");
         overlayView.showBubble("嘿嘿~ 戳我干嘛呀！", 2f);
     }
@@ -320,6 +415,7 @@ public class PetService extends Service implements AICore.Output,
         }
         if (aiCore == null) return;
         aiCore.onUserInteraction();
+        noteUserInteraction();
         aiCore.onUserSays(text);
     }
 
@@ -337,6 +433,14 @@ public class PetService extends Service implements AICore.Output,
     public void onDrag(float dx, float dy) {
         if (dx == 0 && dy == 0) {
             overlayView.clearBubble();
+            // 松手：恢复触摸状态，拖拽速度产生的摆角回弹归零
+            touching = false;
+            lastDragTime = 0;
+            Live2DGLView gl = overlayView.getLive2DView();
+            if (gl != null) {
+                gl.setParamTarget("ParamAngleZ", 0f);
+                gl.setParamTarget("ParamBodyAngleX", 0f);
+            }
         }
     }
 
@@ -350,6 +454,22 @@ public class PetService extends Service implements AICore.Output,
             windowManager.updateViewLayout(overlayView, overlayParams);
         } catch (Exception ignored) {}
         settings.setOverlayPos(overlayParams.x, overlayParams.y);
+
+        // L4 惯性摆角：拖拽速度越快，身体/头摆角越大（方向相反，松手弹簧回弹）
+        touching = true;
+        long now = System.currentTimeMillis();
+        float dt = lastDragTime == 0 ? 0.05f : (now - lastDragTime) / 1000f;
+        lastDragTime = now;
+        if (dt > 0.001f) {
+            float vx = dx / dt;
+            float headZ = Math.max(-30f, Math.min(30f, vx * 0.008f));
+            float bodyX = Math.max(-20f, Math.min(20f, vx * 0.005f));
+            Live2DGLView gl = overlayView.getLive2DView();
+            if (gl != null) {
+                gl.setParamTarget("ParamAngleZ", -headZ);
+                gl.setParamTarget("ParamBodyAngleX", -bodyX);
+            }
+        }
     }
 
     /** 屏幕尺寸/方向变化时重新计算窗口宽高，并等比迁移位置避免越界 */
@@ -443,6 +563,20 @@ public class PetService extends Service implements AICore.Output,
     @Override
     public void onExpression(String name) {
         if (overlayView != null) overlayView.setExpression(name);
+    }
+
+    @Override
+    public void onStyle(float energy, float alertness, float speed, float amplitude) {
+        if (overlayView == null) return;
+        ContinuousMotionEngine engine = overlayView.getLive2DView().getMotionEngine();
+        if (engine != null) engine.setStyle(energy, alertness, speed, amplitude);
+    }
+
+    @Override
+    public void onGazeBias(float x, float y) {
+        if (overlayView == null) return;
+        ContinuousMotionEngine engine = overlayView.getLive2DView().getMotionEngine();
+        if (engine != null) engine.setGazeBias(x, y);
     }
 
     @Override
@@ -556,6 +690,12 @@ public class PetService extends Service implements AICore.Output,
     public AICore getAiCore() { return aiCore; }
     public PetOverlayView getOverlayView() { return overlayView; }
     public boolean isVoiceEnabled() { return voiceEnabled; }
+
+    /** 用户交互登记：喂饱生理状态机、重置独白空闲计时 */
+    private void noteUserInteraction() {
+        if (vitals != null) vitals.noteInteraction();
+        if (thoughtLoop != null) thoughtLoop.noteInteraction();
+    }
 
     /** 语音引擎诊断文本（供配置页显示） */
     public String getVoiceDiag() {
@@ -686,6 +826,10 @@ public class PetService extends Service implements AICore.Output,
         if (careAutomation != null) careAutomation.stop();
         if (heartbeat != null) heartbeat.stop();
         if (aiCore != null) aiCore.stop();
+        if (thoughtLoop != null) thoughtLoop.stop();
+        vitalsTicking = false;
+        vitals = null;
+        thoughtLoop = null;
         if (tts != null) { tts.stop(); tts.destroy(); }
         if (stt != null) stt.destroy();
         if (overlayView != null) {
