@@ -108,19 +108,23 @@ public class MemoryStore {
     }
 
     public synchronized List<Message> getContext() {
+        return getRecentMessages(CONTEXT_LIMIT);
+    }
+
+    /** 取最近 N 条对话消息（升序），供聊天界面渲染 */
+    public synchronized List<Message> getRecentMessages(int limit) {
         ArrayList<Message> out = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor c = db.rawQuery(
                 "SELECT role, content, emotion_tag, timestamp FROM raw_messages ORDER BY timestamp DESC, id DESC LIMIT ?",
-                new String[]{String.valueOf(CONTEXT_LIMIT)});
+                new String[]{String.valueOf(limit)});
         try {
             while (c.moveToNext()) {
                 out.add(0, new Message(
                         c.getString(0),
                         c.getString(1),
                         c.getString(2),
-                        c.getLong(3)
-                ));
+                        c.getLong(3)));
             }
         } finally {
             c.close();
