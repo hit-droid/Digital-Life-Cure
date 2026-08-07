@@ -109,6 +109,24 @@ public class MainActivity extends Activity {
         header.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        // 快捷打开对话大脑聊天界面
+        Button btnChatOpen = new Button(this);
+        btnChatOpen.setText("对话大脑");
+        btnChatOpen.setTextSize(12f);
+        btnChatOpen.setTextColor(Color.WHITE);
+        btnChatOpen.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnChatOpen.setAllCaps(false);
+        btnChatOpen.setPadding(dp(12), dp(6), dp(12), dp(6));
+        btnChatOpen.setOnClickListener(v -> {
+            try {
+                Intent i = new Intent(this, ChatActivity.class);
+                startActivity(i);
+            } catch (Exception e) {
+                Toast.makeText(this, "无法打开对话大脑: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+        header.addView(btnChatOpen);
+
         // 快捷打开护理大脑对话
         Button btnCareOpen = new Button(this);
         btnCareOpen.setText("护理大脑");

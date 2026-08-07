@@ -7,6 +7,7 @@ import android.os.Looper;
 import com.digitallife.brain.LLMClient;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
+import com.digitallife.util.ChatStore;
 import com.digitallife.util.Settings;
 
 import org.json.JSONArray;
@@ -72,6 +73,7 @@ public class CareAI {
     private final Context ctx;
     private final CareExecutor executor;
     private final List<LLMClient.ChatMessage> history;
+    private final ChatStore chatStore;
     private final Handler handler;
     private final ExecutorService pool;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -80,13 +82,61 @@ public class CareAI {
     private CareListener listener;
     private volatile boolean cancelled;
 
+    /** 护理大脑对话历史持久化会话 key */
+    private static final String SESSION_CARE = "care";
+
     public CareAI(Context ctx) {
         this.ctx = ctx.getApplicationContext();
         this.executor = CareExecutor.getInstance(ctx);
+        this.chatStore = new ChatStore(ctx);
         this.history = new ArrayList<>();
         this.handler = new Handler(Looper.getMainLooper());
         this.pool = Executors.newSingleThreadExecutor();
+        loadHistory();
         initLLM();
+    }
+
+    /** 从本地存储恢复对话历史（豆包式：重启后保留之前的对话） */
+    private void loadHistory() {
+        try {
+            for (ChatStore.StoredMsg m : chatStore.getMessages(SESSION_CARE, 80)) {
+                if ("user".equals(m.role)) {
+                    history.add(new LLMClient.ChatMessage("user", m.content));
+                } else if ("tool".equals(m.role)) {
+                    LLMClient.ChatMessage tm = new LLMClient.ChatMessage("tool", m.content);
+                    tm.toolCallId = m.toolCallId;
+                    history.add(tm);
+                } else {
+                    LLMClient.ChatMessage am = new LLMClient.ChatMessage("assistant", m.content);
+                    if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
+                        try {
+                            am.toolCalls = new JSONArray(m.toolCalls);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    history.add(am);
+                }
+            }
+        } catch (Exception e) {
+            history.clear();
+        }
+    }
+
+    /** 把当前内存历史整体落盘（恢复/新增/清理后调用） */
+    private void persistHistory() {
+        try {
+            chatStore.clearSession(SESSION_CARE);
+            for (LLMClient.ChatMessage m : history) {
+                if ("user".equals(m.role) || "system".equals(m.role)) {
+                    chatStore.addMessage(SESSION_CARE, m.role, m.content, null, null, System.currentTimeMillis());
+                } else if ("tool".equals(m.role)) {
+                    chatStore.addMessage(SESSION_CARE, m.role, m.content, null, m.toolCallId, System.currentTimeMillis());
+                } else {
+                    chatStore.addMessage(SESSION_CARE, m.role, m.content, m.toolCalls, null, System.currentTimeMillis());
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void initLLM() {
@@ -134,6 +184,7 @@ public class CareAI {
     /** 发送用户消息 */
     public void sendMessage(String text) {
         history.add(new LLMClient.ChatMessage("user", text));
+        persistHistory();
         if (running.compareAndSet(false, true)) {
             pool.execute(this::converse);
         }
@@ -335,6 +386,7 @@ public class CareAI {
                     LLMClient.ChatMessage toolMsg = new LLMClient.ChatMessage("tool", result);
                     toolMsg.toolCallId = toolCallId;
                     history.add(toolMsg);
+                    persistHistory();
                 } catch (Exception e) {
                     postToolResult(name, false, "执行失败: " + e.getMessage());
                     history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + e.getMessage()));
@@ -345,6 +397,7 @@ public class CareAI {
             public void onDone(String fullText) {
                 if (!fullText.isEmpty()) {
                     history.add(new LLMClient.ChatMessage("assistant", fullText));
+                    persistHistory();
                     postDone(fullText);
                 }
                 // 判断是否继续对话
@@ -384,6 +437,7 @@ public class CareAI {
 
     public void clearHistory() {
         history.clear();
+        chatStore.clearSession(SESSION_CARE);
     }
 
     /**
@@ -392,6 +446,7 @@ public class CareAI {
      */
     public void logAutomationEvent(String text) {
         history.add(new LLMClient.ChatMessage("assistant", "【自动化记录】" + text));
+        persistHistory();
     }
 
     // ============ 回调 ============

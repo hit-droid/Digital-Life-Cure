@@ -71,6 +71,22 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 护理大脑模型管理 -->
+        <activity
+            android:name="com.digitallife.care.CareModelsActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
+        <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
+        <activity
+            android:name="com.digitallife.ui.ChatActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         </application>
 
 </manifest>

@@ -15,6 +15,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -22,15 +23,19 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.digitallife.R;
+import com.digitallife.util.ChatStore;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -85,7 +90,57 @@ public class CareActivity extends Activity {
             }
         });
         buildUi();
-        addAiBubble("你好，我是护理大脑，负责照料你的数字生命。\n\n我可以帮你：\n· 上传模型包，自动解压并体检\n· 分析模型完整性，修复缺失文件\n· 查看、创作、编辑角色动作\n· 管理工作流和定时任务\n\n直接发消息，或点左下角上传模型压缩包。");
+        restoreHistory();
+    }
+
+    /**
+     * 从本地存储恢复历史对话（豆包式：重新打开页面保留之前的对话）。
+     * 历史为空时才显示开场白。
+     */
+    private void restoreHistory() {
+        List<ChatStore.StoredMsg> msgs;
+        try {
+            msgs = new ChatStore(this).getMessages(ChatStore.SESSION_CARE, 80);
+        } catch (Exception e) {
+            msgs = new ArrayList<>();
+        }
+        if (msgs != null && !msgs.isEmpty()) {
+            lastTimestampMs = 0;
+            for (ChatStore.StoredMsg m : msgs) {
+                if ("user".equals(m.role)) {
+                    addUserBubble(m.content);
+                } else if ("tool".equals(m.role)) {
+                    // 工具结果：合并到最近一条工具气泡（若有）
+                    markLastToolResult("tool", true, m.content);
+                } else {
+                    if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
+                        // assistant 的工具调用消息 → 显示工具占位气泡
+                        String toolName = parseToolName(m.toolCalls);
+                        addToolBubble(toolName);
+                    } else if (m.content != null && !m.content.isEmpty()) {
+                        addAiBubble(m.content);
+                    }
+                }
+            }
+        } else {
+            addAiBubble("你好，我是护理大脑，负责照料你的数字生命。\n\n我可以帮你：\n· 上传模型包，自动解压并体检\n· 分析模型完整性，修复缺失文件\n· 查看、创作、编辑角色动作\n· 管理工作流和定时任务\n\n直接发消息，或点左下角上传模型压缩包。");
+        }
+    }
+
+    /** 从 tool_calls JSON 数组里取第一个函数名 */
+    private String parseToolName(String toolCallsJson) {
+        try {
+            JSONArray arr = new JSONArray(toolCallsJson);
+            if (arr.length() > 0) {
+                JSONObject call = arr.optJSONObject(0);
+                if (call != null && call.optJSONObject("function") != null) {
+                    String n = call.optJSONObject("function").optString("name", "");
+                    if (!n.isEmpty()) return n;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "tool";
     }
 
     private void buildUi() {
@@ -113,6 +168,26 @@ public class CareActivity extends Activity {
         tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
         topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // 模型管理：查看/切换/删除所有 Live2D 模型
+        Button btnModels = new Button(this);
+        btnModels.setText("模型");
+        btnModels.setTextSize(13f);
+        btnModels.setTextColor(Color.WHITE);
+        btnModels.setAllCaps(false);
+        btnModels.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnModels.setPadding(dp(12), dp(4), dp(12), dp(4));
+        btnModels.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(this, CareModelsActivity.class));
+            } catch (Exception e) {
+                toast("无法打开模型管理：" + e.getMessage());
+            }
+        });
+        LinearLayout.LayoutParams modelLp = btnLp(0, 0);
+        modelLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        modelLp.height = dp(34);
+        topBar.addView(btnModels, modelLp);
 
         // 快捷切换到配置界面
         ImageButton btnSettings = iconButton(R.drawable.ic_settings);
