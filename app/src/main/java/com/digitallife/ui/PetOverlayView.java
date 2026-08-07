@@ -233,7 +233,7 @@ public class PetOverlayView extends FrameLayout {
     private android.graphics.drawable.Drawable getBubbleBackground() {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(dp(14));
+        bg.setCornerRadius(dp(18));
         bg.setColor(Color.WHITE);
         bg.setStroke(dp(1), Color.argb(120, 180, 170, 200));
         return bg;
@@ -249,9 +249,9 @@ public class PetOverlayView extends FrameLayout {
     private android.graphics.drawable.Drawable getInputBackground() {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setCornerRadius(12f);
-        bg.setColor(Color.argb(230, 255, 255, 255));
-        bg.setStroke(1, Color.argb(100, 160, 140, 200));
+        bg.setCornerRadius(dp(16));
+        bg.setColor(Color.argb(235, 255, 255, 255));
+        bg.setStroke(1, Color.argb(110, 160, 140, 200));
         return bg;
     }
 

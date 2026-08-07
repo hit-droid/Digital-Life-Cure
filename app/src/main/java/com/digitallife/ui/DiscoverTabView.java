@@ -3,6 +3,7 @@ package com.digitallife.ui;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -100,21 +101,24 @@ public class DiscoverTabView extends LinearLayout {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 TextView label = new TextView(activity);
                 label.setText(dimName(dim));
-                label.setTextSize(12f);
+                label.setTextSize(13f);
                 label.setTextColor(UiKit.color(activity, R.color.text_secondary));
                 row.addView(label, new LinearLayout.LayoutParams(
                         UiKit.dp(activity, 56), ViewGroup.LayoutParams.WRAP_CONTENT));
 
                 LinearLayout track = new LinearLayout(activity);
                 track.setOrientation(LinearLayout.HORIZONTAL);
-                track.setBackgroundResource(R.drawable.bg_input);
+                track.setBackgroundResource(R.drawable.bg_track);
                 LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(0, UiKit.dp(activity, 8), 1);
                 tl.leftMargin = UiKit.dp(activity, 4);
                 tl.rightMargin = UiKit.dp(activity, 4);
                 track.setLayoutParams(tl);
 
                 View fill = new View(activity);
-                fill.setBackgroundColor(dimColor(dim));
+                GradientDrawable fg = new GradientDrawable();
+                fg.setCornerRadius(UiKit.dp(activity, 4));
+                fg.setColor(dimColor(dim));
+                fill.setBackground(fg);
                 LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(0, UiKit.dp(activity, 8), val);
                 fill.setLayoutParams(fl);
                 track.addView(fill);
@@ -177,7 +181,7 @@ public class DiscoverTabView extends LinearLayout {
             for (MemoryStore.DailySummary s : summaries) {
                 TextView st = new TextView(activity);
                 st.setText(s.date + "：" + s.summary);
-                st.setTextSize(12f);
+                st.setTextSize(13f);
                 st.setTextColor(UiKit.color(activity, R.color.text_secondary));
                 st.setLineSpacing(2f, 1f);
                 card.addView(st, UiKit.lp(activity, 2));
@@ -195,7 +199,7 @@ public class DiscoverTabView extends LinearLayout {
             for (MemoryStore.Fact f : facts) {
                 TextView ft = new TextView(activity);
                 ft.setText("· " + f.content);
-                ft.setTextSize(12f);
+                ft.setTextSize(13f);
                 ft.setTextColor(UiKit.color(activity, R.color.text_primary));
                 ft.setLineSpacing(2f, 1f);
                 card.addView(ft, UiKit.lp(activity, 2));

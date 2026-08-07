@@ -83,6 +83,10 @@ public class LLMClient {
         this.tools = tools != null ? tools : new JSONArray();
     }
 
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
     public void cancel() {
         cancelled = true;
     }
