@@ -287,6 +287,10 @@ public class ChatActivity extends Activity {
         String text = etInput.getText().toString().trim();
         boolean hasFile = pendingFilePath != null && !pendingFilePath.isEmpty();
         if (text.isEmpty() && !hasFile) return;
+        if (thinking) {
+            Toast.makeText(this, "她还在回复中，稍等一下哦…", Toast.LENGTH_SHORT).show();
+            return;
+        }
         etInput.setText("");
         hideKeyboard();
 
@@ -689,6 +693,10 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rlp.bottomMargin = dp(2);
         listContainer.addView(row, rlp);
+        bubble.setOnLongClickListener(v -> {
+            copyToClipboard(bubble.getText() == null ? "" : bubble.getText().toString());
+            return true;
+        });
     }
 
     private void appendAiBubble(String text) {
@@ -698,6 +706,20 @@ public class ChatActivity extends Activity {
         b.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listContainer.addView(b);
+        b.setOnLongClickListener(v -> {
+            copyToClipboard(b.getText() == null ? "" : b.getText().toString());
+            return true;
+        });
+    }
+
+    private void copyToClipboard(String text) {
+        if (text == null || text.isEmpty()) return;
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("消息", text));
+            Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show();
+        }
     }
 
     /** 工具过程卡片（完全可视化）：工具名 + 完整参数；结果回填后完整展示 */

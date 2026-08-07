@@ -116,7 +116,17 @@ public class SettingsTabView extends LinearLayout {
         swVoice = UiKit.switchRow(activity, cSwitch, "语音互动（说话+发声）", settings.isVoiceEnabled());
         swProactive = UiKit.switchRow(activity, cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
 
-        Button btnSwitchModel = UiKit.button(activity, cSwitch, "选择模型（当前: " + getCurrentModelName() + "）");
+        Button btnAccessibility = UiKit.button(activity, cSwitch, "无障碍感知权限（可选，增强互动）");
+        btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
+        TextView tvAccessibility = new TextView(activity);
+        tvAccessibility.setTextSize(13f);
+        tvAccessibility.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
+        cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
+
+        // ---------- 桌宠形象（Live2D 形象管理，与上面的 LLM 模型配置区分开） ----------
+        LinearLayout cAppearance = UiKit.card(activity, root, "桌宠形象");
+        Button btnSwitchModel = UiKit.button(activity, cAppearance, "切换形象（当前: " + getCurrentModelName() + "）");
         btnSwitchModel.setOnClickListener(v -> showModelPicker(btnSwitchModel));
 
         final TextView tvModelListTmp = new TextView(activity);
@@ -125,25 +135,17 @@ public class SettingsTabView extends LinearLayout {
         tvModelListTmp.setPadding(0, UiKit.dp(activity, 2), 0, 0);
         tvModelListTmp.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvModelList = tvModelListTmp;
-        cSwitch.addView(tvModelListTmp, UiKit.lp(activity, 0));
+        cAppearance.addView(tvModelListTmp, UiKit.lp(activity, 0));
 
-        // 模型管理入口（护理大脑模型面板）
-        Button btnModels = UiKit.secondaryButton(activity, cSwitch, "打开模型管理（详情/删除）");
+        // 形象管理入口（护理大脑模型面板）
+        Button btnModels = UiKit.secondaryButton(activity, cAppearance, "打开形象管理（详情/删除）");
         btnModels.setOnClickListener(v -> {
             try {
                 activity.startActivity(new Intent(activity, CareModelsActivity.class));
             } catch (Exception e) {
-                Toast.makeText(activity, "无法打开模型管理: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, "无法打开形象管理: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
         });
-
-        Button btnAccessibility = UiKit.button(activity, cSwitch, "无障碍感知权限（可选，增强互动）");
-        btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
-        TextView tvAccessibility = new TextView(activity);
-        tvAccessibility.setTextSize(13f);
-        tvAccessibility.setTextColor(UiKit.color(activity, R.color.text_secondary));
-        tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
-        cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
 
         // ---------- 互动（语音 + 快速聊天） ----------
         LinearLayout cChat = UiKit.card(activity, root, "互动");
@@ -443,7 +445,7 @@ public class SettingsTabView extends LinearLayout {
     private void showModelPicker(Button btnSwitchModel) {
         PetService svc = PetService.getInstance();
         if (svc == null) {
-            Toast.makeText(activity, "请先启动桌宠再选择模型", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "请先启动桌宠再切换形象", Toast.LENGTH_SHORT).show();
             return;
         }
         int count = Live2DNative.nativeGetModelCount();
@@ -460,13 +462,13 @@ public class SettingsTabView extends LinearLayout {
             }
         }
         new AlertDialog.Builder(activity)
-                .setTitle("选择模型")
+                .setTitle("切换形象")
                 .setSingleChoiceItems(marks, currentModelIndex, (d, which) -> {
                     currentModelIndex = which;
                     svc.switchToModel(which);
                     d.dismiss();
                     if (btnSwitchModel != null) {
-                        btnSwitchModel.setText("选择模型（当前: " + getCurrentModelName() + "）");
+                        btnSwitchModel.setText("切换形象（当前: " + getCurrentModelName() + "）");
                     }
                     refreshModelList();
                 })

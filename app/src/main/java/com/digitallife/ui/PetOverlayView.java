@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.digitallife.R;
 import com.digitallife.render.Pose;
 import com.digitallife.render.Live2DGLView;
 
@@ -84,7 +85,7 @@ public class PetOverlayView extends FrameLayout {
         bubbleContainer = new LinearLayout(context);
         bubbleContainer.setOrientation(LinearLayout.VERTICAL);
         bubbleView = new TextView(context);
-        bubbleView.setTextColor(Color.rgb(60, 50, 80));
+        bubbleView.setTextColor(colorRes(R.color.text_primary));
         bubbleView.setTextSize(14f);
         bubbleView.setLineSpacing(2f, 1f);
         bubbleView.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -111,8 +112,8 @@ public class PetOverlayView extends FrameLayout {
         chatInput = new EditText(context);
         chatInput.setHint("跟她说句话...");
         chatInput.setTextSize(13f);
-        chatInput.setTextColor(Color.rgb(40, 30, 60));
-        chatInput.setHintTextColor(Color.argb(120, 100, 80, 140));
+        chatInput.setTextColor(colorRes(R.color.text_primary));
+        chatInput.setHintTextColor(colorRes(R.color.text_hint));
         chatInput.setSingleLine(true);
         chatInput.setBackground(getInputBackground());
         chatInput.setPadding(10, 6, 10, 6);
@@ -234,15 +235,15 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(18));
-        bg.setColor(Color.WHITE);
-        bg.setStroke(dp(1), Color.argb(120, 180, 170, 200));
+        bg.setColor(colorRes(R.color.card_bg));
+        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
         return bg;
     }
 
     private android.graphics.drawable.Drawable getTailBackground() {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setColor(Color.WHITE);
+        bg.setColor(colorRes(R.color.card_bg));
         return bg;
     }
 
@@ -250,9 +251,13 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(16));
-        bg.setColor(Color.argb(235, 255, 255, 255));
-        bg.setStroke(1, Color.argb(110, 160, 140, 200));
+        bg.setColor(colorRes(R.color.surface_glass));
+        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
         return bg;
+    }
+
+    private int colorRes(int res) {
+        return getResources().getColor(res);
     }
 
     public void clearBubble() {
