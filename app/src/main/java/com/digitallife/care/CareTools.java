@@ -15,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -62,11 +63,18 @@ public class CareTools {
             arr.put(makeSchema("set_default_model", "把指定模型设为默认模型（下次启动自动加载）", new String[]{"modelName"}));
             arr.put(makeSchema("delete_model", "删除已导入的模型（内置模型不可删除）", new String[]{"modelName"}));
             arr.put(makeSchema("repair_model", "修复模型缺失文件", new String[]{"modelName"}));
+            arr.put(makeSchema("list_model_files", "列出模型目录内全部文件（含子目录），排查缺失/多余文件", new String[]{"modelName"}));
+            arr.put(makeSchema("read_model_file", "读取模型目录内任意文件内容（json/文本），检查配置错误", new String[]{"modelName", "path"}));
+            arr.put(makeSchema("write_model_file", "写入/覆盖模型目录内某个文件（自动备份原文件为 .bak），修复损坏配置", new String[]{"modelName", "path", "content"}));
+            arr.put(makeSchema("fix_model_references", "自动修复 model3.json 中的文件引用路径（按实际文件匹配修正），检查每个引用是否有效", new String[]{"modelName"}));
+            arr.put(makeSchema("backup_model", "备份整个模型目录到备份区，修改模型前建议先备份", new String[]{"modelName"}));
+            arr.put(makeSchema("restore_model", "从最近的备份恢复模型目录", new String[]{"modelName"}));
             arr.put(makeSchema("list_motions", "列出模型所有动作及详情（时长/循环/曲线数）", new String[]{"modelName"}));
             arr.put(makeSchema("get_motion_detail", "查看单个动作的完整参数曲线", new String[]{"modelName", "motionName"}));
             arr.put(makeSchema("generate_motion", "创建新动作，可指定参数曲线", new String[]{"modelName", "motionName", "duration", "curves"}));
             arr.put(makeSchema("edit_motion", "修改动作：时长/循环/参数曲线", new String[]{"modelName", "motionName", "edits"}));
             arr.put(makeSchema("delete_motion", "删除模型动作", new String[]{"modelName", "motionName"}));
+            arr.put(makeSchema("repair_motion", "修复损坏或缺少 Meta 字段的动作文件（motion3.json），恢复为可播放的合法结构", new String[]{"modelName", "motionName"}));
             arr.put(makeSchema("create_workflow", "创建多步骤工作流", new String[]{"name", "steps"}));
             arr.put(makeSchema("list_workflows", "列出所有工作流"));
             arr.put(makeSchema("delete_workflow", "删除工作流", new String[]{"name"}));
@@ -119,6 +127,16 @@ public class CareTools {
             case "set_default_model": return setDefaultModel(args.optString("modelName", ""));
             case "delete_model": return deleteModel(args.optString("modelName", ""));
             case "repair_model": return repairModel(args.optString("modelName", ""));
+            case "list_model_files": return listModelFiles(args.optString("modelName", ""));
+            case "read_model_file": return readModelFile(
+                    args.optString("modelName", ""), args.optString("path", ""));
+            case "write_model_file": return writeModelFile(
+                    args.optString("modelName", ""),
+                    args.optString("path", ""),
+                    args.optString("content", ""));
+            case "fix_model_references": return fixModelReferences(args.optString("modelName", ""));
+            case "backup_model": return backupModel(args.optString("modelName", ""));
+            case "restore_model": return restoreModel(args.optString("modelName", ""));
             case "list_motions": return listMotions(args.optString("modelName", ""));
             case "get_motion_detail": return getMotionDetail(
                     args.optString("modelName", ""), args.optString("motionName", ""));
@@ -134,6 +152,8 @@ public class CareTools {
             case "delete_motion": return deleteMotion(
                     args.optString("modelName", ""),
                     args.optString("motionName", ""));
+            case "repair_motion": return repairMotion(
+                    args.optString("modelName", ""), args.optString("motionName", ""));
             case "create_workflow": return createWorkflow(
                     args.optString("name", ""), args.optString("steps", "[]"));
             case "list_workflows": return listWorkflows();
@@ -636,6 +656,350 @@ public class CareTools {
             report.append("   ✅ 纹理文件正常\n");
         }
         return report.toString();
+    }
+
+    // ============ 模型文件级工具（修复/排查） ============
+
+    private String listModelFiles(String modelName) {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        StringBuilder sb = new StringBuilder("📁 模型「" + modelName + "」文件结构:\n");
+        appendFileTree(dir, sb, 0, 3);
+        return sb.toString();
+    }
+
+    private void appendFileTree(File dir, StringBuilder sb, int depth, int maxDepth) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        Arrays.sort(files, (a, b) -> a.getName().compareTo(b.getName()));
+        String pad = depth == 0 ? "  " : "     ".repeat(Math.max(0, depth));
+        for (File f : files) {
+            if (f.isDirectory()) {
+                sb.append(pad).append("📁 ").append(f.getName()).append("/\n");
+                if (depth < maxDepth) appendFileTree(f, sb, depth + 1, maxDepth);
+            } else {
+                sb.append(pad).append("   ").append(f.getName())
+                  .append(" (").append(formatSize(f.length())).append(")\n");
+            }
+        }
+    }
+
+    private String readModelFile(String modelName, String path) {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        if (path == null || path.trim().isEmpty()) return "请指定相对路径（如 foo.model3.json）。";
+        File f = safeResolve(dir, path);
+        if (f == null) return "路径非法（不允许访问模型目录之外）: " + path;
+        if (!f.exists()) return "文件不存在: " + path;
+        if (f.isDirectory()) return "「" + path + "」是目录，请指定文件路径。";
+        if (f.length() > 512 * 1024) return "文件过大（>512KB），拒绝读取: " + path;
+        try {
+            String content = readFile(f);
+            if (content.length() > 8000) {
+                content = content.substring(0, 8000) + "\n...（内容过长已截断）";
+            }
+            return "📄 " + path + " (" + formatSize(f.length()) + "):\n" + content;
+        } catch (Exception e) {
+            return "读取失败: " + e.getMessage();
+        }
+    }
+
+    private String writeModelFile(String modelName, String path, String content) throws Exception {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        if (path == null || path.trim().isEmpty()) return "请指定相对路径。";
+        if (content == null || content.trim().isEmpty()) return "写入内容为空。";
+        File f = safeResolve(dir, path);
+        if (f == null) return "路径非法（不允许写入模型目录之外）: " + path;
+        // json 文件校验合法性，避免写入损坏配置
+        String low = path.toLowerCase(Locale.ROOT);
+        if (low.endsWith(".json")) {
+            try {
+                String c = content.trim();
+                if (c.startsWith("[")) {
+                    new JSONArray(c);
+                } else {
+                    new JSONObject(c);
+                }
+            } catch (Exception e) {
+                return "❌ JSON 格式不合法，未写入: " + e.getMessage();
+            }
+        }
+        File parent = f.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        if (f.exists()) {
+            File bak = new File(f.getAbsolutePath() + ".bak");
+            copyFile(f, bak);
+        }
+        try (OutputStream os = new FileOutputStream(f)) {
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+        }
+        return "✅ 已写入 " + path + "（原文件已备份为 .bak）";
+    }
+
+    /** 修复 model3.json 引用路径：按实际文件匹配修正大小写/目录差异 */
+    private String fixModelReferences(String modelName) throws Exception {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        File model3 = firstFile(dir, ".model3.json");
+        if (model3 == null) {
+            File moc = firstFile(dir, ".moc3");
+            if (moc != null) {
+                String base = moc.getName().replace(".moc3", "");
+                createMinimalModel3Json(dir, base);
+                return "✅ 缺少 model3.json，已根据 " + moc.getName() + " 自动生成最小定义。";
+            }
+            return "⚠ 缺少 model3.json 与 .moc3，无法自动修复，请重新安装。";
+        }
+        JSONObject root = new JSONObject(readFile(model3));
+        JSONObject fr = root.optJSONObject("FileReferences");
+        if (fr == null) return "⚠ model3.json 缺少 FileReferences 字段，无法修复引用。";
+        StringBuilder sb = new StringBuilder("🔧 引用修复结果:\n");
+        int fixed = 0;
+        fixed += fixSingleRef(dir, fr, "Moc", sb);
+        fixed += fixSingleRef(dir, fr, "Physics", sb);
+        fixed += fixSingleRef(dir, fr, "DisplayInfo", sb);
+        fixed += fixSingleRef(dir, fr, "Pose", sb);
+        // 纹理数组
+        JSONArray texs = fr.optJSONArray("Textures");
+        if (texs != null) {
+            for (int i = 0; i < texs.length(); i++) {
+                String ref = texs.optString(i, "");
+                String match = resolveRef(dir, ref);
+                if (match == null) {
+                    sb.append("   ⚠ 纹理缺失且未找到匹配文件: ").append(ref).append("\n");
+                } else if (!match.equals(ref)) {
+                    texs.put(i, match);
+                    fixed++;
+                    sb.append("   ✅ 纹理: ").append(ref).append(" → ").append(match).append("\n");
+                }
+            }
+            fr.put("Textures", texs);
+        }
+        // 动作组
+        JSONObject motions = fr.optJSONObject("Motions");
+        if (motions != null) {
+            java.util.Iterator<String> it = motions.keys();
+            while (it.hasNext()) {
+                String group = it.next();
+                JSONArray arr = motions.optJSONArray(group);
+                if (arr == null) continue;
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject m = arr.optJSONObject(i);
+                    if (m == null || !m.has("File")) continue;
+                    String ref = m.optString("File", "");
+                    String match = resolveRef(dir, ref);
+                    if (match == null) {
+                        sb.append("   ⚠ 动作缺失且未找到匹配文件: ").append(ref).append("\n");
+                    } else if (!match.equals(ref)) {
+                        m.put("File", match);
+                        fixed++;
+                        sb.append("   ✅ 动作: ").append(ref).append(" → ").append(match).append("\n");
+                    }
+                }
+            }
+            fr.put("Motions", motions);
+        }
+        if (fixed == 0) {
+            sb.append("   所有引用均有效，无需修复 ✅\n");
+        } else {
+            root.put("FileReferences", fr);
+            File bak = new File(model3.getAbsolutePath() + ".bak");
+            copyFile(model3, bak);
+            try (OutputStream os = new FileOutputStream(model3)) {
+                os.write(root.toString(2).getBytes(StandardCharsets.UTF_8));
+            }
+            sb.append("   ⚠ 共修正 ").append(fixed).append(" 处引用并写回（原文件备份为 .bak）。\n");
+            sb.append("   若桌宠正在运行，可重新启动桌宠让修复生效。");
+        }
+        return sb.toString();
+    }
+
+    private int fixSingleRef(File dir, JSONObject fr, String key, StringBuilder sb) throws Exception {
+        if (!fr.has(key)) return 0;
+        String ref = fr.optString(key, "");
+        if (ref.isEmpty()) return 0;
+        String match = resolveRef(dir, ref);
+        if (match == null) {
+            sb.append("   ⚠ ").append(key).append(" 缺失且未找到匹配文件: ").append(ref).append("\n");
+            return 0;
+        }
+        if (!match.equals(ref)) {
+            fr.put(key, match);
+            sb.append("   ✅ ").append(key).append(": ").append(ref).append(" → ").append(match).append("\n");
+            return 1;
+        }
+        return 0;
+    }
+
+    /** 解析引用：优先按原路径；不存在则遍历目录按文件名（忽略大小写）匹配实际文件 */
+    private String resolveRef(File dir, String ref) {
+        if (ref == null || ref.isEmpty()) return null;
+        String norm = ref.replace("\\", "/");
+        File direct = new File(dir, norm);
+        if (direct.exists()) return norm;
+        String fileName = new File(norm).getName();
+        List<File> stack = new ArrayList<>();
+        File[] all = dir.listFiles();
+        if (all != null) Collections.addAll(stack, all);
+        while (!stack.isEmpty()) {
+            File f = stack.remove(stack.size() - 1);
+            if (f.isDirectory()) {
+                File[] sub = f.listFiles();
+                if (sub != null) Collections.addAll(stack, sub);
+            } else if (f.getName().equalsIgnoreCase(fileName)) {
+                return f.getAbsolutePath().substring(dir.getAbsolutePath().length() + 1)
+                        .replace("\\", "/");
+            }
+        }
+        return null;
+    }
+
+    /** 备份模型目录到备份区，并记录最近一次备份路径 */
+    private String backupModel(String modelName) {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        File backupsRoot = new File(ctx.getCacheDir(), "care_backups");
+        if (!backupsRoot.exists() && !backupsRoot.mkdirs()) return "无法创建备份目录。";
+        String dirName = sanitizeDirName(dir.getName());
+        File target = new File(backupsRoot, dirName + "_" + System.currentTimeMillis());
+        try {
+            copyRecursive(dir, target);
+        } catch (Exception e) {
+            return "备份失败: " + e.getMessage();
+        }
+        ctx.getSharedPreferences("care_backups", Context.MODE_PRIVATE).edit()
+                .putString(dir.getName(), target.getAbsolutePath()).apply();
+        return "✅ 已备份「" + dir.getName() + "」→ " + target.getName() + "\n修改模型前先备份是好习惯。";
+    }
+
+    /** 从最近备份恢复模型目录 */
+    private String restoreModel(String modelName) {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        String backupPath = ctx.getSharedPreferences("care_backups", Context.MODE_PRIVATE)
+                .getString(dir.getName(), null);
+        if (backupPath == null) {
+            File backupsRoot = new File(ctx.getCacheDir(), "care_backups");
+            File[] bks = backupsRoot.listFiles((d, n) -> n.toLowerCase(Locale.ROOT)
+                    .startsWith(dir.getName().toLowerCase(Locale.ROOT)));
+            if (bks != null && bks.length > 0) {
+                Arrays.sort(bks, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                backupPath = bks[bks.length - 1].getAbsolutePath();
+            }
+        }
+        if (backupPath == null) {
+            return "未找到「" + dir.getName() + "」的备份，请先用 backup_model 备份。";
+        }
+        File backup = new File(backupPath);
+        if (!backup.exists()) return "备份不存在: " + backupPath;
+        try {
+            deleteRecursive(dir);
+            if (!dir.mkdirs()) throw new Exception("无法创建模型目录");
+            copyRecursive(backup, dir);
+        } catch (Exception e) {
+            return "恢复失败: " + e.getMessage();
+        }
+        return "✅ 已从备份恢复模型「" + dir.getName() + "」。\n若桌宠正在运行，可重新启动桌宠让恢复生效。";
+    }
+
+    /** 修复动作文件：损坏则重建最小结构，缺 Meta 则补全 */
+    private String repairMotion(String modelName, String motionName) throws Exception {
+        File dir = findModelDir(modelName);
+        if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
+        File m = resolveMotionFile(dir, motionName);
+        if (m == null) return "未找到动作: " + motionName;
+        JSONObject motion;
+        try {
+            motion = new JSONObject(readFile(m));
+        } catch (Exception e) {
+            // 完全损坏：备份后重建最小合法结构
+            File bak = new File(m.getAbsolutePath() + ".bak");
+            copyFile(m, bak);
+            JSONObject rebuilt = new JSONObject();
+            rebuilt.put("Version", 3);
+            JSONObject meta = new JSONObject();
+            meta.put("Duration", 4.0);
+            meta.put("Fps", 30.0);
+            meta.put("Loop", false);
+            meta.put("AreBeziersRestricted", true);
+            meta.put("CurveCount", 0);
+            meta.put("TotalSegmentCount", 0);
+            meta.put("TotalPointCount", 0);
+            meta.put("UserDataCount", 0);
+            meta.put("TotalUserDataSize", 0);
+            rebuilt.put("Meta", meta);
+            rebuilt.put("Curves", new JSONArray());
+            rebuilt.put("UserData", new JSONArray());
+            try (OutputStream os = new FileOutputStream(m)) {
+                os.write(rebuilt.toString(2).getBytes(StandardCharsets.UTF_8));
+            }
+            return "✅ 动作文件损坏，已重建为最小合法结构（4s 单次）: " + m.getName() + "\n原文件已备份为 .bak";
+        }
+        StringBuilder report = new StringBuilder("🔧 修复动作: " + m.getName() + "\n");
+        boolean changed = false;
+        JSONObject meta = motion.optJSONObject("Meta");
+        if (meta == null) {
+            meta = new JSONObject();
+            meta.put("Duration", 4.0);
+            meta.put("Fps", 30.0);
+            meta.put("Loop", false);
+            meta.put("AreBeziersRestricted", true);
+            meta.put("CurveCount", 0);
+            meta.put("TotalSegmentCount", 0);
+            meta.put("TotalPointCount", 0);
+            meta.put("UserDataCount", 0);
+            meta.put("TotalUserDataSize", 0);
+            motion.put("Meta", meta);
+            changed = true;
+            report.append("   ✅ 补全缺失的 Meta 字段\n");
+        }
+        if (!motion.has("Version")) {
+            motion.put("Version", 3);
+            changed = true;
+        }
+        if (motion.opt("Curves") == null || !(motion.opt("Curves") instanceof JSONArray)) {
+            motion.put("Curves", new JSONArray());
+            meta.put("CurveCount", 0);
+            changed = true;
+        }
+        if (motion.opt("UserData") == null) {
+            motion.put("UserData", new JSONArray());
+            changed = true;
+        }
+        if (changed) {
+            File bak = new File(m.getAbsolutePath() + ".bak");
+            copyFile(m, bak);
+            try (OutputStream os = new FileOutputStream(m)) {
+                os.write(motion.toString(2).getBytes(StandardCharsets.UTF_8));
+            }
+            report.append("   ✅ 已修复并写回（原文件备份为 .bak）\n");
+        } else {
+            report.append("   动作文件结构正常，无需修复 ✅\n");
+        }
+        return report.toString();
+    }
+
+    private static void copyRecursive(File src, File dst) throws Exception {
+        if (src.isDirectory()) {
+            if (!dst.exists() && !dst.mkdirs()) throw new Exception("无法创建目录: " + dst);
+            File[] files = src.listFiles();
+            if (files != null) {
+                for (File f : files) copyRecursive(f, new File(dst, f.getName()));
+            }
+        } else {
+            copyFile(src, dst);
+        }
+    }
+
+    private static void copyFile(File src, File dst) throws Exception {
+        File parent = dst.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+        }
     }
 
     // ============ 动作管理 ============

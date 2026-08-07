@@ -69,6 +69,8 @@ public class LLMClient {
     private String baseUrl, apiKey, model;
     private JSONArray tools;
     private volatile boolean cancelled = false;
+    /** 标记本次会话是否已做过非流式兜底重试（避免死循环） */
+    private volatile boolean streamFallbackDone = false;
 
     public LLMClient(String baseUrl, String apiKey, String model) {
         this.baseUrl = baseUrl;
@@ -93,6 +95,7 @@ public class LLMClient {
     public void chatStream(List<ChatMessage> messages, JSONObject extraSystem, StreamListener listener) {
         pool.execute(() -> {
             cancelled = false;
+            streamFallbackDone = false;
             // 首次带 tools；若端点不支持（HTTP 400/415），自动去掉 tools 重试一次
             chatStreamInner(messages, extraSystem, listener, true);
         });
@@ -156,6 +159,13 @@ public class LLMClient {
                         chatStreamInner(trimmed, extraSystem, listener, withTools);
                         return;
                     }
+                }
+                // 部分中转站不支持流式：改为非流式请求重试一次（与测试连接同款请求）
+                if (!streamFallbackDone) {
+                    conn.disconnect();
+                    streamFallbackDone = true;
+                    nonStreamFallback(messages, extraSystem, listener);
+                    return;
                 }
                 listener.onError("HTTP " + code + ": " + err);
                 return;
@@ -283,6 +293,67 @@ public class LLMClient {
 
     public interface Callback {
         void onResult(String text, String error);
+    }
+
+    /**
+     * 非流式兜底请求（stream=false）。
+     * 用于中转站不支持流式时的降级：请求体与流式一致，但一次返回完整文本，
+     * 通过 onDelta + onDone 模拟流式回调，上层无需感知差异。
+     */
+    private void nonStreamFallback(List<ChatMessage> messages, JSONObject extraSystem, StreamListener listener) {
+        if (cancelled) {
+            listener.onDone("");
+            return;
+        }
+        HttpURLConnection conn = null;
+        try {
+            JSONObject body = new JSONObject();
+            body.put("model", model);
+            body.put("stream", false);
+            JSONArray msgs = new JSONArray();
+            msgs.put(new JSONObject().put("role", "system").put("content", buildSystemPrompt(extraSystem)));
+            for (ChatMessage m : messages) msgs.put(m.toJson());
+            body.put("messages", msgs);
+
+            URL url = new URL(buildUrl(baseUrl));
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(60000);
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                String err = readStream(conn.getErrorStream());
+                if (isContextOverflow(err)) {
+                    List<ChatMessage> trimmed = trimHistory(messages);
+                    if (trimmed.size() < messages.size()) {
+                        conn.disconnect();
+                        nonStreamFallback(trimmed, extraSystem, listener);
+                        return;
+                    }
+                }
+                listener.onError("HTTP " + code + ": " + err);
+                return;
+            }
+            String resp = readStream(conn.getInputStream());
+            JSONObject o = new JSONObject(resp);
+            JSONArray choices = o.optJSONArray("choices");
+            String content = (choices == null || choices.length() == 0) ? ""
+                    : choices.getJSONObject(0).optJSONObject("message").optString("content");
+            if (!content.isEmpty()) {
+                listener.onDelta(content);
+            }
+            listener.onDone(content);
+        } catch (Exception ex) {
+            listener.onError(ex.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     /** 判断 HTTP 错误是否由上下文超长（token 超限）引起 */

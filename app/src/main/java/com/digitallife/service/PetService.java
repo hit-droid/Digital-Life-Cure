@@ -35,6 +35,7 @@ import com.digitallife.model.ModelManager;
 import com.digitallife.util.CrashHandler;
 import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
+import com.digitallife.util.ThoughtStore;
 import com.digitallife.ui.PetOverlayView;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
@@ -76,6 +77,7 @@ public class PetService extends Service implements AICore.Output,
     private PetVitalsManager vitals;
     private EnvironmentSensors environmentSensors;
     private ThoughtLoopManager thoughtLoop;
+    private ThoughtStore thoughtStore;
     private volatile boolean touching = false;
     private boolean vitalsTicking = false;
     private long lastDragTime = 0;
@@ -317,7 +319,13 @@ public class PetService extends Service implements AICore.Output,
 
         // L3 心理独白：8~12 分钟静默采集环境+生理状态，LLM 产生内心独白并触发动作/气泡
         environmentSensors = new EnvironmentSensors(this);
+        thoughtStore = new ThoughtStore(this);
         thoughtLoop = new ThoughtLoopManager(settings, environmentSensors, vitals, (tag, text) -> {
+            // 内心独白持久化（发现页数据源）
+            try {
+                if (thoughtStore != null) thoughtStore.addThought(text);
+            } catch (Exception ignored) {
+            }
             if (overlayView == null) return;
             overlayView.showBubble(text, Math.max(3f, text.length() * 0.12f));
             switch (tag) {

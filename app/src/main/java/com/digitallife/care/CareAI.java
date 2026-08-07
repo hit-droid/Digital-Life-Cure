@@ -56,13 +56,15 @@ public class CareAI {
     private static final String SYSTEM_PROMPT =
             "你是数字生命的护理大脑，负责管理桌面上的 Live2D 虚拟角色。\n\n" +
             "你的能力：\n" +
-            "1. 模型管理：列出、检查、分析、安装、修复 Live2D 模型\n" +
-            "2. 动作管理：列出、创建、修改、删除模型动作（.motion3.json），可指定参数曲线\n" +
+            "1. 模型管理：列出、检查、分析、安装、修复 Live2D 模型；可读取/写入模型任意 json 文件、修复引用路径、备份恢复模型\n" +
+            "2. 动作管理：列出、创建、修改、删除、修复模型动作（.motion3.json），可指定参数曲线\n" +
             "3. 工作流：创建、列出、执行自动化工作流\n" +
             "4. 定时任务：添加、列出、删除定时任务\n\n" +
             "使用规则：\n" +
             "- 当用户上传模型 zip 或请求检查模型时，必须主动调用 analyze_model 进行完整分析，并主动输出检查结论（通过/缺失文件/修复建议），不要等用户追问\n" +
             "- 安装模型前先检查完整性，缺失关键文件要明确指出\n" +
+            "- 修复模型前建议先用 backup_model 备份，再用 read_model_file/list_model_files 定位问题\n" +
+            "- 引用路径错误用 fix_model_references 自动修复；配置文件损坏用 write_model_file 重写（会自动备份 .bak）\n" +
             "- 创建动作时主动询问动作参数（名称、时长、是否循环），或按用户描述直接创建\n" +
             "- 编辑动作时先查看动作详情再修改\n" +
             "- 工作流可以包含多个步骤，每个步骤调用一个工具\n" +
@@ -81,6 +83,8 @@ public class CareAI {
     private LLMClient llm;
     private CareListener listener;
     private volatile boolean cancelled;
+    /** 当前 LLM 配置指纹；发送前检测变化自动重建（解决"改配置后单例仍用旧配置"） */
+    private volatile String configFingerprint = "";
 
     /** 护理大脑对话历史持久化会话 key */
     private static final String SESSION_CARE = "care";
@@ -139,9 +143,19 @@ public class CareAI {
         }
     }
 
+    /**
+     * 初始化/刷新 LLM 客户端。
+     * 每次调用会读取 care scope 当前 profile；若配置（base/key/model/工具列表）未变化则跳过，
+     * 避免频繁重建。用户改完配置后下一次对话自动生效。
+     */
     private void initLLM() {
         ApiManager apiManager = new ApiManager(ctx);
         ApiProfile profile = apiManager.getCurrent(ApiManager.SCOPE_CARE);
+        String fp = buildConfigFingerprint(profile);
+        if (llm != null && fp.equals(configFingerprint)) {
+            return;
+        }
+        configFingerprint = fp;
         if (profile != null) {
             llm = new LLMClient(profile.baseUrl, profile.apiKey, profile.model);
         } else {
@@ -173,6 +187,24 @@ public class CareAI {
         llm.setTools(schemas);
     }
 
+    /** 计算当前配置指纹：care profile（或全局设置）三要素 + 工具列表签名 */
+    private String buildConfigFingerprint(ApiProfile profile) {
+        String base, key, model;
+        if (profile != null) {
+            base = profile.baseUrl;
+            key = profile.apiKey;
+            model = profile.model;
+        } else {
+            Settings s = new Settings(ctx);
+            base = s.getApiBase();
+            key = s.getApiKey();
+            model = s.getModel();
+        }
+        String schemas = String.valueOf(executor.getTools().getToolSchemas());
+        return (base == null ? "" : base) + "|" + (key == null ? "" : key) + "|"
+                + (model == null ? "" : model) + "|" + schemas;
+    }
+
     public void setListener(CareListener listener) {
         this.listener = listener;
     }
@@ -183,6 +215,7 @@ public class CareAI {
 
     /** 发送用户消息 */
     public void sendMessage(String text) {
+        initLLM();
         history.add(new LLMClient.ChatMessage("user", text));
         persistHistory();
         if (running.compareAndSet(false, true)) {
@@ -190,6 +223,7 @@ public class CareAI {
         }
     }
     public void handleFile(String fileName, String filePath) {
+        initLLM();
         String msg = "我上传了一个文件: " + fileName + "\n路径: " + filePath;
         if (fileName.endsWith(".zip")) {
             msg += "\n这是一个压缩包，请检查并尝试安装其中的模型。";
@@ -197,11 +231,26 @@ public class CareAI {
         sendMessage(msg);
     }
 
+    /** 文字与文件一起发送：把文件信息追加到用户消息后，交给护理大脑处理 */
+    public void sendMessageWithFile(String text, String fileName, String filePath) {
+        initLLM();
+        StringBuilder msg = new StringBuilder();
+        if (text != null && !text.trim().isEmpty()) {
+            msg.append(text.trim()).append("\n\n");
+        }
+        msg.append("我上传了一个文件: ").append(fileName).append("\n路径: ").append(filePath);
+        if (fileName != null && fileName.endsWith(".zip")) {
+            msg.append("\n这是一个压缩包，请检查并尝试安装其中的模型。");
+        }
+        sendMessage(msg.toString());
+    }
+
     /**
      * 上传模型 zip 后全自动处理：真正安装到模型目录 → 注册 → 分析完整性 → 动作列表，
      * 每步结果实时反馈 UI，最后让 AI 主动总结（无需用户追问、不再死循环）。
      */
     public void analyzeUploadedZip(String fileName, String filePath) {
+        initLLM();
         pool.execute(() -> {
             try {
                 if (!running.compareAndSet(false, true)) {
@@ -309,8 +358,20 @@ public class CareAI {
                 case "repair_model":
                     executor.repairModel(args.optString("modelName", ""));
                     break;
+                case "fix_model_references":
+                case "restore_model":
+                case "write_model_file":
+                    // model3.json 可能被改写：让 native 重新注册全部模型，修复立即生效
+                    if (com.digitallife.service.PetService.getInstance() != null) {
+                        try {
+                            com.digitallife.model.ModelManager.registerImportedModels(ctx);
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                    break;
                 case "generate_motion":
                 case "edit_motion":
+                case "repair_motion":
                     // 动作文件已写入，执行层无需额外处理（下次读取生效）
                     break;
                 default:
