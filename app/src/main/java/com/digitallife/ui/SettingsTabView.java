@@ -49,7 +49,7 @@ public class SettingsTabView extends LinearLayout {
     private EditText etPetName, etChat;
     private TextView tvStatus, tvVoiceDiag, tvMemoryDebug, tvCrashPath, tvModelList;
 
-    private ApiProfileSection chatSection, careSection;
+    private ApiProfileSection modelSection;
     private int currentModelIndex = 0;
 
     public SettingsTabView(Activity activity) {
@@ -75,17 +75,10 @@ public class SettingsTabView extends LinearLayout {
 
         // ---------- 状态 ----------
         tvStatus = new TextView(activity);
-        tvStatus.setTextSize(12f);
+        tvStatus.setTextSize(13f);
         tvStatus.setTextColor(UiKit.color(activity, R.color.success));
         tvStatus.setPadding(0, UiKit.dp(activity, 4), 0, 0);
         root.addView(tvStatus, UiKit.lp(activity, 0));
-
-        tvCrashPath = new TextView(activity);
-        tvCrashPath.setTextSize(10f);
-        tvCrashPath.setTextColor(UiKit.color(activity, R.color.text_secondary));
-        tvCrashPath.setPadding(0, UiKit.dp(activity, 4), 0, 0);
-        tvCrashPath.setText("崩溃日志：" + CrashHandler.getCrashPath());
-        root.addView(tvCrashPath, UiKit.lp(activity, 0));
 
         // ---------- 启停控制 ----------
         LinearLayout cCtrl = UiKit.card(activity, root, "启停控制");
@@ -114,11 +107,8 @@ public class SettingsTabView extends LinearLayout {
         Button btnOverlay = UiKit.button(activity, cOverlay, "授予悬浮窗权限 / 检查授权");
         btnOverlay.setOnClickListener(v -> requestOverlayPermission());
 
-        // ---------- API 配置 ----------
-        chatSection = new ApiProfileSection(activity, root, "对话大脑配置", ApiManager.SCOPE_CHAT, "AI 大脑");
-        chatSection.tvResult.setHint("填写后点「测试 API 连接」，这里会显示详细结果。");
-        careSection = new ApiProfileSection(activity, root, "护理大脑配置", ApiManager.SCOPE_CARE, "护理大脑");
-        careSection.tvResult.setHint("护理大脑负责模型校验修复/动作创作，可与对话大脑使用不同 API。");
+        // ---------- 模型配置（统一管理对话/护理两套） ----------
+        modelSection = new ApiProfileSection(activity, root);
 
         // ---------- 功能设置 ----------
         LinearLayout cSwitch = UiKit.card(activity, root, "功能设置");
@@ -147,22 +137,10 @@ public class SettingsTabView extends LinearLayout {
             }
         });
 
-        tvVoiceDiag = new TextView(activity);
-        tvVoiceDiag.setTextSize(12f);
-        tvVoiceDiag.setLineSpacing(2f, 1f);
-        tvVoiceDiag.setPadding(0, UiKit.dp(activity, 6), 0, 0);
-        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.text_secondary));
-        tvVoiceDiag.setText("桌宠运行中才能检测。如提示 TTS 失败，可点下方按钮到系统设置安装/启用语音合成数据。");
-        cSwitch.addView(tvVoiceDiag, UiKit.lp(activity, 0));
-        Button btnVoiceDiag = UiKit.button(activity, cSwitch, "检查语音引擎");
-        btnVoiceDiag.setOnClickListener(v -> checkVoiceDiag());
-        Button btnTtsInstall = UiKit.button(activity, cSwitch, "打开系统 TTS 安装/设置");
-        btnTtsInstall.setOnClickListener(v -> openTtsInstall());
-
         Button btnAccessibility = UiKit.button(activity, cSwitch, "无障碍感知权限（可选，增强互动）");
         btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
         TextView tvAccessibility = new TextView(activity);
-        tvAccessibility.setTextSize(12f);
+        tvAccessibility.setTextSize(13f);
         tvAccessibility.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
         cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
@@ -215,19 +193,57 @@ public class SettingsTabView extends LinearLayout {
             Toast.makeText(activity, "记忆已清空", Toast.LENGTH_SHORT).show();
         });
 
-        // ---------- 记忆调试 ----------
-        LinearLayout cMemory = UiKit.card(activity, root, "记忆调试");
+        // ---------- 开发者选项（折叠） ----------
+        LinearLayout cDev = UiKit.card(activity, root, "开发者选项");
+        TextView devHint = new TextView(activity);
+        devHint.setText("面向调试的高级功能，日常使用无需打开。");
+        devHint.setTextSize(13f);
+        devHint.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        devHint.setLineSpacing(2f, 1f);
+        cDev.addView(devHint, UiKit.lp(activity, 0));
+
+        LinearLayout devBody = new LinearLayout(activity);
+        devBody.setOrientation(LinearLayout.VERTICAL);
+        devBody.setVisibility(View.GONE);
+
+        tvCrashPath = new TextView(activity);
+        tvCrashPath.setTextSize(10f);
+        tvCrashPath.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvCrashPath.setPadding(0, UiKit.dp(activity, 4), 0, 0);
+        tvCrashPath.setText("崩溃日志：" + CrashHandler.getCrashPath());
+        devBody.addView(tvCrashPath, UiKit.lp(activity, 0));
+
+        tvVoiceDiag = new TextView(activity);
+        tvVoiceDiag.setTextSize(13f);
+        tvVoiceDiag.setLineSpacing(2f, 1f);
+        tvVoiceDiag.setPadding(0, UiKit.dp(activity, 6), 0, 0);
+        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvVoiceDiag.setText("桌宠运行中才能检测。如提示 TTS 失败，可点下方按钮到系统设置安装/启用语音合成数据。");
+        devBody.addView(tvVoiceDiag, UiKit.lp(activity, 0));
+        Button btnVoiceDiag = UiKit.button(activity, devBody, "检查语音引擎");
+        btnVoiceDiag.setOnClickListener(v -> checkVoiceDiag());
+        Button btnTtsInstall = UiKit.button(activity, devBody, "打开系统 TTS 安装/设置");
+        btnTtsInstall.setOnClickListener(v -> openTtsInstall());
+
         tvMemoryDebug = new TextView(activity);
-        tvMemoryDebug.setTextSize(12f);
+        tvMemoryDebug.setTextSize(13f);
         tvMemoryDebug.setLineSpacing(2f, 1f);
         tvMemoryDebug.setPadding(0, UiKit.dp(activity, 6), 0, 0);
         tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.text_secondary));
-        tvMemoryDebug.setText("点击上方按钮查看当前记忆快照或执行本地自检。\n自检会写入一条测试 fact 和一条测试 summary。\n");
-        cMemory.addView(tvMemoryDebug, UiKit.lp(activity, 0));
-        Button btnMemoryDebug = UiKit.button(activity, cMemory, "查看记忆快照");
+        tvMemoryDebug.setText("点击下方按钮查看当前记忆快照或执行本地自检。\n自检会写入一条测试 fact 和一条测试 summary。");
+        devBody.addView(tvMemoryDebug, UiKit.lp(activity, 0));
+        Button btnMemoryDebug = UiKit.button(activity, devBody, "查看记忆快照");
         btnMemoryDebug.setOnClickListener(v -> showMemoryDebug());
-        Button btnMemorySelfCheck = UiKit.button(activity, cMemory, "运行记忆自检");
+        Button btnMemorySelfCheck = UiKit.button(activity, devBody, "运行记忆自检");
         btnMemorySelfCheck.setOnClickListener(v -> runMemorySelfCheck());
+
+        Button btnToggleDev = UiKit.secondaryButton(activity, cDev, "展开调试功能");
+        btnToggleDev.setOnClickListener(v -> {
+            boolean show = devBody.getVisibility() != View.VISIBLE;
+            devBody.setVisibility(show ? View.VISIBLE : View.GONE);
+            btnToggleDev.setText(show ? "收起调试功能" : "展开调试功能");
+        });
+        cDev.addView(devBody, UiKit.lp(activity, 4));
 
         addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -245,8 +261,7 @@ public class SettingsTabView extends LinearLayout {
         settings.setPetName(etPetName != null ? etPetName.getText().toString().trim() : settings.getPetName());
         settings.setVoiceEnabled(swVoice.isChecked());
         settings.setProactiveEnabled(swProactive.isChecked());
-        chatSection.saveProfile();
-        careSection.saveProfile();
+        modelSection.saveCurrentProfile();
         PetService svc = PetService.getInstance();
         if (svc != null) {
             apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);

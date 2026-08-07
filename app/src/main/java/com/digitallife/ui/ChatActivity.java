@@ -26,11 +26,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.digitallife.R;
-import com.digitallife.brain.AICore;
+import com.digitallife.brain.LLMClient;
 import com.digitallife.care.CareAI;
 import com.digitallife.service.PetService;
+import com.digitallife.util.ApiManager;
+import com.digitallife.util.ApiProfile;
 import com.digitallife.util.ChatStore;
-import com.digitallife.util.MemoryStore;
+import com.digitallife.util.Settings;
 
 import org.json.JSONObject;
 
@@ -38,6 +40,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -54,16 +57,16 @@ public class ChatActivity extends Activity {
     private static final String EXTRA_TITLE = "title";
     private static final String EXTRA_TYPE = "type";
     private static final String EXTRA_MODEL = "model_name";
-    private static final long POLL_INTERVAL = 900;
-
     private static final int REQ_ATTACH = 3001;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ScrollView scroll;
     private LinearLayout listContainer;
     private EditText etInput;
-    private Button btnAttach;
+    private ImageButton btnAttach;
+    private Button btnModel;
     private CareAI careAI;
+    private LLMClient llm;
 
     // 待发送附件（选文件后不立即发，与消息一起提交）
     private LinearLayout attachBar;
@@ -78,41 +81,30 @@ public class ChatActivity extends Activity {
     private boolean isCare;
 
     private ChatStore chatStore;
-    private MemoryStore memory;
 
     private TextView curAssistantBubble;   // care 流式回复气泡
     private TextView curToolBubble;        // care 工具过程卡片
     private String curAssistantText = "";
     private String curToolName = "";       // 工具卡片名称
     private String curToolFull = "";       // 工具卡片完整结果（点击展开/收起）
-    private long lastMemoryTs;
     private long lastTsLabel = 0;
 
     private boolean thinking = false;
-
-    private final Runnable poller = new Runnable() {
-        @Override
-        public void run() {
-            if (!isCare) pollMemoryIncrements();
-            handler.postDelayed(this, POLL_INTERVAL);
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         chatStore = new ChatStore(this);
-        memory = new MemoryStore(this);
         sessionKey = getIntent().getStringExtra(EXTRA_SESSION);
         title = getIntent().getStringExtra(EXTRA_TITLE);
         type = getIntent().getStringExtra(EXTRA_TYPE);
         modelName = getIntent().getStringExtra(EXTRA_MODEL);
         if (sessionKey == null) sessionKey = ChatStore.SESSION_CARE;
         isCare = ChatStore.TYPE_CARE.equals(type);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().getDecorView().setSystemUiVisibility(0);
         buildUi();
         restoreHistory();
-        lastMemoryTs = System.currentTimeMillis();
-        handler.postDelayed(poller, POLL_INTERVAL);
     }
 
     private void buildUi() {
@@ -126,7 +118,7 @@ public class ChatActivity extends Activity {
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackgroundResource(R.drawable.bg_top_bar);
         topBar.setElevation(dp(4));
-        topBar.setPadding(dp(4), dp(12), dp(4), dp(12));
+        topBar.setPadding(dp(4), statusBarHeight() + dp(8), dp(4), dp(12));
 
         ImageButton btnBack = iconButton(R.drawable.ic_back);
         btnBack.setContentDescription("返回");
@@ -135,13 +127,26 @@ public class ChatActivity extends Activity {
 
         TextView tvTitle = new TextView(this);
         tvTitle.setText(title == null || title.isEmpty() ? "对话" : title);
-        tvTitle.setTextSize(17f);
+        tvTitle.setTextSize(18f);
         tvTitle.setTextColor(Color.WHITE);
         tvTitle.setGravity(Gravity.CENTER);
         tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tvTitle.setSingleLine(true);
         topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        btnModel = new Button(this);
+        btnModel.setTextSize(12f);
+        btnModel.setTextColor(Color.WHITE);
+        btnModel.setAllCaps(false);
+        btnModel.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnModel.setPadding(dp(10), dp(4), dp(10), dp(4));
+        UiKit.pressScale(btnModel);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        mlp.setMargins(dp(4), 0, dp(2), 0);
+        btnModel.setOnClickListener(v -> switchModel());
+        topBar.addView(btnModel, mlp);
 
         Button btnClear = new Button(this);
         btnClear.setText("清空");
@@ -205,12 +210,12 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         if (isCare) {
-            btnAttach = new Button(this);
-            btnAttach.setText("＋");
-            btnAttach.setTextSize(18f);
-            btnAttach.setAllCaps(false);
-            btnAttach.setTextColor(getColorCompat(R.color.brand));
+            btnAttach = new ImageButton(this);
+            btnAttach.setImageResource(R.drawable.ic_attach);
+            btnAttach.setColorFilter(getColorCompat(R.color.brand));
             btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
+            btnAttach.setScaleType(ImageView.ScaleType.CENTER);
+            btnAttach.setPadding(dp(10), dp(10), dp(10), dp(10));
             UiKit.pressScale(btnAttach);
             LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
             alp.rightMargin = dp(6);
@@ -244,6 +249,7 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         setContentView(root);
+        refreshModelChip();
     }
 
     // ==================== 历史恢复 ====================
@@ -262,7 +268,6 @@ public class ChatActivity extends Activity {
             }
             return;
         }
-        long lastTs = 0;
         for (ChatStore.StoredMsg m : msgs) {
             if ("user".equals(m.role)) {
                 appendUserBubble(m.content);
@@ -273,9 +278,7 @@ public class ChatActivity extends Activity {
             } else if (m.content != null && !m.content.isEmpty()) {
                 appendAiBubble(m.content);
             }
-            lastTs = Math.max(lastTs, m.timestamp);
         }
-        lastMemoryTs = Math.max(lastTs, System.currentTimeMillis() - 3600_000L);
     }
 
     // ==================== 发送与分发 ====================
@@ -316,42 +319,183 @@ public class ChatActivity extends Activity {
                 PetService svc = PetService.getInstance();
                 if (svc != null) svc.switchToModelByName(modelName);
             }
-            AICore ai = getAiCore();
-            if (ai == null) {
-                appendAiBubble("桌宠尚未启动，无法回复。请到「设置」Tab 启动桌宠。");
-                chatStore.addMessage(sessionKey, "assistant", "桌宠尚未启动，无法回复。请到「设置」Tab 启动桌宠。", null, null, System.currentTimeMillis());
-                scrollToBottom();
-                return;
-            }
             thinking = true;
             renderThinkingDot();
-            ai.onUserSays(text);
+            sendChatMessage(text);
         }
     }
 
-    /** 轮询 MemoryStore：把 AICore 新产出的 assistant 回复同步进本会话 */
-    private void pollMemoryIncrements() {
-        if (listContainer == null) return;
+    // ==================== 顶部快捷切换模型 ====================
+
+    private String modelScope() {
+        return isCare ? com.digitallife.util.ApiManager.SCOPE_CARE
+                : com.digitallife.util.ApiManager.SCOPE_CHAT;
+    }
+
+    private void refreshModelChip() {
+        if (btnModel == null) return;
+        com.digitallife.util.ApiManager am = new com.digitallife.util.ApiManager(this);
+        com.digitallife.util.ApiProfile cur = am.getCurrent(modelScope());
+        String label;
+        if (cur != null && cur.model != null && !cur.model.isEmpty()) {
+            label = cur.model;
+        } else if (cur != null && cur.name != null && !cur.name.isEmpty()) {
+            label = cur.name;
+        } else {
+            label = isCare ? "护理模型" : "选择模型";
+        }
+        btnModel.setText("模型 " + label + " ▾");
+    }
+
+    private void switchModel() {
+        com.digitallife.util.ApiManager am = new com.digitallife.util.ApiManager(this);
+        final String scope = modelScope();
+        final java.util.List<com.digitallife.util.ApiProfile> list = am.list(scope);
+        if (list.isEmpty()) {
+            Toast.makeText(this, "还没有配置模型，请到「设置 → 模型配置」添加", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String curId = am.getCurrentId(scope);
+        int curIdx = 0;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id.equals(curId)) { curIdx = i; break; }
+        }
+        final String[] names = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) {
+            com.digitallife.util.ApiProfile p = list.get(i);
+            names[i] = (p.name == null || p.name.isEmpty() ? "（未命名）" : p.name)
+                    + " · " + (p.model == null || p.model.isEmpty() ? "?" : p.model);
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(isCare ? "切换护理大脑模型" : "切换对话大脑模型")
+                .setSingleChoiceItems(names, curIdx, (d, w) -> {
+                    com.digitallife.util.ApiProfile sel = list.get(w);
+                    am.setCurrent(scope, sel.id);
+                    if (com.digitallife.util.ApiManager.SCOPE_CHAT.equals(scope)) {
+                        am.syncCurrentToSettings(scope, new com.digitallife.util.Settings(this));
+                    }
+                    d.dismiss();
+                    refreshModelChip();
+                    applyModelNow();
+                    Toast.makeText(this, "已切换到 " + sel.model, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ==================== 对话大脑独立对话（不依赖桌宠） ====================
+
+    private void ensureChatLlm() {
+        if (llm != null) return;
+        ApiManager am = new ApiManager(this);
+        ApiProfile p = am.getCurrent(ApiManager.SCOPE_CHAT);
+        if (p != null && p.baseUrl != null && !p.baseUrl.isEmpty()
+                && p.apiKey != null && !p.apiKey.isEmpty()) {
+            llm = new LLMClient(p.baseUrl, p.apiKey, p.model);
+        } else {
+            Settings s = new Settings(this);
+            llm = new LLMClient(s.getApiBase(), s.getApiKey(), s.getModel());
+        }
+    }
+
+    private void sendChatMessage(String text) {
+        ensureChatLlm();
+        if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
+            hideThinkingDot();
+            thinking = false;
+            String msg = "还没有可用的模型配置，请到「设置 → 模型配置」添加对话大脑模型。";
+            appendAiBubble(msg);
+            chatStore.addMessage(sessionKey, "assistant", msg, null, null, System.currentTimeMillis());
+            scrollToBottom();
+            return;
+        }
+        List<LLMClient.ChatMessage> msgs = new ArrayList<>();
+        List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 40);
+        for (ChatStore.StoredMsg m : hist) {
+            if (m.content == null || m.content.isEmpty()) continue;
+            msgs.add(new LLMClient.ChatMessage("user".equals(m.role) ? "user" : "assistant", m.content));
+        }
+        msgs.add(new LLMClient.ChatMessage("user", text));
+
+        JSONObject extra = new JSONObject();
         try {
-            List<MemoryStore.Message> fresh = memory.getMessagesSince(lastMemoryTs);
-            boolean added = false;
-            for (MemoryStore.Message m : fresh) {
-                if (!"assistant".equals(m.role)) continue;
-                if (m.content == null || m.content.isEmpty()) continue;
-                // 跳过自动化记录（情绪/行为描述）类短消息
-                if (m.content.length() < 8 && !m.content.contains("（")) continue;
-                chatStore.addMessage(sessionKey, "assistant", m.content, null, null, System.currentTimeMillis());
-                hideThinkingDot();
-                appendAiBubble(m.content);
-                added = true;
-                thinking = false;
-            }
-            if (added) scrollToBottom();
-            for (MemoryStore.Message m : fresh) {
-                if (m.timestamp > lastMemoryTs) lastMemoryTs = m.timestamp;
-            }
+            extra.put("system", chatSystemPrompt());
         } catch (Exception ignored) {
         }
+
+        llm.chatStream(msgs, extra, new LLMClient.StreamListener() {
+            @Override
+            public void onDelta(String t) {
+                runOnUiThread(() -> {
+                    if (curAssistantBubble == null) {
+                        hideThinkingDot();
+                        curAssistantText = "";
+                        curAssistantBubble = newTextViewBubble();
+                        listContainer.addView(curAssistantBubble);
+                    }
+                    curAssistantText += t;
+                    curAssistantBubble.setText(curAssistantText);
+                    scrollToBottom();
+                });
+            }
+
+            @Override
+            public void onToolCall(String name, JSONObject args, String toolCallId) {
+            }
+
+            @Override
+            public void onDone(String fullText) {
+                runOnUiThread(() -> {
+                    if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
+                        chatStore.addMessage(sessionKey, "assistant", curAssistantText,
+                                null, null, System.currentTimeMillis());
+                        curAssistantBubble = null;
+                        curAssistantText = "";
+                    } else if (fullText != null && !fullText.isEmpty()) {
+                        chatStore.addMessage(sessionKey, "assistant", fullText,
+                                null, null, System.currentTimeMillis());
+                        hideThinkingDot();
+                        appendAiBubble(fullText);
+                    }
+                    hideThinkingDot();
+                    thinking = false;
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                runOnUiThread(() -> {
+                    hideThinkingDot();
+                    appendAiBubble("出错了：" + error);
+                    thinking = false;
+                });
+            }
+        });
+    }
+
+    private String chatSystemPrompt() {
+        Settings s = new Settings(this);
+        String persona = ChatStore.TYPE_MODEL.equals(type) && modelName != null
+                ? modelName : s.getPetName();
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是「").append(persona).append("」，一个住在用户手机里的 AI 二次元少女，是用户亲密的朋友。\n");
+        sb.append("你活泼可爱，有一点小傲娇，关心用户但绝不啰嗦。\n");
+        sb.append("说话简短自然，一般不超过 80 字，用口语化的二次元语气，亲近但不腻。\n");
+        sb.append("当前时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+                .format(new Date())).append("\n");
+        sb.append("直接以纯文本回复，不要输出 JSON 或任何标记。");
+        return sb.toString();
+    }
+
+    /** 切换模型后立即让本会话使用新配置 */
+    private void applyModelNow() {
+        if (isCare) {
+            if (careAI == null) careAI = CareAI.getInstance(this);
+            careAI.reconfigure();
+            return;
+        }
+        llm = null;
+        ensureChatLlm();
     }
 
     // ==================== 护理大脑（care）流式 ====================
@@ -560,16 +704,21 @@ public class ChatActivity extends Activity {
     private void appendToolBubble(String toolName, String argsText) {
         hideThinkingDot();
         final TextView b = new TextView(this);
-        b.setTextSize(12f);
+        b.setTextSize(13f);
         b.setTextColor(getColorCompat(R.color.text_primary));
         b.setLineSpacing(2f, 1f);
         b.setPadding(dp(12), dp(8), dp(12), dp(8));
         b.setElevation(dp(1));
         b.setBackgroundResource(R.drawable.bg_tool);
         String pretty = prettyJson(argsText);
-        b.setText("🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
-                + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty)
-                + "\n\n⏳ 状态：执行中…");
+        String head = "🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
+                + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty);
+        String statusLine = "\n\n状态：执行中…";
+        SpannableString ss = new SpannableString(head + statusLine);
+        ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.brand)),
+                head.length() + "\n\n状态：".length(), ss.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        b.setText(ss);
         b.setTag(Boolean.TRUE);
         b.setOnClickListener(v -> toggleToolCard(b));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -711,11 +860,6 @@ public class ChatActivity extends Activity {
                 .show();
     }
 
-    private AICore getAiCore() {
-        PetService svc = PetService.getInstance();
-        return svc != null ? svc.getAiCore() : null;
-    }
-
     private void hideKeyboard() {
         InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (imm != null) imm.hideSoftInputFromWindow(etInput.getWindowToken(), 0);
@@ -748,15 +892,25 @@ public class ChatActivity extends Activity {
         return Math.round(getResources().getDisplayMetrics().density * v);
     }
 
+    private int statusBarHeight() {
+        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        if (isCare) setupCareListener();
+        if (isCare) {
+            careAI = CareAI.getInstance(this);
+            careAI.setSession(sessionKey);
+            setupCareListener();
+        } else {
+            ensureChatLlm();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        handler.removeCallbacks(poller);
     }
 }

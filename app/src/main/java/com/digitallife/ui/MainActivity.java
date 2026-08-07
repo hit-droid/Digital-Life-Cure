@@ -72,6 +72,9 @@ public class MainActivity extends Activity {
         }
         apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);
 
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().getDecorView().setSystemUiVisibility(0);
+
         buildUi();
     }
 
@@ -86,7 +89,7 @@ public class MainActivity extends Activity {
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackgroundResource(R.drawable.bg_top_bar);
         topBar.setElevation(dp(4));
-        topBar.setPadding(dp(20), dp(8), dp(20), dp(12));
+        topBar.setPadding(dp(20), statusBarHeight() + dp(8), dp(20), dp(12));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
@@ -299,5 +302,10 @@ public class MainActivity extends Activity {
 
     private int dp(float v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
+    }
+
+    private int statusBarHeight() {
+        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 }

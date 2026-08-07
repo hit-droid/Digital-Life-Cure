@@ -88,6 +88,8 @@ public class CareAI {
 
     /** 护理大脑对话历史持久化会话 key */
     private static final String SESSION_CARE = "care";
+    /** 当前护理会话 key（支持多护理会话，各自独立历史） */
+    private String sessionKey = SESSION_CARE;
 
     public CareAI(Context ctx) {
         this.ctx = ctx.getApplicationContext();
@@ -103,7 +105,7 @@ public class CareAI {
     /** 从本地存储恢复对话历史（豆包式：重启后保留之前的对话） */
     private void loadHistory() {
         try {
-            for (ChatStore.StoredMsg m : chatStore.getMessages(SESSION_CARE, 80)) {
+            for (ChatStore.StoredMsg m : chatStore.getMessages(sessionKey, 80)) {
                 if ("user".equals(m.role)) {
                     history.add(new LLMClient.ChatMessage("user", m.content));
                 } else if ("tool".equals(m.role)) {
@@ -129,14 +131,14 @@ public class CareAI {
     /** 把当前内存历史整体落盘（恢复/新增/清理后调用） */
     private void persistHistory() {
         try {
-            chatStore.clearSession(SESSION_CARE);
+            chatStore.clearSession(sessionKey);
             for (LLMClient.ChatMessage m : history) {
                 if ("user".equals(m.role) || "system".equals(m.role)) {
-                    chatStore.addMessage(SESSION_CARE, m.role, m.content, null, null, System.currentTimeMillis());
+                    chatStore.addMessage(sessionKey, m.role, m.content, null, null, System.currentTimeMillis());
                 } else if ("tool".equals(m.role)) {
-                    chatStore.addMessage(SESSION_CARE, m.role, m.content, null, m.toolCallId, System.currentTimeMillis());
+                    chatStore.addMessage(sessionKey, m.role, m.content, null, m.toolCallId, System.currentTimeMillis());
                 } else {
-                    chatStore.addMessage(SESSION_CARE, m.role, m.content, m.toolCalls, null, System.currentTimeMillis());
+                    chatStore.addMessage(sessionKey, m.role, m.content, m.toolCalls, null, System.currentTimeMillis());
                 }
             }
         } catch (Exception ignored) {
@@ -498,7 +500,23 @@ public class CareAI {
 
     public void clearHistory() {
         history.clear();
-        chatStore.clearSession(SESSION_CARE);
+        chatStore.clearSession(sessionKey);
+    }
+
+    /** 切换到指定护理会话（每个会话独立历史）。打开护理会话时调用。 */
+    public void setSession(String key) {
+        if (key == null || key.isEmpty()) key = SESSION_CARE;
+        if (sessionKey.equals(key)) return;
+        cancel();
+        persistHistory();
+        sessionKey = key;
+        history.clear();
+        loadHistory();
+    }
+
+    /** 按当前配置重建 LLM 客户端（改配置后立即生效）。 */
+    public void reconfigure() {
+        initLLM();
     }
 
     /**

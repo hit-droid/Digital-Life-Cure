@@ -59,21 +59,23 @@ public class ConversationTabView extends LinearLayout {
                 UiKit.dp(activity, 12), UiKit.dp(activity, 4));
 
         TextView tip = new TextView(activity);
-        tip.setText("对话列表");
+        tip.setText("会话列表");
         tip.setTextSize(13f);
         tip.setTextColor(UiKit.color(activity, R.color.text_secondary));
         bar.addView(tip, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         Button btnNew = new Button(activity);
-        btnNew.setText("＋ 新建对话");
+        btnNew.setText("＋ 新建会话");
         btnNew.setTextSize(13f);
         btnNew.setTextColor(Color.WHITE);
         btnNew.setAllCaps(false);
         btnNew.setBackgroundResource(R.drawable.bg_btn_primary);
-        btnNew.setPadding(UiKit.dp(activity, 14), UiKit.dp(activity, 4),
-                UiKit.dp(activity, 14), UiKit.dp(activity, 4));
+        btnNew.setPadding(UiKit.dp(activity, 14), 0,
+                UiKit.dp(activity, 14), 0);
+        UiKit.pressScale(btnNew);
         btnNew.setOnClickListener(v -> showNewSessionDialog());
-        bar.addView(btnNew);
+        bar.addView(btnNew, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 34)));
         addView(bar, UiKit.lp(activity, 0));
 
         ScrollView scroll = new ScrollView(activity);
@@ -131,10 +133,10 @@ public class ConversationTabView extends LinearLayout {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card);
         card.setElevation(UiKit.dp(activity, 2));
         card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 8), UiKit.dp(activity, 10));
+        UiKit.ripple(activity, card, activity.getDrawable(R.drawable.bg_card), 20);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         clp.bottomMargin = UiKit.dp(activity, 8);
@@ -225,16 +227,30 @@ public class ConversationTabView extends LinearLayout {
 
     private void showNewSessionDialog() {
         final EditText et = new EditText(activity);
-        et.setHint("给对话起个名字（如：关于今天的心情）");
+        et.setHint("给会话起个名字（如：关于今天的心情）");
         et.setInputType(InputType.TYPE_CLASS_TEXT);
+        final android.widget.RadioButton rbChat = new android.widget.RadioButton(activity);
+        rbChat.setText("对话大脑（日常聊天）");
+        rbChat.setChecked(true);
+        final android.widget.RadioButton rbCare = new android.widget.RadioButton(activity);
+        rbCare.setText("护理大脑（模型体检 / 动作创作）");
+        LinearLayout body = new LinearLayout(activity);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(UiKit.dp(activity, 20), UiKit.dp(activity, 4),
+                UiKit.dp(activity, 20), 0);
+        body.addView(et);
+        body.addView(rbChat, UiKit.lp(activity, 0));
+        body.addView(rbCare, UiKit.lp(activity, 0));
         new android.app.AlertDialog.Builder(activity)
-                .setTitle("新建对话")
-                .setView(et)
+                .setTitle("新建会话")
+                .setView(body)
                 .setPositiveButton("创建", (d, w) -> {
                     String title = et.getText().toString().trim();
-                    if (title.isEmpty()) title = "新对话";
-                    String id = chatStore.createSession(title, ChatStore.TYPE_CHAT, "chat", null);
-                    if (listener != null) listener.onOpenSession(id, title, ChatStore.TYPE_CHAT, null);
+                    if (title.isEmpty()) title = rbCare.isChecked() ? "护理会话" : "新对话";
+                    String type = rbCare.isChecked() ? ChatStore.TYPE_CARE : ChatStore.TYPE_CHAT;
+                    String id = chatStore.createSession(title, type,
+                            rbCare.isChecked() ? "care" : "chat", null);
+                    if (listener != null) listener.onOpenSession(id, title, type, null);
                 })
                 .setNegativeButton("取消", null)
                 .show();
@@ -285,7 +301,7 @@ public class ConversationTabView extends LinearLayout {
         }
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        g.setCornerRadius(UiKit.dp(activity, 10));
+        g.setCornerRadius(UiKit.dp(activity, 12));
         g.setColor(color);
         return g;
     }

@@ -1,7 +1,10 @@
 package com.digitallife.ui;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -41,7 +44,7 @@ public final class UiKit {
     public static LinearLayout card(Context c, LinearLayout root, String title) {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 14));
+        box.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 16));
         box.setElevation(dp(c, 2));
         box.setBackgroundResource(R.drawable.bg_card);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
@@ -51,10 +54,11 @@ public final class UiKit {
 
         TextView t = new TextView(c);
         t.setText(title);
-        t.setTextSize(14f);
+        t.setTextSize(15f);
         t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setLetterSpacing(0.03f);
         t.setTextColor(color(c, R.color.brand));
-        t.setPadding(0, 0, 0, dp(c, 8));
+        t.setPadding(0, 0, 0, dp(c, 10));
         box.addView(t, lp(c, 0));
         return box;
     }
@@ -67,8 +71,10 @@ public final class UiKit {
         et.setTextSize(14f);
         et.setTextColor(color(c, R.color.text_primary));
         et.setBackgroundResource(R.drawable.bg_input);
-        et.setPadding(dp(c, 12), dp(c, 9), dp(c, 12), dp(c, 9));
+        et.setPadding(dp(c, 12), 0, dp(c, 12), 0);
         root.addView(et, lp(c, 8));
+        LinearLayout.LayoutParams elp = (LinearLayout.LayoutParams) et.getLayoutParams();
+        elp.height = dp(c, 44);
         return et;
     }
 
@@ -79,9 +85,11 @@ public final class UiKit {
         b.setTextColor(Color.WHITE);
         b.setBackgroundResource(R.drawable.bg_btn_primary);
         b.setAllCaps(false);
-        b.setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
+        b.setPadding(dp(c, 14), 0, dp(c, 14), 0);
         pressScale(b);
         root.addView(b, lp(c, 8));
+        LinearLayout.LayoutParams blp = (LinearLayout.LayoutParams) b.getLayoutParams();
+        blp.height = dp(c, 44);
         return b;
     }
 
@@ -93,9 +101,11 @@ public final class UiKit {
         b.setTextColor(color(c, R.color.brand));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setAllCaps(false);
-        b.setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
+        b.setPadding(dp(c, 14), 0, dp(c, 14), 0);
         pressScale(b);
         root.addView(b, lp(c, 8));
+        LinearLayout.LayoutParams slp = (LinearLayout.LayoutParams) b.getLayoutParams();
+        slp.height = dp(c, 42);
         return b;
     }
 
@@ -113,6 +123,17 @@ public final class UiKit {
             }
             return false;
         });
+    }
+
+    /** 给可点击容器套品牌色涟漪反馈（content 背景 + 圆角 mask） */
+    public static void ripple(Context c, View v, Drawable content, float radiusDp) {
+        GradientDrawable mask = new GradientDrawable();
+        mask.setCornerRadius(dp(c, radiusDp));
+        mask.setColor(0xFF000000);
+        android.graphics.drawable.RippleDrawable rd = new android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(color(c, R.color.ripple)), content, mask);
+        v.setBackground(rd);
+        v.setClickable(true);
     }
 
     public static Switch switchRow(Context c, LinearLayout root, String label, boolean checked) {

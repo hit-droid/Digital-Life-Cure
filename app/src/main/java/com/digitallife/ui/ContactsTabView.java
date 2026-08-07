@@ -101,10 +101,10 @@ public class ContactsTabView extends LinearLayout {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card);
         card.setElevation(UiKit.dp(activity, 2));
         card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 8), UiKit.dp(activity, 10));
+        UiKit.ripple(activity, card, activity.getDrawable(R.drawable.bg_card), 20);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         clp.bottomMargin = UiKit.dp(activity, 8);
@@ -118,7 +118,7 @@ public class ContactsTabView extends LinearLayout {
         avatar.setText(name.length() > 0 ? name.substring(0, 1).toUpperCase() : "?");
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        g.setCornerRadius(UiKit.dp(activity, 10));
+        g.setCornerRadius(UiKit.dp(activity, 12));
         g.setColor(isImported ? Color.rgb(80, 150, 220) : Color.rgb(140, 120, 190));
         avatar.setBackground(g);
         LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
@@ -150,7 +150,7 @@ public class ContactsTabView extends LinearLayout {
 
         TextView status = new TextView(activity);
         status.setText(hasMotions ? "动作齐全，可以自由活动" : "暂无动作文件（可通过护理大脑补全）");
-        status.setTextSize(12f);
+        status.setTextSize(13f);
         status.setTextColor(UiKit.color(activity, R.color.text_secondary));
         info.addView(status, UiKit.lp(activity, 2));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));

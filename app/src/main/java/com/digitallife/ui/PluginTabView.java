@@ -72,7 +72,7 @@ public class PluginTabView extends LinearLayout {
         LinearLayout card = UiKit.card(activity, container, "插件（外部工具包）");
         TextView hint = new TextView(activity);
         hint.setText("安装声明式插件 zip 包，自动注册工具到 AI 可用工具列表。插件包内需包含 plugin.json 描述工具集。");
-        hint.setTextSize(12f);
+        hint.setTextSize(13f);
         hint.setTextColor(UiKit.color(activity, R.color.text_secondary));
         hint.setLineSpacing(3f, 1f);
         card.addView(hint, UiKit.lp(activity, 0));
@@ -84,7 +84,7 @@ public class PluginTabView extends LinearLayout {
         if (list.isEmpty()) {
             TextView empty = new TextView(activity);
             empty.setText("尚未安装插件。");
-            empty.setTextSize(12f);
+            empty.setTextSize(13f);
             empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
             card.addView(empty, UiKit.lp(activity, 6));
         } else {
@@ -93,7 +93,7 @@ public class PluginTabView extends LinearLayout {
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 TextView name = new TextView(activity);
-                name.setText("✦ " + p.name + " v" + p.version + "（" + p.toolCount + " 工具）");
+                name.setText(p.name + " v" + p.version + "（" + p.toolCount + " 工具）");
                 name.setTextSize(13f);
                 name.setTextColor(UiKit.color(activity, R.color.text_primary));
                 row.addView(name, new LinearLayout.LayoutParams(0,
@@ -158,7 +158,7 @@ public class PluginTabView extends LinearLayout {
         hint.setText("连接外部 MCP 工具服务器（如你在 Smithery 注册的工具）。"
                 + "连接后其工具自动加入 AI 可用工具列表。\n"
                 + "Smithery 端点格式：https://server.smithery.ai/<namespace>/mcp");
-        hint.setTextSize(12f);
+        hint.setTextSize(13f);
         hint.setTextColor(UiKit.color(activity, R.color.text_secondary));
         hint.setLineSpacing(3f, 1f);
         card.addView(hint, UiKit.lp(activity, 0));
@@ -197,7 +197,7 @@ public class PluginTabView extends LinearLayout {
         if (servers.isEmpty()) {
             TextView empty = new TextView(activity);
             empty.setText("尚未添加 MCP 服务器。");
-            empty.setTextSize(12f);
+            empty.setTextSize(13f);
             empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
             card.addView(empty, UiKit.lp(activity, 6));
         } else {
@@ -206,7 +206,7 @@ public class PluginTabView extends LinearLayout {
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 TextView name = new TextView(activity);
-                name.setText("◉ " + c.name + "\n   " + c.endpoint);
+                name.setText(c.name + "\n   " + c.endpoint);
                 name.setTextSize(13f);
                 name.setTextColor(UiKit.color(activity, R.color.text_primary));
                 name.setLineSpacing(2f, 1f);
