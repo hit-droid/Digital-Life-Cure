@@ -3,6 +3,8 @@ package com.digitallife.ui;
 import android.content.Context;
 import android.graphics.Color;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
@@ -40,6 +42,7 @@ public final class UiKit {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 14));
+        box.setElevation(dp(c, 2));
         box.setBackgroundResource(R.drawable.bg_card);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -77,6 +80,7 @@ public final class UiKit {
         b.setBackgroundResource(R.drawable.bg_btn_primary);
         b.setAllCaps(false);
         b.setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
+        pressScale(b);
         root.addView(b, lp(c, 8));
         return b;
     }
@@ -90,8 +94,25 @@ public final class UiKit {
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setAllCaps(false);
         b.setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
+        pressScale(b);
         root.addView(b, lp(c, 8));
         return b;
+    }
+
+    /** 按下缩放反馈（不消费点击事件） */
+    public static void pressScale(View v) {
+        v.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90).start();
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
+                    break;
+            }
+            return false;
+        });
     }
 
     public static Switch switchRow(Context c, LinearLayout root, String label, boolean checked) {

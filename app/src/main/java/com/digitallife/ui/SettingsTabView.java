@@ -76,13 +76,13 @@ public class SettingsTabView extends LinearLayout {
         // ---------- 状态 ----------
         tvStatus = new TextView(activity);
         tvStatus.setTextSize(12f);
-        tvStatus.setTextColor(Color.rgb(90, 150, 100));
+        tvStatus.setTextColor(UiKit.color(activity, R.color.success));
         tvStatus.setPadding(0, UiKit.dp(activity, 4), 0, 0);
         root.addView(tvStatus, UiKit.lp(activity, 0));
 
         tvCrashPath = new TextView(activity);
         tvCrashPath.setTextSize(10f);
-        tvCrashPath.setTextColor(Color.rgb(150, 140, 160));
+        tvCrashPath.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvCrashPath.setPadding(0, UiKit.dp(activity, 4), 0, 0);
         tvCrashPath.setText("崩溃日志：" + CrashHandler.getCrashPath());
         root.addView(tvCrashPath, UiKit.lp(activity, 0));
@@ -94,13 +94,19 @@ public class SettingsTabView extends LinearLayout {
         Button btnStart = new Button(activity);
         btnStart.setText("启动桌宠");
         btnStart.setTextSize(14f);
+        btnStart.setAllCaps(false);
+        btnStart.setTextColor(Color.WHITE);
+        btnStart.setBackgroundResource(R.drawable.bg_btn_primary);
         btnStart.setOnClickListener(v -> startPet());
-        rowBtn.addView(btnStart, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 52), 1));
+        rowBtn.addView(btnStart, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         Button btnStop = new Button(activity);
         btnStop.setText("停止桌宠");
         btnStop.setTextSize(14f);
+        btnStop.setAllCaps(false);
+        btnStop.setTextColor(UiKit.color(activity, R.color.brand));
+        btnStop.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnStop.setOnClickListener(v -> stopPet());
-        rowBtn.addView(btnStop, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 52), 1));
+        rowBtn.addView(btnStop, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         cCtrl.addView(rowBtn, UiKit.lp(activity, 0));
 
         // ---------- 悬浮窗权限 ----------
@@ -127,7 +133,7 @@ public class SettingsTabView extends LinearLayout {
         tvModelListTmp.setTextSize(11f);
         tvModelListTmp.setLineSpacing(2f, 1f);
         tvModelListTmp.setPadding(0, UiKit.dp(activity, 2), 0, 0);
-        tvModelListTmp.setTextColor(Color.rgb(150, 140, 160));
+        tvModelListTmp.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvModelList = tvModelListTmp;
         cSwitch.addView(tvModelListTmp, UiKit.lp(activity, 0));
 
@@ -145,7 +151,7 @@ public class SettingsTabView extends LinearLayout {
         tvVoiceDiag.setTextSize(12f);
         tvVoiceDiag.setLineSpacing(2f, 1f);
         tvVoiceDiag.setPadding(0, UiKit.dp(activity, 6), 0, 0);
-        tvVoiceDiag.setTextColor(Color.rgb(130, 125, 150));
+        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvVoiceDiag.setText("桌宠运行中才能检测。如提示 TTS 失败，可点下方按钮到系统设置安装/启用语音合成数据。");
         cSwitch.addView(tvVoiceDiag, UiKit.lp(activity, 0));
         Button btnVoiceDiag = UiKit.button(activity, cSwitch, "检查语音引擎");
@@ -157,7 +163,7 @@ public class SettingsTabView extends LinearLayout {
         btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
         TextView tvAccessibility = new TextView(activity);
         tvAccessibility.setTextSize(12f);
-        tvAccessibility.setTextColor(Color.rgb(130, 125, 150));
+        tvAccessibility.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
         cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
 
@@ -184,11 +190,22 @@ public class SettingsTabView extends LinearLayout {
         etChat = new EditText(activity);
         etChat.setHint("输入一句话和她聊天…");
         etChat.setSingleLine(true);
+        etChat.setHintTextColor(UiKit.color(activity, R.color.text_hint));
+        etChat.setTextSize(14f);
+        etChat.setTextColor(UiKit.color(activity, R.color.text_primary));
+        etChat.setBackgroundResource(R.drawable.bg_input);
+        etChat.setPadding(UiKit.dp(activity, 12), 0, UiKit.dp(activity, 12), 0);
         chatRow.addView(etChat, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         Button btnChat = new Button(activity);
         btnChat.setText("发送");
+        btnChat.setAllCaps(false);
+        btnChat.setTextColor(Color.WHITE);
+        btnChat.setTextSize(14f);
+        btnChat.setBackgroundResource(R.drawable.bg_btn_primary);
         btnChat.setOnClickListener(v -> sendChat());
-        chatRow.addView(btnChat, new LinearLayout.LayoutParams(UiKit.dp(activity, 80), UiKit.dp(activity, 48)));
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(UiKit.dp(activity, 80), UiKit.dp(activity, 48));
+        blp.leftMargin = UiKit.dp(activity, 8);
+        chatRow.addView(btnChat, blp);
         cChat.addView(chatRow, UiKit.lp(activity, 0));
 
         Button btnClear = UiKit.button(activity, cChat, "清空对话记忆");
@@ -204,7 +221,7 @@ public class SettingsTabView extends LinearLayout {
         tvMemoryDebug.setTextSize(12f);
         tvMemoryDebug.setLineSpacing(2f, 1f);
         tvMemoryDebug.setPadding(0, UiKit.dp(activity, 6), 0, 0);
-        tvMemoryDebug.setTextColor(Color.rgb(130, 125, 150));
+        tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.text_secondary));
         tvMemoryDebug.setText("点击上方按钮查看当前记忆快照或执行本地自检。\n自检会写入一条测试 fact 和一条测试 summary。\n");
         cMemory.addView(tvMemoryDebug, UiKit.lp(activity, 0));
         Button btnMemoryDebug = UiKit.button(activity, cMemory, "查看记忆快照");
@@ -361,11 +378,11 @@ public class SettingsTabView extends LinearLayout {
     private void checkVoiceDiag() {
         PetService svc = PetService.getInstance();
         if (svc == null) {
-            tvVoiceDiag.setTextColor(Color.rgb(200, 160, 40));
+            tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.warning));
             tvVoiceDiag.setText("桌宠未启动，启动后才能检测语音引擎。");
             return;
         }
-        tvVoiceDiag.setTextColor(Color.rgb(90, 150, 100));
+        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.success));
         tvVoiceDiag.setText(svc.getVoiceDiag());
     }
 
@@ -381,23 +398,23 @@ public class SettingsTabView extends LinearLayout {
     private void showMemoryDebug() {
         AICore ai = getAiCore();
         if (ai == null) {
-            tvMemoryDebug.setTextColor(Color.rgb(200, 160, 40));
+            tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.warning));
             tvMemoryDebug.setText("请先启动桌宠，再查看记忆快照。");
             return;
         }
-        tvMemoryDebug.setTextColor(Color.rgb(90, 150, 100));
+        tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.success));
         tvMemoryDebug.setText(ai.getMemory().buildDebugSnapshot());
     }
 
     private void runMemorySelfCheck() {
         AICore ai = getAiCore();
         if (ai == null) {
-            tvMemoryDebug.setTextColor(Color.rgb(200, 160, 40));
+            tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.warning));
             tvMemoryDebug.setText("请先启动桌宠，再运行记忆自检。");
             return;
         }
         String result = ai.getMemory().runLocalSelfCheck();
-        tvMemoryDebug.setTextColor(Color.rgb(90, 150, 100));
+        tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.success));
         tvMemoryDebug.setText("自检结果：" + result + "\n\n" + ai.getMemory().buildDebugSnapshot());
     }
 

@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -95,17 +96,34 @@ public class ConversationTabView extends LinearLayout {
         chatStore.ensureSession(ChatStore.SESSION_CARE, "护理大脑", ChatStore.TYPE_CARE, "care", null);
         List<ChatStore.SessionInfo> sessions = chatStore.getSessions();
         if (sessions.isEmpty()) {
+            LinearLayout emptyBox = new LinearLayout(activity);
+            emptyBox.setOrientation(LinearLayout.VERTICAL);
+            emptyBox.setGravity(Gravity.CENTER);
+            emptyBox.setPadding(0, UiKit.dp(activity, 56), 0, 0);
+
+            ImageView emptyIcon = new ImageView(activity);
+            emptyIcon.setImageResource(R.drawable.ic_empty);
+            emptyIcon.setAlpha(0.9f);
+            emptyBox.addView(emptyIcon);
+
             TextView empty = new TextView(activity);
-            empty.setText("还没有对话，点右上角「新建对话」开始。\n或打开通讯录，与某个模型单独聊聊。");
+            empty.setText("还没有对话\n点右上角「＋ 新建对话」开始\n或打开通讯录，与某个模型单独聊聊");
             empty.setTextSize(13f);
             empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
             empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, UiKit.dp(activity, 40), 0, 0);
-            listContainer.addView(empty);
+            empty.setLineSpacing(4f, 1f);
+            empty.setPadding(0, UiKit.dp(activity, 14), 0, 0);
+            emptyBox.addView(empty);
+            listContainer.addView(emptyBox);
             return;
         }
-        for (ChatStore.SessionInfo s : sessions) {
-            listContainer.addView(buildSessionCard(s));
+        for (int i = 0; i < sessions.size(); i++) {
+            View card = buildSessionCard(sessions.get(i));
+            card.setAlpha(0f);
+            card.setTranslationY(UiKit.dp(activity, 10));
+            card.animate().alpha(1f).translationY(0f)
+                    .setDuration(220).setStartDelay(i * 45L).start();
+            listContainer.addView(card);
         }
     }
 
@@ -114,6 +132,7 @@ public class ConversationTabView extends LinearLayout {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setBackgroundResource(R.drawable.bg_card);
+        card.setElevation(UiKit.dp(activity, 2));
         card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 8), UiKit.dp(activity, 10));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
@@ -186,7 +205,7 @@ public class ConversationTabView extends LinearLayout {
         btnDel.setText("删除");
         btnDel.setTextSize(11f);
         btnDel.setAllCaps(false);
-        btnDel.setTextColor(Color.rgb(200, 80, 80));
+        btnDel.setTextColor(UiKit.color(activity, R.color.danger));
         btnDel.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnDel.setPadding(UiKit.dp(activity, 10), 0, UiKit.dp(activity, 10), 0);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(

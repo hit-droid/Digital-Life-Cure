@@ -86,6 +86,7 @@ public class ChatActivity extends Activity {
     private String curToolName = "";       // 工具卡片名称
     private String curToolFull = "";       // 工具卡片完整结果（点击展开/收起）
     private long lastMemoryTs;
+    private long lastTsLabel = 0;
 
     private boolean thinking = false;
 
@@ -124,6 +125,7 @@ public class ChatActivity extends Activity {
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackgroundResource(R.drawable.bg_top_bar);
+        topBar.setElevation(dp(4));
         topBar.setPadding(dp(4), dp(12), dp(4), dp(12));
 
         ImageButton btnBack = iconButton(R.drawable.ic_back);
@@ -146,8 +148,9 @@ public class ChatActivity extends Activity {
         btnClear.setTextSize(13f);
         btnClear.setTextColor(Color.WHITE);
         btnClear.setAllCaps(false);
-        btnClear.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnClear.setBackgroundResource(R.drawable.bg_btn_glass);
         btnClear.setPadding(dp(12), dp(4), dp(12), dp(4));
+        UiKit.pressScale(btnClear);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
         clp.setMargins(dp(4), 0, dp(4), 0);
@@ -168,18 +171,19 @@ public class ChatActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        // ===== 底部输入栏 =====
+        // ===== 底部输入栏（玻璃感容器） =====
         LinearLayout inputBar = new LinearLayout(this);
         inputBar.setOrientation(LinearLayout.HORIZONTAL);
         inputBar.setGravity(Gravity.CENTER_VERTICAL);
-        inputBar.setBackgroundColor(Color.WHITE);
-        inputBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+        inputBar.setBackgroundColor(getColorCompat(R.color.surface_glass));
+        inputBar.setElevation(dp(10));
+        inputBar.setPadding(dp(8), dp(6), dp(8), dp(8));
 
         // 待发送附件条（选文件后先暂存，与文字一起发送）
         attachBar = new LinearLayout(this);
         attachBar.setOrientation(LinearLayout.HORIZONTAL);
         attachBar.setGravity(Gravity.CENTER_VERTICAL);
-        attachBar.setBackgroundColor(Color.WHITE);
+        attachBar.setBackgroundColor(getColorCompat(R.color.card_bg));
         attachBar.setPadding(dp(12), dp(2), dp(12), dp(2));
         attachBar.setVisibility(View.GONE);
         tvAttachName = new TextView(this);
@@ -192,7 +196,7 @@ public class ChatActivity extends Activity {
         TextView tvRemove = new TextView(this);
         tvRemove.setText("✕");
         tvRemove.setTextSize(15f);
-        tvRemove.setTextColor(Color.GRAY);
+        tvRemove.setTextColor(getColorCompat(R.color.text_hint));
         tvRemove.setPadding(dp(10), dp(2), dp(2), dp(2));
         tvRemove.setOnClickListener(v -> clearPendingFile());
         attachBar.addView(tvRemove, new LinearLayout.LayoutParams(
@@ -207,6 +211,7 @@ public class ChatActivity extends Activity {
             btnAttach.setAllCaps(false);
             btnAttach.setTextColor(getColorCompat(R.color.brand));
             btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
+            UiKit.pressScale(btnAttach);
             LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
             alp.rightMargin = dp(6);
             btnAttach.setOnClickListener(v -> pickAttach());
@@ -219,13 +224,17 @@ public class ChatActivity extends Activity {
         etInput.setInputType(InputType.TYPE_CLASS_TEXT);
         etInput.setBackgroundResource(R.drawable.bg_input);
         etInput.setPadding(dp(12), dp(6), dp(12), dp(6));
+        etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
+                has ? R.drawable.bg_input_focused : R.drawable.bg_input));
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
         ImageButton btnSend = new ImageButton(this);
         btnSend.setImageResource(R.drawable.ic_send);
-        btnSend.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnSend.setBackgroundResource(R.drawable.bg_send);
         btnSend.setScaleType(ImageView.ScaleType.CENTER);
         btnSend.setPadding(dp(10), dp(10), dp(10), dp(10));
+        btnSend.setElevation(dp(2));
+        UiKit.pressScale(btnSend);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(44), dp(44));
         slp.leftMargin = dp(8);
         btnSend.setOnClickListener(v -> send());
@@ -484,6 +493,21 @@ public class ChatActivity extends Activity {
 
     // ==================== 气泡渲染 ====================
 
+    /** 相邻消息间隔超过 5 分钟时插入居中的时间标签（iMessage 风格） */
+    private void appendTimeDividerIfNeeded() {
+        long now = System.currentTimeMillis();
+        if (lastTsLabel != 0 && now - lastTsLabel < 5 * 60 * 1000L) return;
+        lastTsLabel = now;
+        TextView t = new TextView(this);
+        t.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(now)));
+        t.setTextSize(10f);
+        t.setTextColor(getColorCompat(R.color.text_hint));
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, dp(8), 0, dp(6));
+        listContainer.addView(t, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
     private TextView newTextViewBubble() {
         TextView b = new TextView(this);
         b.setTextSize(15f);
@@ -491,6 +515,7 @@ public class ChatActivity extends Activity {
         b.setLineSpacing(3f, 1f);
         b.setPadding(dp(12), dp(8), dp(12), dp(8));
         b.setMaxWidth(dp(260));
+        b.setElevation(dp(2));
         b.setBackgroundResource(R.drawable.bg_bubble_ai);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -499,6 +524,7 @@ public class ChatActivity extends Activity {
     }
 
     private void appendUserBubble(String text) {
+        appendTimeDividerIfNeeded();
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.END);
@@ -509,6 +535,7 @@ public class ChatActivity extends Activity {
         bubble.setLineSpacing(3f, 1f);
         bubble.setPadding(dp(12), dp(8), dp(12), dp(8));
         bubble.setMaxWidth(dp(260));
+        bubble.setElevation(dp(2));
         bubble.setBackgroundResource(R.drawable.bg_bubble_user);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -521,6 +548,7 @@ public class ChatActivity extends Activity {
     }
 
     private void appendAiBubble(String text) {
+        appendTimeDividerIfNeeded();
         TextView b = newTextViewBubble();
         b.setText(text);
         b.setLayoutParams(new LinearLayout.LayoutParams(
@@ -533,8 +561,10 @@ public class ChatActivity extends Activity {
         hideThinkingDot();
         final TextView b = new TextView(this);
         b.setTextSize(12f);
-        b.setTextColor(getColorCompat(R.color.text_secondary));
-        b.setPadding(dp(12), dp(6), dp(12), dp(6));
+        b.setTextColor(getColorCompat(R.color.text_primary));
+        b.setLineSpacing(2f, 1f);
+        b.setPadding(dp(12), dp(8), dp(12), dp(8));
+        b.setElevation(dp(1));
         b.setBackgroundResource(R.drawable.bg_tool);
         String pretty = prettyJson(argsText);
         b.setText("🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
