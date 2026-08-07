@@ -102,6 +102,7 @@ public class ContactsTabView extends LinearLayout {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setBackgroundResource(R.drawable.bg_card);
+        card.setElevation(UiKit.dp(activity, 2));
         card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 8), UiKit.dp(activity, 10));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
@@ -154,11 +155,12 @@ public class ContactsTabView extends LinearLayout {
         info.addView(status, UiKit.lp(activity, 2));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        TextView arrow = new TextView(activity);
-        arrow.setText("›");
-        arrow.setTextSize(20f);
-        arrow.setTextColor(UiKit.color(activity, R.color.text_secondary));
-        card.addView(arrow);
+        android.widget.ImageView arrow = new android.widget.ImageView(activity);
+        arrow.setImageResource(R.drawable.ic_chevron_right);
+        arrow.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        LinearLayout.LayoutParams arp = new LinearLayout.LayoutParams(
+                UiKit.dp(activity, 24), UiKit.dp(activity, 24));
+        card.addView(arrow, arp);
 
         card.setOnClickListener(v -> {
             if (listener != null) {

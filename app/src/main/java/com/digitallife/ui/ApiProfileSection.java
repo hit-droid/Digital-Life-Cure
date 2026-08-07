@@ -16,6 +16,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.digitallife.brain.LLMClient;
+import com.digitallife.R;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.Settings;
@@ -57,11 +58,19 @@ public class ApiProfileSection {
         Button btnNew = new Button(ctx);
         btnNew.setText("新建");
         btnNew.setTextSize(13f);
+        btnNew.setTextColor(UiKit.color(ctx, R.color.brand));
+        btnNew.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnNew.setAllCaps(false);
+        UiKit.pressScale(btnNew);
         btnNew.setOnClickListener(v -> newProfile());
         row.addView(btnNew, UiKit.lp(ctx, 4));
         Button btnDel = new Button(ctx);
         btnDel.setText("删除");
         btnDel.setTextSize(13f);
+        btnDel.setTextColor(UiKit.color(ctx, R.color.danger));
+        btnDel.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnDel.setAllCaps(false);
+        UiKit.pressScale(btnDel);
         btnDel.setOnClickListener(v -> deleteProfile());
         row.addView(btnDel, UiKit.lp(ctx, 4));
         card.addView(row, UiKit.lp(ctx, 0));
@@ -89,7 +98,7 @@ public class ApiProfileSection {
         tvResult.setTextSize(12f);
         tvResult.setLineSpacing(2f, 1f);
         tvResult.setPadding(0, UiKit.dp(ctx, 6), 0, 0);
-        tvResult.setTextColor(Color.rgb(130, 125, 150));
+        tvResult.setTextColor(UiKit.color(ctx, R.color.text_secondary));
         card.addView(tvResult, UiKit.lp(ctx, 0));
         refreshSpinner();
     }
@@ -131,7 +140,7 @@ public class ApiProfileSection {
     void deleteProfile() {
         String curId = apiManager.getCurrentId(scope);
         if (curId.isEmpty() || findProfile(curId) == null) {
-            tvResult.setTextColor(Color.rgb(200, 70, 70));
+            tvResult.setTextColor(UiKit.color(ctx, R.color.danger));
             tvResult.setText("没有可删除的配置");
             return;
         }
@@ -140,7 +149,7 @@ public class ApiProfileSection {
             apiManager.syncCurrentToSettings(scope, settings);
         }
         refreshSpinner();
-        tvResult.setTextColor(Color.rgb(90, 150, 100));
+        tvResult.setTextColor(UiKit.color(ctx, R.color.success));
         tvResult.setText("已删除配置");
     }
 
@@ -150,7 +159,7 @@ public class ApiProfileSection {
         String key = etKey.getText().toString().trim();
         String model = etModel.getText().toString().trim();
         if (name.isEmpty()) {
-            tvResult.setTextColor(Color.rgb(200, 70, 70));
+            tvResult.setTextColor(UiKit.color(ctx, R.color.danger));
             tvResult.setText("请先填写配置名称");
             return;
         }
@@ -169,7 +178,7 @@ public class ApiProfileSection {
             apiManager.syncCurrentToSettings(scope, settings);
         }
         refreshSpinner();
-        tvResult.setTextColor(Color.rgb(60, 160, 80));
+        tvResult.setTextColor(UiKit.color(ctx, R.color.success));
         tvResult.setText("已保存：" + name);
     }
 
@@ -178,18 +187,18 @@ public class ApiProfileSection {
         String key = etKey.getText().toString().trim();
         String model = etModel.getText().toString().trim();
         if (base.isEmpty() || key.isEmpty() || model.isEmpty()) {
-            tvResult.setTextColor(Color.rgb(200, 70, 70));
+            tvResult.setTextColor(UiKit.color(ctx, R.color.danger));
             tvResult.setText("请先填写 Base URL / API Key / 模型名");
             return;
         }
-        tvResult.setTextColor(Color.rgb(130, 125, 150));
+        tvResult.setTextColor(UiKit.color(ctx, R.color.text_secondary));
         tvResult.setText("正在测试，请稍候…");
         LLMClient.testConnection(base, key, model, (text, err) -> handler.post(() -> {
             if (err == null) {
-                tvResult.setTextColor(Color.rgb(60, 160, 80));
+                tvResult.setTextColor(UiKit.color(ctx, R.color.success));
                 tvResult.setText("✓ " + text);
             } else {
-                tvResult.setTextColor(Color.rgb(200, 70, 70));
+                tvResult.setTextColor(UiKit.color(ctx, R.color.danger));
                 tvResult.setText("✗ " + err + "\n" + UiKit.friendlyApiError(err, base, model));
             }
         }));

@@ -343,8 +343,31 @@ public class LLMClient {
             String resp = readStream(conn.getInputStream());
             JSONObject o = new JSONObject(resp);
             JSONArray choices = o.optJSONArray("choices");
-            String content = (choices == null || choices.length() == 0) ? ""
-                    : choices.getJSONObject(0).optJSONObject("message").optString("content");
+            JSONObject message = (choices == null || choices.length() == 0) ? null
+                    : choices.getJSONObject(0).optJSONObject("message");
+            if (message == null) {
+                listener.onDone("");
+                return;
+            }
+            // 中转站不支持流式时，工具调用走非流式返回：解析 message.tool_calls
+            JSONArray toolCalls = message.optJSONArray("tool_calls");
+            if (toolCalls != null && toolCalls.length() > 0) {
+                JSONObject tc = toolCalls.getJSONObject(0);
+                String callId = tc.optString("id", "");
+                JSONObject fn = tc.optJSONObject("function");
+                String name = fn != null ? fn.optString("name", "") : "";
+                String argsRaw = fn != null ? fn.optString("arguments", "{}") : "{}";
+                JSONObject argsObj;
+                try {
+                    argsObj = new JSONObject(argsRaw.isEmpty() ? "{}" : argsRaw);
+                } catch (Exception ignored) {
+                    argsObj = new JSONObject();
+                }
+                listener.onToolCall(name, argsObj, callId);
+                listener.onDone("");
+                return;
+            }
+            String content = message.optString("content");
             if (!content.isEmpty()) {
                 listener.onDelta(content);
             }
