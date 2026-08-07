@@ -24,8 +24,13 @@ public class ChatStore {
     public static final String SESSION_CARE = "care";
 
     private static final String DB_NAME = "pet_chat.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
     private static final int MAX_MSG_PER_SESSION = 120;
+
+    /** 会话类型 */
+    public static final String TYPE_CARE = "care";     // 护理大脑（工具型）
+    public static final String TYPE_CHAT = "chat";     // 对话大脑
+    public static final String TYPE_MODEL = "model";   // 绑定指定模型
 
     public static class StoredMsg {
         public final String role;
@@ -40,6 +45,28 @@ public class ChatStore {
             this.toolCalls = toolCalls;
             this.toolCallId = toolCallId;
             this.timestamp = timestamp;
+        }
+    }
+
+    /** 会话元信息（对话列表展示用） */
+    public static class SessionInfo {
+        public final String id;
+        public final String title;
+        public final String type;        // TYPE_CARE / TYPE_CHAT / TYPE_MODEL
+        public final String brainType;   // chat / care / model
+        public final String modelName;   // 绑定模型名（type=model 时）
+        public final long createdAt;
+        public final long updatedAt;
+
+        public SessionInfo(String id, String title, String type, String brainType,
+                           String modelName, long createdAt, long updatedAt) {
+            this.id = id;
+            this.title = title;
+            this.type = type;
+            this.brainType = brainType;
+            this.modelName = modelName;
+            this.createdAt = createdAt;
+            this.updatedAt = updatedAt;
         }
     }
 
@@ -61,7 +88,99 @@ public class ChatStore {
         v.put("tool_call_id", toolCallId);
         v.put("timestamp", timestamp);
         db.insert("chat_messages", null, v);
+        touchSession(db, sessionKey, timestamp);
         trimSession(db, sessionKey);
+    }
+
+    // ==================== 会话元数据 ====================
+
+    /** 确保会话存在（不存在则创建），用于内置会话注册 */
+    public synchronized void ensureSession(String id, String title, String type,
+                                           String brainType, String modelName) {
+        if (getSession(id) != null) return;
+        long now = System.currentTimeMillis();
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues v = new ContentValues();
+        v.put("id", id);
+        v.put("title", title == null ? id : title);
+        v.put("type", type);
+        v.put("brain_type", brainType);
+        v.put("model_name", modelName);
+        v.put("created_at", now);
+        v.put("updated_at", now);
+        db.insert("sessions", null, v);
+    }
+
+    /** 新建会话，返回 session id */
+    public synchronized String createSession(String title, String type, String brainType, String modelName) {
+        String id = "s" + System.currentTimeMillis() + "_" + (int) (Math.random() * 10000);
+        ensureSession(id, title, type, brainType, modelName);
+        return id;
+    }
+
+    public synchronized SessionInfo getSession(String sessionKey) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
+                        "FROM sessions WHERE id = ?",
+                new String[]{sessionKey});
+        try {
+            if (c.moveToFirst()) {
+                return new SessionInfo(
+                        c.getString(0), c.getString(1), c.getString(2),
+                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6));
+            }
+        } finally {
+            c.close();
+        }
+        return null;
+    }
+
+    /** 列出全部会话（按最近更新时间降序） */
+    public synchronized List<SessionInfo> getSessions() {
+        ArrayList<SessionInfo> out = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
+                "FROM sessions ORDER BY updated_at DESC", null);
+        try {
+            while (c.moveToNext()) {
+                out.add(new SessionInfo(
+                        c.getString(0), c.getString(1), c.getString(2),
+                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6)));
+            }
+        } finally {
+            c.close();
+        }
+        return out;
+    }
+
+    /** 删除会话及其全部消息 */
+    public synchronized void deleteSession(String sessionKey) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.delete("chat_messages", "session_key = ?", new String[]{sessionKey});
+        db.delete("sessions", "id = ?", new String[]{sessionKey});
+    }
+
+    /** 取某会话最后一条非工具消息（对话列表摘要用） */
+    public synchronized StoredMsg getLastMessage(String sessionKey) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
+                "WHERE session_key = ? AND role IN ('user','assistant') AND content != '' " +
+                "ORDER BY timestamp DESC, id DESC LIMIT 1", new String[]{sessionKey});
+        try {
+            if (c.moveToFirst()) {
+                return new StoredMsg(c.getString(0), c.getString(1), c.getString(2),
+                        c.getString(3), c.getLong(4));
+            }
+        } finally {
+            c.close();
+        }
+        return null;
+    }
+
+    private void touchSession(SQLiteDatabase db, String sessionKey, long ts) {
+        ContentValues v = new ContentValues();
+        v.put("updated_at", ts);
+        db.update("sessions", v, "id = ?", new String[]{sessionKey});
     }
 
     /** 读取指定会话最近 N 条消息（按时间正序返回） */
@@ -123,10 +242,30 @@ public class ChatStore {
                     "timestamp INTEGER NOT NULL" +
                     ")");
             db.execSQL("CREATE INDEX idx_chat_session_ts ON chat_messages(session_key, timestamp)");
+            db.execSQL("CREATE TABLE sessions (" +
+                    "id TEXT PRIMARY KEY," +
+                    "title TEXT NOT NULL," +
+                    "type TEXT NOT NULL," +
+                    "brain_type TEXT NOT NULL," +
+                    "model_name TEXT," +
+                    "created_at INTEGER NOT NULL," +
+                    "updated_at INTEGER NOT NULL" +
+                    ")");
         }
 
         @Override
         public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+            if (oldVersion < 2) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS sessions (" +
+                        "id TEXT PRIMARY KEY," +
+                        "title TEXT NOT NULL," +
+                        "type TEXT NOT NULL," +
+                        "brain_type TEXT NOT NULL," +
+                        "model_name TEXT," +
+                        "created_at INTEGER NOT NULL," +
+                        "updated_at INTEGER NOT NULL" +
+                        ")");
+            }
         }
     }
 }

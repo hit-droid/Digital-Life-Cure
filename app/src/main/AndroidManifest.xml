@@ -63,14 +63,6 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- 护理大脑对话界面 -->
-        <activity
-            android:name="com.digitallife.care.CareActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="portrait" />
-
         <!-- 护理大脑模型管理 -->
         <activity
             android:name="com.digitallife.care.CareModelsActivity"
