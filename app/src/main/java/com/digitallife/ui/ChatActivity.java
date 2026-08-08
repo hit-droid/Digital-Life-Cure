@@ -262,6 +262,7 @@ public class ChatActivity extends Activity {
         List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 100);
         if (msgs.isEmpty() && isCare) {
             appendAiBubble("你好，我是护理大脑。\n\n可以给我发模型 zip 压缩包（点左下角 ＋），我会自动解压体检、分析完整性、修复缺失文件，还能创作和编辑动作。");
+            appendCareQuickChips();
             return;
         }
         if (msgs.isEmpty()) {
@@ -286,6 +287,40 @@ public class ChatActivity extends Activity {
     }
 
     // ==================== 发送与分发 ====================
+
+    /** 护理会话空态快捷能力入口：点击即发送对应指令 */
+    private void appendCareQuickChips() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(dp(8), dp(8), dp(8), 0);
+        addQuickChip(row, "体检模型", "请帮我体检全部模型，分析完整性并给出报告");
+        addQuickChip(row, "修复文件", "请帮我检查并修复模型缺失或损坏的文件");
+        addQuickChip(row, "创作动作", "帮我创作一个全新的动作，展示效果");
+        listContainer.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollToBottom();
+    }
+
+    private void addQuickChip(LinearLayout row, String label, String instruction) {
+        TextView chip = new TextView(this);
+        chip.setText(label);
+        chip.setTextSize(13f);
+        chip.setTextColor(getColorCompat(R.color.brand));
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(12), dp(7), dp(12), dp(7));
+        chip.setBackgroundResource(R.drawable.bg_btn_secondary);
+        UiKit.pressScale(chip);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(6);
+        chip.setOnClickListener(v -> quickSend(instruction));
+        row.addView(chip, lp);
+    }
+
+    private void quickSend(String text) {
+        etInput.setText(text);
+        send();
+    }
 
     private void send() {
         String text = etInput.getText().toString().trim();
