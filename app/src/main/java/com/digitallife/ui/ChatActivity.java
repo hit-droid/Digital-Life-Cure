@@ -591,12 +591,11 @@ public class ChatActivity extends Activity {
     // ==================== 对话大脑独立对话（不依赖桌宠） ====================
 
     private void ensureChatLlm() {
-        if (llm != null) return;
         ApiManager am = new ApiManager(this);
         ApiProfile p = am.getCurrent(ApiManager.SCOPE_CHAT);
         if (p != null && p.baseUrl != null && !p.baseUrl.isEmpty()
-                && p.apiKey != null && !p.apiKey.isEmpty()) {
-            llm = new LLMClient(p.baseUrl, p.apiKey, p.model);
+                && !p.effectiveKeys().isEmpty()) {
+            llm = new LLMClient(p.baseUrl, am.nextKey(ApiManager.SCOPE_CHAT, p.id), p.model);
         } else {
             Settings s = new Settings(this);
             llm = new LLMClient(s.getApiBase(), s.getApiKey(), s.getModel());
