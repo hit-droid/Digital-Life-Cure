@@ -280,6 +280,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (settingsTab != null && settingsTab.handleActivityResult(requestCode, resultCode, data)) {
+            return;
+        }
         if (requestCode == PluginTabView.REQ_INSTALL_PLUGIN && resultCode == RESULT_OK && data != null) {
             pluginTab.handlePluginResult(data.getData());
         }

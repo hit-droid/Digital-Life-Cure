@@ -83,6 +83,11 @@ public class LLMClient {
         this.tools = tools != null ? tools : new JSONArray();
     }
 
+    /** 更新 API Key（密钥池轮换时复用同一客户端实例） */
+    public void setApiKey(String key) {
+        this.apiKey = key;
+    }
+
     public String getBaseUrl() {
         return baseUrl;
     }
