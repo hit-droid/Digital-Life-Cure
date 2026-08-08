@@ -135,12 +135,13 @@ public class ChatStore {
         return null;
     }
 
-    /** 列出全部会话（按最近更新时间降序） */
+    /** 列出全部会话（护理大脑固定置顶，其余按最近更新时间降序） */
     public synchronized List<SessionInfo> getSessions() {
         ArrayList<SessionInfo> out = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
-                "FROM sessions ORDER BY updated_at DESC", null);
+                        "FROM sessions ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC",
+                new String[]{SESSION_CARE});
         try {
             while (c.moveToNext()) {
                 out.add(new SessionInfo(
