@@ -38,4 +38,7 @@
     <color name="tag_model">#5AA36C</color>
     <color name="tag_chat">#5096DC</color>
     <color name="tag_builtin">#82829A</color>
+
+    <!-- ===== Markdown 代码块 ===== -->
+    <color name="code_bg">#F0EEF9</color>
 </resources>

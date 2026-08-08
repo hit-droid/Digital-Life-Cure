@@ -205,8 +205,14 @@ public class ApiProfileSection {
         apiManager.setCurrent(scope, p.id);
         syncSettings();
         refreshList();
-        tvResult.setTextColor(UiKit.color(ctx, R.color.success));
-        tvResult.setText("已保存「" + name + "」，在对话页顶部可直接切换到它");
+        if (!base.isEmpty() && !key.isEmpty() && !model.isEmpty()) {
+            tvResult.setTextColor(UiKit.color(ctx, R.color.text_secondary));
+            tvResult.setText("已保存「" + name + "」，正在自动测试连接…");
+            testConnection();
+        } else {
+            tvResult.setTextColor(UiKit.color(ctx, R.color.success));
+            tvResult.setText("已保存「" + name + "」，在对话页顶部可直接切换到它");
+        }
     }
 
     /** 供设置页「启动桌宠」等入口一键保存当前配置 */
