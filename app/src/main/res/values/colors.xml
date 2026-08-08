@@ -10,6 +10,7 @@
     <color name="brand_soft">#F4F2FD</color>
     <color name="brand_stroke">#DED9F4</color>
     <color name="ripple">#296C5CE7</color>
+    <color name="brand_glass_bg">#3DFFFFFF</color>
 
     <!-- ===== 中性色 ===== -->
     <color name="page_bg">#F5F4FB</color>
