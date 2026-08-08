@@ -64,10 +64,12 @@ public class ChatActivity extends Activity {
     private LinearLayout listContainer;
     private EditText etInput;
     private ImageButton btnAttach;
+    private ImageButton btnSend;
     private Button btnModel;
     private CareAI careAI;
     private CareAI.CareListener careListener;
     private LLMClient llm;
+    private MarkdownRenderer mdRenderer;
 
     // 待发送附件（选文件后不立即发，与消息一起提交）
     private LinearLayout attachBar;
@@ -91,6 +93,8 @@ public class ChatActivity extends Activity {
     private long lastTsLabel = 0;
 
     private boolean thinking = false;
+    /** 用户主动点击“停止生成”后吞掉取消触发的 onDone/onError */
+    private boolean aborting = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,6 +109,12 @@ public class ChatActivity extends Activity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().getDecorView().setSystemUiVisibility(0);
         buildUi();
+        mdRenderer = new MarkdownRenderer(
+                getColorCompat(R.color.code_bg),
+                getColorCompat(R.color.text_primary),
+                getColorCompat(R.color.text_secondary),
+                getColorCompat(R.color.text_primary),
+                getColorCompat(R.color.brand));
         restoreHistory();
     }
 
@@ -237,7 +247,8 @@ public class ChatActivity extends Activity {
                 has ? R.drawable.bg_input_focused : R.drawable.bg_input));
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(42), 1f));
 
-        ImageButton btnSend = new ImageButton(this);
+        ImageButton btnSendView = new ImageButton(this);
+        btnSend = btnSendView;
         btnSend.setImageResource(R.drawable.ic_send);
         btnSend.setBackgroundResource(R.drawable.bg_send);
         btnSend.setScaleType(ImageView.ScaleType.CENTER);
@@ -246,7 +257,13 @@ public class ChatActivity extends Activity {
         UiKit.pressScale(btnSend);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(44), dp(44));
         slp.leftMargin = dp(8);
-        btnSend.setOnClickListener(v -> send());
+        btnSend.setOnClickListener(v -> {
+            if (thinking) {
+                stopGenerating();
+            } else {
+                send();
+            }
+        });
         inputBar.addView(btnSend, slp);
 
         root.addView(inputBar, new LinearLayout.LayoutParams(
@@ -330,6 +347,7 @@ public class ChatActivity extends Activity {
             Toast.makeText(this, "她还在回复中，稍等一下哦…", Toast.LENGTH_SHORT).show();
             return;
         }
+        aborting = false;
         etInput.setText("");
         hideKeyboard();
 
@@ -343,6 +361,7 @@ public class ChatActivity extends Activity {
             if (careAI == null) careAI = CareAI.getInstance(this);
             thinking = true;
             renderThinkingDot();
+            updateSendButton();
             if (text.isEmpty()) {
                 careAI.analyzeUploadedZip(display, filePath);
             } else {
@@ -360,6 +379,7 @@ public class ChatActivity extends Activity {
             if (careAI == null) careAI = CareAI.getInstance(this);
             thinking = true;
             renderThinkingDot();
+            updateSendButton();
             careAI.sendMessage(text);
         } else {
             if (ChatStore.TYPE_MODEL.equals(type) && modelName != null && !modelName.isEmpty()) {
@@ -368,8 +388,56 @@ public class ChatActivity extends Activity {
             }
             thinking = true;
             renderThinkingDot();
+            updateSendButton();
             sendChatMessage(text);
         }
+    }
+
+    // ==================== 停止生成 / 发送按钮状态 ====================
+
+    private void updateSendButton() {
+        if (btnSend == null) return;
+        if (thinking) {
+            btnSend.setImageResource(R.drawable.ic_stop);
+        } else {
+            btnSend.setImageResource(R.drawable.ic_send);
+        }
+    }
+
+    /** 用户点击停止：取消当前流式请求，保留已生成内容，恢复可发送状态 */
+    private void stopGenerating() {
+        if (!thinking) return;
+        aborting = true;
+        try {
+            if (isCare) {
+                if (careAI != null) careAI.cancel();
+            } else if (llm != null) {
+                llm.cancel();
+            }
+        } catch (Exception ignored) {
+        }
+        if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
+            chatStore.addMessage(sessionKey, "assistant", curAssistantText,
+                    null, null, System.currentTimeMillis());
+        }
+        curAssistantBubble = null;
+        curAssistantText = "";
+        thinking = false;
+        aborting = false;
+        hideThinkingDot();
+        updateSendButton();
+        scrollToBottom();
+    }
+
+    private boolean consumeAbort() {
+        if (aborting) {
+            aborting = false;
+            thinking = false;
+            hideThinkingDot();
+            updateSendButton();
+            return true;
+        }
+        return false;
     }
 
     // ==================== 顶部快捷切换模型 ====================
@@ -481,7 +549,8 @@ public class ChatActivity extends Activity {
                         listContainer.addView(curAssistantBubble);
                     }
                     curAssistantText += t;
-                    curAssistantBubble.setText(curAssistantText);
+                    curAssistantBubble.setText(mdRenderer != null
+                            ? mdRenderer.render(curAssistantText) : curAssistantText);
                     scrollToBottom();
                 });
             }
@@ -493,6 +562,7 @@ public class ChatActivity extends Activity {
             @Override
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
+                    if (consumeAbort()) return;
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
@@ -506,15 +576,18 @@ public class ChatActivity extends Activity {
                     }
                     hideThinkingDot();
                     thinking = false;
+                    updateSendButton();
                 });
             }
 
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
+                    if (consumeAbort()) return;
                     hideThinkingDot();
                     appendAiBubble("出错了：" + error);
                     thinking = false;
+                    updateSendButton();
                 });
             }
         });
@@ -560,7 +633,8 @@ public class ChatActivity extends Activity {
                         listContainer.addView(curAssistantBubble);
                     }
                     curAssistantText += text;
-                    curAssistantBubble.setText(curAssistantText);
+                    curAssistantBubble.setText(mdRenderer != null
+                            ? mdRenderer.render(curAssistantText) : curAssistantText);
                     scrollToBottom();
                 });
             }
@@ -579,6 +653,7 @@ public class ChatActivity extends Activity {
             @Override
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
+                    if (consumeAbort()) return;
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
@@ -592,15 +667,18 @@ public class ChatActivity extends Activity {
                     }
                     hideThinkingDot();
                     thinking = false;
+                    updateSendButton();
                 });
             }
 
             @Override
             public void onError(String error) {
                 runOnUiThread(() -> {
+                    if (consumeAbort()) return;
                     hideThinkingDot();
                     appendAiBubble("出错了：" + error);
                     thinking = false;
+                    updateSendButton();
                 });
             }
         };
@@ -746,7 +824,7 @@ public class ChatActivity extends Activity {
     private void appendAiBubble(String text) {
         appendTimeDividerIfNeeded();
         TextView b = newTextViewBubble();
-        b.setText(text);
+        b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
         b.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listContainer.addView(b);
