@@ -31,4 +31,10 @@
     <!-- ===== 聊天 ===== -->
     <color name="bubble_user">#6C5CE7</color>
     <color name="bubble_ai">#FFFFFF</color>
+
+    <!-- ===== 类型标签（会话/联系人） ===== -->
+    <color name="tag_care">#E6973C</color>
+    <color name="tag_model">#5AA36C</color>
+    <color name="tag_chat">#5096DC</color>
+    <color name="tag_builtin">#82829A</color>
 </resources>

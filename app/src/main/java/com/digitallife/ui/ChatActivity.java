@@ -272,7 +272,7 @@ public class ChatActivity extends Activity {
             if ("user".equals(m.role)) {
                 appendUserBubble(m.content);
             } else if ("tool".equals(m.role)) {
-                markLastToolResult(m.toolCallId, null, m.content);
+                markLastToolResult(null, null, m.content);
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
                 appendToolBubble(parseToolName(m.toolCalls), parseToolArgs(m.toolCalls));
             } else if (m.content != null && !m.content.isEmpty()) {

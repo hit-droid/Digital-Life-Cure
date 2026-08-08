@@ -119,7 +119,7 @@ public class ContactsTabView extends LinearLayout {
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         g.setCornerRadius(UiKit.dp(activity, 12));
-        g.setColor(isImported ? Color.rgb(80, 150, 220) : Color.rgb(140, 120, 190));
+        g.setColor(isImported ? UiKit.color(activity, R.color.tag_chat) : UiKit.color(activity, R.color.tag_builtin));
         avatar.setBackground(g);
         LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(
                 UiKit.dp(activity, 44), UiKit.dp(activity, 44));
@@ -140,9 +140,10 @@ public class ContactsTabView extends LinearLayout {
         nameRow.addView(tvName, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         TextView tag = new TextView(activity);
         tag.setText(isImported ? "已导入" : "内置");
-        tag.setTextSize(10f);
-        tag.setTextColor(isImported ? Color.rgb(80, 150, 220) : Color.rgb(130, 130, 150));
-        tag.setBackground(tagBg(isImported ? Color.rgb(80, 150, 220) : Color.rgb(130, 130, 150)));
+        int tagColor = UiKit.color(activity,
+                isImported ? R.color.tag_chat : R.color.tag_builtin);
+        tag.setTextColor(tagColor);
+        tag.setBackground(tagBg(tagColor));
         tag.setPadding(UiKit.dp(activity, 6), UiKit.dp(activity, 1),
                 UiKit.dp(activity, 6), UiKit.dp(activity, 1));
         nameRow.addView(tag);

@@ -201,12 +201,13 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
 
         setContentView(root);
-        switchTab(0);
+        switchTab(getSharedPreferences("main", MODE_PRIVATE).getInt("last_tab", 0));
     }
 
     private void switchTab(int index) {
         int prev = currentTab;
         currentTab = index;
+        getSharedPreferences("main", MODE_PRIVATE).edit().putInt("last_tab", index).apply();
         tvTitle.setText(TAB_TITLES[index]);
         tvSubtitle.setText(TAB_SUBTITLES[index]);
         int active = getColorCompat(R.color.brand);
