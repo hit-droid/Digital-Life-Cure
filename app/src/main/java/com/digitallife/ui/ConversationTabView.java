@@ -222,7 +222,36 @@ public class ConversationTabView extends LinearLayout {
                 listener.onOpenSession(s.id, s.title, s.type, s.modelName);
             }
         });
+        card.setOnLongClickListener(v -> {
+            showRenameDialog(s);
+            return true;
+        });
         return card;
+    }
+
+    private void showRenameDialog(ChatStore.SessionInfo s) {
+        if (ChatStore.SESSION_CARE.equals(s.id)) {
+            Toast.makeText(activity, "护理大脑会话是系统内置的，不能改名。", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final EditText et = new EditText(activity);
+        et.setText(s.title == null || "未命名对话".equals(s.title) ? "" : s.title);
+        et.setSelection(et.getText().length());
+        new android.app.AlertDialog.Builder(activity)
+                .setTitle("重命名会话")
+                .setView(et)
+                .setPositiveButton("保存", (d, w) -> {
+                    String title = et.getText().toString().trim();
+                    if (title.isEmpty()) {
+                        Toast.makeText(activity, "名称不能为空", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (chatStore.renameSession(s.id, title)) {
+                        refresh();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void showNewSessionDialog() {
