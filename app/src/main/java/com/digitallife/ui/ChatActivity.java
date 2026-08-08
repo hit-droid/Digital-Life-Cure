@@ -140,6 +140,9 @@ public class ChatActivity extends Activity {
         btnModel.setTextSize(12f);
         btnModel.setTextColor(Color.WHITE);
         btnModel.setAllCaps(false);
+        btnModel.setMaxWidth(dp(150));
+        btnModel.setMaxLines(1);
+        btnModel.setEllipsize(android.text.TextUtils.TruncateAt.END);
         btnModel.setBackgroundResource(R.drawable.bg_btn_glass);
         btnModel.setPadding(dp(10), dp(4), dp(10), dp(4));
         UiKit.pressScale(btnModel);
