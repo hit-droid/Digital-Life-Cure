@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * API Profile 管理器。
@@ -25,6 +26,8 @@ public class ApiManager {
     private static final String KEY_CURRENT = "_current";
 
     private final SharedPreferences sp;
+    /** 密钥池轮换游标（跨 profile 全局递增，保证逐次轮换） */
+    private final AtomicInteger keyCursor = new AtomicInteger(0);
 
     public ApiManager(Context ctx) {
         sp = ctx.getApplicationContext().getSharedPreferences(PREF, Context.MODE_PRIVATE);
@@ -46,6 +49,15 @@ public class ApiManager {
                         o.optString("baseUrl", ""),
                         o.optString("apiKey", ""),
                         o.optString("model", ""));
+                JSONArray keys = o.optJSONArray("apiKeys");
+                if (keys != null && keys.length() > 0) {
+                    List<String> keyList = new ArrayList<>();
+                    for (int j = 0; j < keys.length(); j++) {
+                        String k = keys.optString(j, "");
+                        if (!k.trim().isEmpty()) keyList.add(k.trim());
+                    }
+                    p.setApiKeys(keyList);
+                }
                 list.add(p);
             }
         } catch (Exception ignored) {
@@ -76,6 +88,18 @@ public class ApiManager {
 
     public String getCurrentId(String scope) {
         return sp.getString(scope + KEY_CURRENT, "");
+    }
+
+    // ============ 密钥池 ============
+
+    /** 返回配置的密钥池（多个 key 逐次轮换）；无密钥池时回退单 key */
+    public String nextKey(String scope, String profileId) {
+        ApiProfile p = find(scope, profileId);
+        if (p == null) return "";
+        List<String> keys = p.effectiveKeys();
+        if (keys.isEmpty()) return "";
+        int idx = Math.floorMod(keyCursor.getAndIncrement(), keys.size());
+        return keys.get(idx);
     }
 
     // ============ 写入 ============
@@ -130,6 +154,13 @@ public class ApiManager {
                 o.put("baseUrl", p.baseUrl == null ? "" : p.baseUrl);
                 o.put("apiKey", p.apiKey == null ? "" : p.apiKey);
                 o.put("model", p.model == null ? "" : p.model);
+                JSONArray keys = new JSONArray();
+                if (p.apiKeys != null) {
+                    for (String k : p.apiKeys) {
+                        if (k != null && !k.trim().isEmpty()) keys.put(k.trim());
+                    }
+                }
+                o.put("apiKeys", keys);
                 arr.put(o);
             } catch (Exception ignored) {
             }
@@ -144,7 +175,7 @@ public class ApiManager {
         ApiProfile cur = getCurrent(scope);
         if (cur == null) return;
         settings.setApiBase(cur.baseUrl);
-        settings.setApiKey(cur.apiKey);
+        settings.setApiKey(cur.primaryKey());
         settings.setModel(cur.model);
     }
 }

@@ -157,11 +157,16 @@ public class CareAI {
         ApiProfile profile = apiManager.getCurrent(ApiManager.SCOPE_CARE);
         String fp = buildConfigFingerprint(profile);
         if (llm != null && fp.equals(configFingerprint)) {
+            // 配置未变化：仅轮换密钥池 key，复用客户端实例
+            if (profile != null) {
+                llm.setApiKey(apiManager.nextKey(ApiManager.SCOPE_CARE, profile.id));
+            }
             return;
         }
         configFingerprint = fp;
         if (profile != null) {
-            llm = new LLMClient(profile.baseUrl, profile.apiKey, profile.model);
+            llm = new LLMClient(profile.baseUrl,
+                    apiManager.nextKey(ApiManager.SCOPE_CARE, profile.id), profile.model);
         } else {
             Settings settings = new Settings(ctx);
             llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
@@ -193,19 +198,17 @@ public class CareAI {
 
     /** 计算当前配置指纹：care profile（或全局设置）三要素 + 工具列表签名 */
     private String buildConfigFingerprint(ApiProfile profile) {
-        String base, key, model;
+        String base, model;
         if (profile != null) {
             base = profile.baseUrl;
-            key = profile.apiKey;
             model = profile.model;
         } else {
             Settings s = new Settings(ctx);
             base = s.getApiBase();
-            key = s.getApiKey();
             model = s.getModel();
         }
         String schemas = String.valueOf(executor.getTools().getToolSchemas());
-        return (base == null ? "" : base) + "|" + (key == null ? "" : key) + "|"
+        return (base == null ? "" : base) + "|"
                 + (model == null ? "" : model) + "|" + schemas;
     }
 
