@@ -52,6 +52,17 @@ public class SettingsTabView extends LinearLayout {
     private ApiProfileSection modelSection;
     private int currentModelIndex = 0;
 
+    /** 转发文件选择结果给模型配置区（密钥批量导入/导出） */
+    public boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
+        if (modelSection != null
+                && (requestCode == ApiProfileSection.REQ_IMPORT_KEYS
+                || requestCode == ApiProfileSection.REQ_EXPORT_KEYS)) {
+            modelSection.onActivityResult(requestCode, resultCode, data);
+            return true;
+        }
+        return false;
+    }
+
     public SettingsTabView(Activity activity) {
         super(activity);
         this.activity = activity;
