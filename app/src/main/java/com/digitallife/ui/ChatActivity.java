@@ -66,6 +66,7 @@ public class ChatActivity extends Activity {
     private ImageButton btnAttach;
     private Button btnModel;
     private CareAI careAI;
+    private CareAI.CareListener careListener;
     private LLMClient llm;
 
     // 待发送附件（选文件后不立即发，与消息一起提交）
@@ -510,7 +511,7 @@ public class ChatActivity extends Activity {
 
     private void setupCareListener() {
         if (careAI == null) careAI = CareAI.getInstance(this);
-        careAI.setListener(new CareAI.CareListener() {
+        careListener = new CareAI.CareListener() {
             @Override
             public void onDelta(String text) {
                 runOnUiThread(() -> {
@@ -564,7 +565,8 @@ public class ChatActivity extends Activity {
                     thinking = false;
                 });
             }
-        });
+        };
+        careAI.setListener(careListener);
     }
 
     // ==================== 附件（护理大脑上传 zip） ====================
@@ -938,5 +940,7 @@ public class ChatActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (careAI != null && careListener != null) careAI.removeListener(careListener);
+        if (llm != null) llm.cancel();
     }
 }

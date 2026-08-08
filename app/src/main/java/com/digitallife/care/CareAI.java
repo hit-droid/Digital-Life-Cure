@@ -213,6 +213,13 @@ public class CareAI {
         this.listener = listener;
     }
 
+    /** 仅当指定监听器仍是当前监听器时移除，避免对话页销毁时误伤悬浮窗监听器 */
+    public void removeListener(CareListener listener) {
+        if (this.listener == listener) {
+            this.listener = null;
+        }
+    }
+
     public void refreshConfig() {
         initLLM();
     }
