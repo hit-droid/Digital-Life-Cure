@@ -7,6 +7,7 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.text.style.TypefaceSpan;
+import android.text.style.URLSpan;
 import android.graphics.Typeface;
 
 import java.util.regex.Matcher;
@@ -26,6 +27,7 @@ public final class MarkdownRenderer {
     private static final Pattern UL_ITEM = Pattern.compile("^[-*]\\s+(.+)$");
     private static final Pattern OL_ITEM = Pattern.compile("^(\\d+)[.、]\\s+(.+)$");
     private static final Pattern BLOCKQUOTE = Pattern.compile("^>\\s?(.+)$");
+    private static final Pattern URL = Pattern.compile("https?://[^\\s)\\]<>]+");
 
     private final int codeBgColor;
     private final int codeTextColor;
@@ -158,6 +160,15 @@ public final class MarkdownRenderer {
             int start = from + it.start(1);
             int end = from + it.end(1);
             out.setSpan(new StyleSpan(Typeface.ITALIC), start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        Matcher ur = URL.matcher(s);
+        while (ur.find()) {
+            int start = from + ur.start();
+            int end = from + ur.end();
+            out.setSpan(new URLSpan(s.substring(ur.start(), ur.end())), start, end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            out.setSpan(new ForegroundColorSpan(linkColor), start, end,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }

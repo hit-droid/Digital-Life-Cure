@@ -252,6 +252,15 @@ public class ChatActivity extends Activity {
                 : "说点什么… ＋ 可附带文件");
         etInput.setTextSize(15f);
         etInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        etInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
+        etInput.setSingleLine(true);
+        etInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                send();
+                return true;
+            }
+            return false;
+        });
         etInput.setBackgroundResource(R.drawable.bg_input);
         etInput.setPadding(dp(12), dp(6), dp(12), dp(6));
         etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
@@ -886,6 +895,8 @@ public class ChatActivity extends Activity {
         b.setMaxWidth(dp(260));
         b.setElevation(dp(2));
         b.setBackgroundResource(R.drawable.bg_bubble_ai);
+        b.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+        b.setLinksClickable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(4);
@@ -1220,6 +1231,19 @@ public class ChatActivity extends Activity {
     }
 
     @Override
+    public void onBackPressed() {
+        if (thinking) {
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("她还在回复中")
+                    .setMessage("现在退出将中断回复，确定要退出吗？")
+                    .setPositiveButton("退出", (d, w) -> finish())
+                    .setNegativeButton("继续等", null)
+                    .show();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
     protected void onDestroy() {
         super.onDestroy();
         if (careAI != null && careListener != null) careAI.removeListener(careListener);
