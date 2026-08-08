@@ -118,6 +118,16 @@ public class ChatStore {
         return id;
     }
 
+    /** 重命名会话（护理大脑等系统内置会话不允许改名） */
+    public synchronized boolean renameSession(String sessionKey, String title) {
+        if (SESSION_CARE.equals(sessionKey)) return false;
+        if (title == null || title.trim().isEmpty()) return false;
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues v = new ContentValues();
+        v.put("title", title.trim());
+        return db.update("sessions", v, "id = ?", new String[]{sessionKey}) > 0;
+    }
+
     public synchronized SessionInfo getSession(String sessionKey) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
