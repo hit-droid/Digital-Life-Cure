@@ -279,9 +279,9 @@ public class ConversationTabView extends LinearLayout {
     }
 
     private int typeColor(String type) {
-        if (ChatStore.TYPE_CARE.equals(type)) return Color.rgb(230, 150, 60);
-        if (ChatStore.TYPE_MODEL.equals(type)) return Color.rgb(90, 160, 100);
-        return Color.rgb(80, 150, 220);
+        if (ChatStore.TYPE_CARE.equals(type)) return UiKit.color(activity, R.color.tag_care);
+        if (ChatStore.TYPE_MODEL.equals(type)) return UiKit.color(activity, R.color.tag_model);
+        return UiKit.color(activity, R.color.tag_chat);
     }
 
     private String avatarChar(ChatStore.SessionInfo s) {
@@ -293,11 +293,11 @@ public class ConversationTabView extends LinearLayout {
     private android.graphics.drawable.GradientDrawable makeAvatarBg(ChatStore.SessionInfo s) {
         int color;
         if (ChatStore.TYPE_CARE.equals(s.type)) {
-            color = Color.rgb(220, 150, 70);
+            color = UiKit.color(activity, R.color.tag_care);
         } else if (ChatStore.TYPE_MODEL.equals(s.type)) {
-            color = Color.rgb(90, 170, 110);
+            color = UiKit.color(activity, R.color.tag_model);
         } else {
-            color = Color.rgb(100, 150, 220);
+            color = UiKit.color(activity, R.color.tag_chat);
         }
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
