@@ -15,6 +15,7 @@ import com.digitallife.R;
 import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.util.ChatStore;
 
 import java.util.List;
 
@@ -154,6 +155,18 @@ public class ContactsTabView extends LinearLayout {
         status.setTextSize(13f);
         status.setTextColor(UiKit.color(activity, R.color.text_secondary));
         info.addView(status, UiKit.lp(activity, 2));
+
+        ChatStore.StoredMsg last = new ChatStore(activity).getLastMessage("model_" + name);
+        TextView lastTv = new TextView(activity);
+        if (last != null && last.content != null && !last.content.isEmpty()) {
+            lastTv.setText("assistant".equals(last.role) ? "她说：" + last.content : "我：" + last.content);
+        } else {
+            lastTv.setText("还没聊过，点进去打声招呼吧");
+        }
+        lastTv.setTextSize(12f);
+        lastTv.setTextColor(UiKit.color(activity, R.color.text_hint));
+        lastTv.setMaxLines(1);
+        info.addView(lastTv, UiKit.lp(activity, 1));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         android.widget.ImageView arrow = new android.widget.ImageView(activity);
