@@ -83,6 +83,8 @@ public class CareAI {
     private LLMClient llm;
     private CareListener listener;
     private volatile boolean cancelled;
+    /** 会话代际号：每次 cancel 递增，旧线程退出时若代际已过期则不再触碰 running（防止误清新会话） */
+    private volatile int generation = 0;
     /** 当前 LLM 配置指纹；发送前检测变化自动重建（解决"改配置后单例仍用旧配置"） */
     private volatile String configFingerprint = "";
 
@@ -254,6 +256,7 @@ public class CareAI {
     public void analyzeUploadedZip(String fileName, String filePath) {
         initLLM();
         pool.execute(() -> {
+            final int gen = generation;
             try {
                 if (!running.compareAndSet(false, true)) {
                     // 已有对话在跑：把上传信息排队进历史，由现有循环继续
@@ -300,7 +303,7 @@ public class CareAI {
                 postError("处理失败: " + e.getMessage());
                 postToolResult("install_model_from_zip", false, e.getMessage());
                 history.add(new LLMClient.ChatMessage("assistant", "处理失败: " + e.getMessage()));
-                running.set(false);
+                if (gen == generation) running.set(false);
             }
         });
     }
@@ -393,8 +396,9 @@ public class CareAI {
     }
 
     private void doConverse() {
+        final int gen = generation;
         if (cancelled) {
-            running.set(false);
+            if (gen == generation) running.set(false);
             return;
         }
 
@@ -481,20 +485,22 @@ public class CareAI {
                 if (shouldContinue) {
                     doConverse();
                 } else {
-                    running.set(false);
+                    if (gen == generation) running.set(false);
                 }
             }
 
             @Override
             public void onError(String error) {
                 postError(error);
-                running.set(false);
+                if (gen == generation) running.set(false);
             }
         });
     }
 
     public void cancel() {
         cancelled = true;
+        generation++;
+        running.set(false);
         if (llm != null) llm.cancel();
     }
 

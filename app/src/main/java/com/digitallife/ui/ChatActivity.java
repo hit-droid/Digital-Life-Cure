@@ -304,7 +304,11 @@ public class ChatActivity extends Activity {
             if (careAI == null) careAI = CareAI.getInstance(this);
             thinking = true;
             renderThinkingDot();
-            careAI.sendMessageWithFile(text, display, filePath);
+            if (text.isEmpty()) {
+                careAI.analyzeUploadedZip(display, filePath);
+            } else {
+                careAI.sendMessageWithFile(text, display, filePath);
+            }
             scrollToBottom();
             return;
         }
