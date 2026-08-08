@@ -408,6 +408,11 @@ public class CareAI {
             if (gen == generation) running.set(false);
             return;
         }
+        if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
+            postError("还没有可用的护理模型配置。请到「设置 → 模型配置」添加护理大脑模型后重试。");
+            if (gen == generation) running.set(false);
+            return;
+        }
 
         // 构建消息列表
         List<LLMClient.ChatMessage> messages = new ArrayList<>();
