@@ -350,7 +350,6 @@ public class ChatActivity extends Activity {
         aborting = false;
         etInput.setText("");
         hideKeyboard();
-
         if (isCare && hasFile) {
             String display = pendingFileName == null || pendingFileName.isEmpty() ? "model.zip" : pendingFileName;
             String bubble = text.isEmpty() ? "📦 " + display : text + "\n📦 " + display;
@@ -371,10 +370,81 @@ public class ChatActivity extends Activity {
             return;
         }
 
+        if (hasFile) {
+            String display = pendingFileName == null || pendingFileName.isEmpty()
+                    ? "附件" : pendingFileName;
+            String bubble = text.isEmpty() ? "📄 " + display : text + "\n📄 " + display;
+            appendUserBubble(bubble);
+            chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            scrollToBottom();
+            final String filePath = pendingFilePath;
+            final String userText = text;
+            clearPendingFile();
+            thinking = true;
+            renderThinkingDot();
+            updateSendButton();
+            new Thread(() -> {
+                final String ctx = buildFileContext(display, filePath);
+                runOnUiThread(() -> sendChatMessage(userText, ctx));
+            }).start();
+            return;
+        }
+
+        sendRaw(text);
+    }
+
+    /** 读取附件作为模型上下文：文本类读取内容，其他类型提示未解析 */
+    private String buildFileContext(String name, String path) {
+        String lower = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        String[] textExts = {".txt", ".md", ".markdown", ".json", ".java", ".xml", ".py",
+                ".js", ".ts", ".html", ".css", ".csv", ".log", ".yml", ".yaml", ".sql",
+                ".sh", ".bat", ".properties", ".gradle", ".kt", ".c", ".h", ".cpp", ".ini",
+                ".cfg", ".toml", ".env", ".jsx", ".tsx"};
+        boolean isText = false;
+        for (String e : textExts) {
+            if (lower.endsWith(e)) {
+                isText = true;
+                break;
+            }
+        }
+        if (!isText) {
+            return "\n\n[附件 " + name + "]（该类型文件暂未解析内容）";
+        }
+        try {
+            File f = new File(path);
+            if (!f.exists() || f.length() > 200 * 1024) {
+                return "\n\n[附件 " + name + "]（文件过大或不存在，内容未读取）";
+            }
+            java.io.FileInputStream fis = new java.io.FileInputStream(f);
+            byte[] buf = new byte[(int) f.length()];
+            int off = 0;
+            while (off < buf.length) {
+                int r = fis.read(buf, off, buf.length - off);
+                if (r < 0) break;
+                off += r;
+            }
+            fis.close();
+            String content = new String(buf, java.nio.charset.StandardCharsets.UTF_8);
+            if (content.length() > 20000) {
+                content = content.substring(0, 20000) + "\n…（内容已截断）";
+            }
+            return "\n\n[附件 " + name + " 内容如下]\n" + content;
+        } catch (Exception e) {
+            return "\n\n[附件 " + name + "]（读取失败：" + e.getMessage() + "）";
+        }
+    }
+
+    /** 发送纯文本消息（新输入或历史重发共用），带并发/停止状态管理 */
+    private void sendRaw(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (thinking) {
+            Toast.makeText(this, "她还在回复中，稍等一下哦…", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        aborting = false;
         appendUserBubble(text);
         chatStore.addMessage(sessionKey, "user", text, null, null, System.currentTimeMillis());
         scrollToBottom();
-
         if (isCare) {
             if (careAI == null) careAI = CareAI.getInstance(this);
             thinking = true;
@@ -389,7 +459,7 @@ public class ChatActivity extends Activity {
             thinking = true;
             renderThinkingDot();
             updateSendButton();
-            sendChatMessage(text);
+            sendChatMessage(text, null);
         }
     }
 
@@ -513,11 +583,12 @@ public class ChatActivity extends Activity {
         }
     }
 
-    private void sendChatMessage(String text) {
+    private void sendChatMessage(String text, String attachContext) {
         ensureChatLlm();
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
             hideThinkingDot();
             thinking = false;
+            updateSendButton();
             String msg = "还没有可用的模型配置，请到「设置 → 模型配置」添加对话大脑模型。";
             appendAiBubble(msg);
             chatStore.addMessage(sessionKey, "assistant", msg, null, null, System.currentTimeMillis());
@@ -526,11 +597,24 @@ public class ChatActivity extends Activity {
         }
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 40);
+        boolean found = false;
         for (ChatStore.StoredMsg m : hist) {
             if (m.content == null || m.content.isEmpty()) continue;
-            msgs.add(new LLMClient.ChatMessage("user".equals(m.role) ? "user" : "assistant", m.content));
+            String role = "user".equals(m.role) ? "user" : "assistant";
+            if (!found && "user".equals(role) && text.equals(m.content)) {
+                msgs.add(new LLMClient.ChatMessage(role,
+                        attachContext != null && !attachContext.isEmpty()
+                                ? m.content + "\n\n" + attachContext : m.content));
+                found = true;
+            } else {
+                msgs.add(new LLMClient.ChatMessage(role, m.content));
+            }
         }
-        msgs.add(new LLMClient.ChatMessage("user", text));
+        if (!found) {
+            msgs.add(new LLMClient.ChatMessage("user",
+                    attachContext != null && !attachContext.isEmpty()
+                            ? text + "\n\n" + attachContext : text));
+        }
 
         JSONObject extra = new JSONObject();
         try {
@@ -691,8 +775,12 @@ public class ChatActivity extends Activity {
         try {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
-            i.setType("*/*");
-            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed"});
+            if (isCare) {
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/zip", "application/x-zip-compressed"});
+            } else {
+                i.setType("*/*");
+            }
             startActivityForResult(i, REQ_ATTACH);
         } catch (Exception e) {
             Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
@@ -816,7 +904,17 @@ public class ChatActivity extends Activity {
         rlp.bottomMargin = dp(2);
         listContainer.addView(row, rlp);
         bubble.setOnLongClickListener(v -> {
-            copyToClipboard(bubble.getText() == null ? "" : bubble.getText().toString());
+            String txt = bubble.getText() == null ? "" : bubble.getText().toString();
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("消息操作")
+                    .setItems(new String[]{"复制", "重新发送"}, (d, w) -> {
+                        if (w == 0) {
+                            copyToClipboard(txt);
+                        } else {
+                            sendRaw(txt);
+                        }
+                    })
+                    .show();
             return true;
         });
     }
