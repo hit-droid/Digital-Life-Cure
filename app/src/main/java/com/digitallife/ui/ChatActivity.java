@@ -61,6 +61,9 @@ public class ChatActivity extends Activity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ScrollView scroll;
+    /** 用户向上翻阅历史时暂停自动滚底，回到底部后恢复 */
+    private boolean userScrolledAway = false;
+    private android.view.ViewTreeObserver.OnScrollChangedListener scrollWatcher;
     private LinearLayout listContainer;
     private EditText etInput;
     private ImageButton btnAttach;
@@ -182,6 +185,13 @@ public class ChatActivity extends Activity {
         // ===== 消息列表 =====
         scroll = new ScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
+        scrollWatcher = () -> {
+            View content = scroll.getChildAt(0);
+            if (content == null) return;
+            int bottomGap = content.getBottom() - (scroll.getScrollY() + scroll.getHeight());
+            userScrolledAway = bottomGap > dp(140);
+        };
+        scroll.getViewTreeObserver().addOnScrollChangedListener(scrollWatcher);
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
         listContainer.setPadding(dp(12), dp(8), dp(12), dp(8));
@@ -238,7 +248,8 @@ public class ChatActivity extends Activity {
         }
 
         etInput = new EditText(this);
-        etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 可附带模型 zip…" : "说点什么…");
+        etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 可附带模型 zip…"
+                : "说点什么… ＋ 可附带文件");
         etInput.setTextSize(15f);
         etInput.setInputType(InputType.TYPE_CLASS_TEXT);
         etInput.setBackgroundResource(R.drawable.bg_input);
@@ -907,11 +918,13 @@ public class ChatActivity extends Activity {
             String txt = bubble.getText() == null ? "" : bubble.getText().toString();
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
-                    .setItems(new String[]{"复制", "重新发送"}, (d, w) -> {
+                    .setItems(new String[]{"复制", "重新发送", "分享"}, (d, w) -> {
                         if (w == 0) {
                             copyToClipboard(txt);
-                        } else {
+                        } else if (w == 1) {
                             sendRaw(txt);
+                        } else {
+                            shareText(txt);
                         }
                     })
                     .show();
@@ -927,9 +940,63 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listContainer.addView(b);
         b.setOnLongClickListener(v -> {
-            copyToClipboard(b.getText() == null ? "" : b.getText().toString());
+            String txt = b.getText() == null ? "" : b.getText().toString();
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("消息操作")
+                    .setItems(new String[]{"朗读", "复制", "分享"}, (d, w) -> {
+                        if (w == 0) {
+                            speakText(txt);
+                        } else if (w == 1) {
+                            copyToClipboard(txt);
+                        } else {
+                            shareText(txt);
+                        }
+                    })
+                    .show();
             return true;
         });
+    }
+
+    private android.speech.tts.TextToSpeech tts;
+
+    private void speakText(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (tts == null) {
+            tts = new android.speech.tts.TextToSpeech(this, status -> {
+                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                    runOnUiThread(() -> speakNow(text));
+                } else {
+                    runOnUiThread(() -> Toast.makeText(ChatActivity.this,
+                            "初始化语音引擎失败", Toast.LENGTH_SHORT).show());
+                }
+            });
+        } else {
+            speakNow(text);
+        }
+    }
+
+    private void speakNow(String text) {
+        if (tts == null) return;
+        int r = tts.setLanguage(Locale.CHINA);
+        if (r == android.speech.tts.TextToSpeech.LANG_MISSING_DATA
+                || r == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+            Toast.makeText(this, "设备缺少中文语音数据", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        tts.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                null, "speak" + System.currentTimeMillis());
+    }
+
+    private void shareText(String text) {
+        if (text == null || text.isEmpty()) return;
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT, text);
+        try {
+            startActivity(Intent.createChooser(send, "分享消息"));
+        } catch (Exception e) {
+            Toast.makeText(this, "没有可用的分享应用", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void copyToClipboard(String text) {
@@ -1108,6 +1175,7 @@ public class ChatActivity extends Activity {
     }
 
     private void scrollToBottom() {
+        if (userScrolledAway) return;
         scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
     }
 
@@ -1156,5 +1224,16 @@ public class ChatActivity extends Activity {
         super.onDestroy();
         if (careAI != null && careListener != null) careAI.removeListener(careListener);
         if (llm != null) llm.cancel();
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+            tts = null;
+        }
+        if (scrollWatcher != null) {
+            try {
+                scroll.getViewTreeObserver().removeOnScrollChangedListener(scrollWatcher);
+            } catch (Exception ignored) {
+            }
+        }
     }
 }
