@@ -222,7 +222,7 @@ public class CareModelsActivity extends Activity {
             try {
                 report = tools.execute("analyze_model", jsonArgs("modelName", modelName));
             } catch (Exception e) {
-                final String err = "分析失败: " + e.getMessage();
+                final String err = "分析失败: " + com.digitallife.ui.UiKit.safeMsg(e);
                 safeRun(() -> tvDetail.setText(err));
                 return;
             }
@@ -249,7 +249,7 @@ public class CareModelsActivity extends Activity {
             toast(r);
             refreshList();
         } catch (Exception e) {
-            toast("设置失败: " + e.getMessage());
+            toast("设置失败: " + com.digitallife.ui.UiKit.safeMsg(e));
         }
     }
 
@@ -264,7 +264,7 @@ public class CareModelsActivity extends Activity {
                         refreshList();
                         tvDetail.setText("点击上方模型查看详情。");
                     } catch (Exception e) {
-                        toast("删除失败: " + e.getMessage());
+                        toast("删除失败: " + com.digitallife.ui.UiKit.safeMsg(e));
                     }
                 })
                 .setNegativeButton("取消", null)

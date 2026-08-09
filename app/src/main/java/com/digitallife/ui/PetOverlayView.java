@@ -57,6 +57,9 @@ public class PetOverlayView extends FrameLayout {
     private float lastTouchX, lastTouchY;
     private boolean live2DReady = false;
 
+    /** 可交互人偶区域（模型带）：水平居中 60%、垂直 20%~100%；区域外触摸透传给下层应用 */
+    private final android.graphics.Rect modelRect = new android.graphics.Rect();
+
     public PetOverlayView(Context context, Listener l) {
         super(context);
         this.listener = l;
@@ -189,6 +192,11 @@ public class PetOverlayView extends FrameLayout {
             lp.topMargin = (int) (h * 0.26f);
             bubbleContainer.setLayoutParams(lp);
         }
+        // 人偶区域（模型带）：水平居中 60%（20%~80%），垂直 20%~100%；与 Live2DGLView 共享同一 Rect
+        if (w > 0 && h > 0) {
+            modelRect.set((int) (w * 0.2f), (int) (h * 0.2f), (int) (w * 0.8f), h);
+            live2DView.setTouchRegion(modelRect);
+        }
     }
 
     private void handleModelTap(float x, float y) {
@@ -261,6 +269,20 @@ public class PetOverlayView extends FrameLayout {
     }
 
     public void clearBubble() {
+        mainHandler.post(() -> bubbleContainer.setVisibility(View.GONE));
+    }
+
+    /** 显示「思考中」状态气泡（不自动隐藏，直到 hideThinking） */
+    public void showThinking() {
+        mainHandler.post(() -> {
+            bubbleView.setText("正在思考…");
+            bubbleContainer.setVisibility(View.VISIBLE);
+            bubbleContainer.removeCallbacks(null);
+        });
+    }
+
+    /** 隐藏「思考中」状态气泡 */
+    public void hideThinking() {
         mainHandler.post(() -> bubbleContainer.setVisibility(View.GONE));
     }
 
@@ -423,6 +445,11 @@ public class PetOverlayView extends FrameLayout {
             clearBubble();
             return true;
         }
+        // 人偶区域外的事件（子 View 未消费回溯到此处）不处理，透传给下层窗口
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && !modelRect.contains((int) event.getX(), (int) event.getY())) {
+            return false;
+        }
         gestureDetector.onTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -449,6 +476,18 @@ public class PetOverlayView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            // 聊天输入框可见时，其范围放行给输入框本身（可聚焦输入），不参与穿透判定
+            if (chatInput.getVisibility() == View.VISIBLE
+                    && ev.getX() >= chatInput.getLeft() && ev.getX() <= chatInput.getRight()
+                    && ev.getY() >= chatInput.getTop() && ev.getY() <= chatInput.getBottom()) {
+                return false;
+            }
+            // 人偶区域（模型带）内拦截以支持拖动/点击；区域外放行，最终经事件回溯透传给下层应用
+            if (!modelRect.contains((int) ev.getX(), (int) ev.getY())) {
+                return false;
+            }
+        }
         return true;
     }
 }

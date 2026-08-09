@@ -25,6 +25,16 @@ public final class UiKit {
     private UiKit() {
     }
 
+    /** 异常消息兜底：getMessage() 为 null 时回退为异常类名，避免界面直显 "null" */
+    public static String safeMsg(Throwable t) {
+        if (t == null) return "未知错误";
+        String m = t.getMessage();
+        if (m == null || m.trim().isEmpty()) {
+            return t.getClass().getSimpleName();
+        }
+        return m;
+    }
+
     public static int dp(Context c, float v) {
         return Math.round(c.getResources().getDisplayMetrics().density * v);
     }

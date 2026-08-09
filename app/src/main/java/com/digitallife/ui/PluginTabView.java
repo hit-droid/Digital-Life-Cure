@@ -108,9 +108,16 @@ public class PluginTabView extends LinearLayout {
                 LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 30));
                 btnUninstall.setOnClickListener(v -> {
-                    pluginManager.uninstall(p.name);
-                    Toast.makeText(activity, "已卸载：" + p.name, Toast.LENGTH_SHORT).show();
-                    refresh();
+                    new android.app.AlertDialog.Builder(activity)
+                            .setTitle("卸载插件")
+                            .setMessage("确定卸载插件「" + p.name + "」吗？其注册的工具将被移除。")
+                            .setPositiveButton("卸载", (d, w) -> {
+                                pluginManager.uninstall(p.name);
+                                Toast.makeText(activity, "已卸载：" + p.name, Toast.LENGTH_SHORT).show();
+                                refresh();
+                            })
+                            .setNegativeButton("取消", null)
+                            .show();
                 });
                 row.addView(btnUninstall, ulp);
                 card.addView(row, UiKit.lp(activity, 4));
@@ -145,7 +152,7 @@ public class PluginTabView extends LinearLayout {
                 });
             } catch (Exception e) {
                 handler.post(() -> Toast.makeText(activity,
-                        "安装异常: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                        "安装异常: " + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_LONG).show());
             }
         }).start();
     }
@@ -222,9 +229,16 @@ public class PluginTabView extends LinearLayout {
                 LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 30));
                 btnDel.setOnClickListener(v -> {
-                    mcpManager.remove(c.id);
-                    Toast.makeText(activity, "已删除：" + c.name, Toast.LENGTH_SHORT).show();
-                    refresh();
+                    new android.app.AlertDialog.Builder(activity)
+                            .setTitle("删除 MCP 服务器")
+                            .setMessage("确定删除 MCP 服务器「" + c.name + "」吗？其注册的远程工具将一并注销。")
+                            .setPositiveButton("删除", (d, w) -> {
+                                mcpManager.remove(c.id);
+                                Toast.makeText(activity, "已删除：" + c.name, Toast.LENGTH_SHORT).show();
+                                refresh();
+                            })
+                            .setNegativeButton("取消", null)
+                            .show();
                 });
                 row.addView(btnDel, dlp);
                 card.addView(row, UiKit.lp(activity, 4));

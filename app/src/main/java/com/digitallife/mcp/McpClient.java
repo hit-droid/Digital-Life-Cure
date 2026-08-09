@@ -32,11 +32,18 @@ private final String endpoint;
     private final String headerName;
     private final String headerValue;
     private String sessionId;
+    /** 本客户端注册进全局注册表的工具名（带 namespace 前缀），disconnect 时精确注销 */
+    private final List<String> registeredToolNames = new ArrayList<>();
 
     public McpClient(String endpoint, String headerName, String headerValue) {
         this.endpoint = endpoint;
         this.headerName = headerName;
         this.headerValue = headerValue;
+    }
+
+    /** 服务器端点地址（用于删除时精确匹配已连接实例） */
+    public String getEndpoint() {
+        return endpoint;
     }
 
     // ============ 握手与工具发现 ============
@@ -48,11 +55,22 @@ private final String endpoint;
             List<McpToolSpec> specs = listTools();
             ToolRegistry reg = ToolRegistry.getInstance();
             for (McpToolSpec spec : specs) {
-                reg.register(new McpTool(this, namespace, spec));
+                McpTool tool = new McpTool(this, namespace, spec);
+                reg.register(tool);
+                registeredToolNames.add(tool.getName());
             }
         } catch (Exception e) {
-            throw new RuntimeException("MCP 连接失败: " + e.getMessage(), e);
+            throw new RuntimeException("MCP 连接失败: " + com.digitallife.ui.UiKit.safeMsg(e), e);
         }
+    }
+
+    /** 注销本客户端注册的所有工具（仅自己的，不动全局其它工具） */
+    public void unregisterTools() {
+        ToolRegistry reg = ToolRegistry.getInstance();
+        for (String name : registeredToolNames) {
+            reg.unregister(name);
+        }
+        registeredToolNames.clear();
     }
 
     private void initialize() throws Exception {

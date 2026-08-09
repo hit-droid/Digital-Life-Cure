@@ -310,9 +310,9 @@ public class CareAI {
                         "请总结这次模型安装和分析的最终结果：模型是否已成功安装可用、完整性问题、可用的动作。"));
                 doConverse();
             } catch (Exception e) {
-                postError("处理失败: " + e.getMessage());
-                postToolResult("install_model_from_zip", false, e.getMessage());
-                history.add(new LLMClient.ChatMessage("assistant", "处理失败: " + e.getMessage()));
+                postError("处理失败: " + com.digitallife.ui.UiKit.safeMsg(e));
+                postToolResult("install_model_from_zip", false, com.digitallife.ui.UiKit.safeMsg(e));
+                history.add(new LLMClient.ChatMessage("assistant", "处理失败: " + com.digitallife.ui.UiKit.safeMsg(e)));
                 if (gen == generation) running.set(false);
             }
         });
@@ -370,10 +370,8 @@ public class CareAI {
                         }
                     }
                     break;
-                case "repair_model":
-                    executor.repairModel(args.optString("modelName", ""));
-                    break;
                 case "fix_model_references":
+                case "repair_model":
                 case "restore_model":
                 case "write_model_file":
                     // model3.json 可能被改写：让 native 重新注册全部模型，修复立即生效
@@ -470,8 +468,8 @@ public class CareAI {
                     history.add(toolMsg);
                     persistHistory();
                 } catch (Exception e) {
-                    postToolResult(name, false, "执行失败: " + e.getMessage());
-                    history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + e.getMessage()));
+                    postToolResult(name, false, "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e));
+                    history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + com.digitallife.ui.UiKit.safeMsg(e)));
                 }
             }
 
@@ -578,7 +576,10 @@ public class CareAI {
                 || r.contains("无法") || r.contains("错误")) return false;
         return r.startsWith("✅") || r.startsWith("✔") || r.startsWith("成功")
                 || r.startsWith("已在") || r.startsWith("已") || r.startsWith("▶")
-                || r.startsWith("解压完成") || r.startsWith("模型");
+                || r.startsWith("解压完成") || r.startsWith("模型")
+                || r.startsWith("🔍") || r.startsWith("🔧") || r.startsWith("📁")
+                || r.startsWith("📋") || r.startsWith("⏰") || r.startsWith("🎬")
+                || r.startsWith("📄");
     }
 
     private void postDone(final String fullText) {

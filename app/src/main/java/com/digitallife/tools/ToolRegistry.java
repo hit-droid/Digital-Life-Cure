@@ -97,7 +97,7 @@ public class ToolRegistry {
         try {
             return tool.execute(args != null ? args : new JSONObject(), progress);
         } catch (Exception e) {
-            return "工具执行失败: " + name + " -> " + (e.getMessage() == null ? e.toString() : e.getMessage());
+            return "工具执行失败: " + name + " -> " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 }

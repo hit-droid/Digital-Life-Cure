@@ -68,7 +68,7 @@ public class ModelManager {
             return importFromStream(ctx, uri);
         } catch (Exception e) {
             Log.e(TAG, "import failed", e);
-            return new ImportResult(false, "导入失败：" + e.getMessage(), null);
+            return new ImportResult(false, "导入失败：" + com.digitallife.ui.UiKit.safeMsg(e), null);
         }
     }
 
@@ -161,7 +161,7 @@ public class ModelManager {
                     targetDir.getName());
         } catch (Exception ex) {
             deleteRecursively(targetDir);
-            return new ImportResult(false, "导入失败：" + ex.getMessage(), null);
+            return new ImportResult(false, "导入失败：" + com.digitallife.ui.UiKit.safeMsg(ex), null);
         }
     }
 
@@ -181,10 +181,15 @@ public class ModelManager {
         return size;
     }
 
-    /** 根目录前缀下的相对路径 */
+    /** 校验 zip 条目路径安全：必须在根目录前缀下，且不含路径穿越段（Zip Slip） */
     private static boolean isUnderRoot(String name, String rootPrefix) {
-        if (rootPrefix.isEmpty()) return true;
-        return name.startsWith(rootPrefix + "/");
+        if (name == null || name.isEmpty()) return false;
+        if (name.startsWith("/") || name.contains("\\")) return false;
+        if (!rootPrefix.isEmpty() && !name.startsWith(rootPrefix + "/")) return false;
+        for (String seg : name.split("/")) {
+            if (seg.equals("..") || seg.isEmpty()) return false;
+        }
+        return true;
     }
 
     private static String relPathUnder(String name, String rootPrefix) {

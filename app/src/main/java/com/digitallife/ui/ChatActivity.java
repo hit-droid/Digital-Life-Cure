@@ -450,7 +450,7 @@ public class ChatActivity extends Activity {
             }
             return "\n\n[附件 " + name + " 内容如下]\n" + content;
         } catch (Exception e) {
-            return "\n\n[附件 " + name + "]（读取失败：" + e.getMessage() + "）";
+            return "\n\n[附件 " + name + "]（读取失败：" + com.digitallife.ui.UiKit.safeMsg(e) + "）";
         }
     }
 
@@ -822,7 +822,7 @@ public class ChatActivity extends Activity {
                             f.getAbsolutePath()));
                 } catch (Exception e) {
                     runOnUiThread(() -> Toast.makeText(ChatActivity.this,
-                            "读取文件失败：" + e.getMessage(), Toast.LENGTH_SHORT).show());
+                            "读取文件失败：" + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_SHORT).show());
                 }
             }).start();
         }

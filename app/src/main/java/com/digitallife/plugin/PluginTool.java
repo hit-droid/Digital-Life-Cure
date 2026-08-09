@@ -89,8 +89,26 @@ public class PluginTool implements Tool {
             Process proc = Runtime.getRuntime().exec(cmd);
             BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
             StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) output.append(line).append('\n');
+            long deadline = System.currentTimeMillis() + 30000;
+            while (isAliveCompat(proc)) {
+                while (reader.ready()) {
+                    String l = reader.readLine();
+                    if (l == null) break;
+                    output.append(l).append('\n');
+                }
+                if (System.currentTimeMillis() > deadline) {
+                    proc.destroy();
+                    return "error: 命令执行超时（30 秒），已终止";
+                }
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            String l;
+            while ((l = reader.readLine()) != null) output.append(l).append('\n');
             int exit = proc.waitFor();
             return "exit=" + exit + "\n" + output.toString().trim();
         }
@@ -100,6 +118,16 @@ public class PluginTool implements Tool {
         }
 
         return "error: unknown executor: " + executor;
+    }
+
+    /** API 21 兼容的进程存活判断：exitValue 在进程未结束时抛 IllegalThreadStateException */
+    private static boolean isAliveCompat(Process proc) {
+        try {
+            proc.exitValue();
+            return false;
+        } catch (IllegalThreadStateException e) {
+            return true;
+        }
     }
 
     /**

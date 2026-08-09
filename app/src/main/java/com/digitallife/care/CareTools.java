@@ -103,7 +103,7 @@ public class CareTools {
         for (String r : required) {
             JSONObject p = new JSONObject();
             p.put("type", "string");
-            p.put("description", r);
+            p.put("description", paramDescription(r));
             props.put(r, p);
         }
         params.put("properties", props);
@@ -115,9 +115,39 @@ public class CareTools {
         return schema;
     }
 
+    /** 参数名 → 中文含义/格式说明，帮助 LLM 正确传参 */
+    private static String paramDescription(String name) {
+        switch (name) {
+            case "modelName": return "模型目录名，先通过 list_models 查看可用模型";
+            case "zipPath": return "zip 文件的绝对路径";
+            case "path": return "模型目录内的相对路径，如 foo.model3.json 或 sub/bar.png";
+            case "content": return "文件内容（JSON 文本或纯文本）";
+            case "motionName": return "动作文件名，如 idle.motion3.json 或 Idle（自动补后缀）";
+            case "duration": return "动作时长（秒），浮点数如 2.0 或 4.0";
+            case "curves": return "参数曲线数组 JSON，格式 [{\"id\":\"ParamAngleX\",\"target\":\"Parameter\",\"startValue\":0,\"endValue\":30}]";
+            case "edits": return "编辑操作 JSON，可选字段: duration(浮点数) loop(true/false) addCurve(对象) removeCurveId(字符串)";
+            case "name": return "名称（唯一标识）";
+            case "steps": return "步骤数组 JSON，格式 [{\"tool\":\"工具名\",\"args\":{...}}]";
+            case "cronExpr": return "cron 表达式，如 '0 0 * * *' 每天零点";
+            case "workflowName": return "已创建的工作流名称";
+            case "action": return "动作名，如 Idle/TapBody/拍手/挥手";
+            default: return name;
+        }
+    }
+
     // ============ 工具执行 ============
 
-    public String execute(String toolName, JSONObject args) throws Exception {
+    public String execute(String toolName, JSONObject args) {
+        try {
+            return dispatch(toolName, args);
+        } catch (Exception e) {
+            // 兜底：任何工具异常都不上抛给 UI 崩溃，转成友好提示
+            return "❌ 工具执行异常: " + com.digitallife.ui.UiKit.safeMsg(e)
+                    + "\n请检查参数格式是否正确后重试。";
+        }
+    }
+
+    private String dispatch(String toolName, JSONObject args) throws Exception {
         switch (toolName) {
             case "inspect_zip": return inspectZip(args.optString("zipPath", ""));
             case "list_models": return listModels();
@@ -203,7 +233,7 @@ public class CareTools {
             sb.append(buildFileTree(targetDir, "", 0, 2));
             return sb.toString();
         } catch (Exception e) {
-            return "解压失败: " + e.getMessage();
+            return "解压失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -370,7 +400,7 @@ public class CareTools {
                     }
                 }
             } catch (Exception e) {
-                report.append("   ⚠ 解析 model3.json 失败: ").append(e.getMessage()).append("\n");
+                report.append("   ⚠ 解析 model3.json 失败: ").append(com.digitallife.ui.UiKit.safeMsg(e)).append("\n");
             }
         } else if (modelJson != null) {
             report.append("✅ 模型定义: ").append(modelJson.getName()).append(" (Cubism 2.x)\n");
@@ -522,7 +552,7 @@ public class CareTools {
             sb.append("   现在可以在桌宠中切换到" ).append(targetDir.getName()).append("了。\n");
             return sb.toString();
         } catch (Exception e) {
-            return "安装失败: " + e.getMessage();
+            return "安装失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -700,7 +730,7 @@ public class CareTools {
             }
             return "📄 " + path + " (" + formatSize(f.length()) + "):\n" + content;
         } catch (Exception e) {
-            return "读取失败: " + e.getMessage();
+            return "读取失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -722,7 +752,7 @@ public class CareTools {
                     new JSONObject(c);
                 }
             } catch (Exception e) {
-                return "❌ JSON 格式不合法，未写入: " + e.getMessage();
+                return "❌ JSON 格式不合法，未写入: " + com.digitallife.ui.UiKit.safeMsg(e);
             }
         }
         File parent = f.getParentFile();
@@ -866,7 +896,7 @@ public class CareTools {
         try {
             copyRecursive(dir, target);
         } catch (Exception e) {
-            return "备份失败: " + e.getMessage();
+            return "备份失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
         ctx.getSharedPreferences("care_backups", Context.MODE_PRIVATE).edit()
                 .putString(dir.getName(), target.getAbsolutePath()).apply();
@@ -884,8 +914,9 @@ public class CareTools {
             File[] bks = backupsRoot.listFiles((d, n) -> n.toLowerCase(Locale.ROOT)
                     .startsWith(dir.getName().toLowerCase(Locale.ROOT)));
             if (bks != null && bks.length > 0) {
+                // 按修改时间降序（最新在前）
                 Arrays.sort(bks, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
-                backupPath = bks[bks.length - 1].getAbsolutePath();
+                backupPath = bks[0].getAbsolutePath();
             }
         }
         if (backupPath == null) {
@@ -898,7 +929,7 @@ public class CareTools {
             if (!dir.mkdirs()) throw new Exception("无法创建模型目录");
             copyRecursive(backup, dir);
         } catch (Exception e) {
-            return "恢复失败: " + e.getMessage();
+            return "恢复失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
         return "✅ 已从备份恢复模型「" + dir.getName() + "」。\n若桌宠正在运行，可重新启动桌宠让恢复生效。";
     }
@@ -1072,7 +1103,7 @@ public class CareTools {
             }
             return sb.toString();
         } catch (Exception e) {
-            return "解析动作失败: " + e.getMessage();
+            return "解析动作失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -1266,7 +1297,7 @@ public class CareTools {
                 String r = execute(tool, args);
                 result.append("✅ 成功\n").append(r).append("\n");
             } catch (Exception e) {
-                result.append("❌ 失败: ").append(e.getMessage()).append("\n");
+                result.append("❌ 失败: ").append(com.digitallife.ui.UiKit.safeMsg(e)).append("\n");
                 return result.toString();
             }
         }
@@ -1288,7 +1319,7 @@ public class CareTools {
             schedulePrefs.edit().putString(name, task.toString()).apply();
             return "✅ 已添加定时任务「" + name + "」\n  cron: " + cronExpr + "\n  执行工作流: " + workflowName;
         } catch (Exception e) {
-            return "添加定时任务失败: " + e.getMessage();
+            return "添加定时任务失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
