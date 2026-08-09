@@ -86,11 +86,30 @@ public class McpServerManager {
     }
 
     public void remove(String id) {
+        McpServerConfig removed = null;
         List<McpServerConfig> keep = new ArrayList<>();
         for (McpServerConfig c : list()) {
-            if (!c.id.equals(id)) keep.add(c);
+            if (c.id.equals(id)) {
+                removed = c;
+            } else {
+                keep.add(c);
+            }
         }
         persist(keep);
+        // 同步断开已连接实例并注销其注册的工具，避免删除后工具残留
+        if (removed != null && removed.endpoint != null) {
+            java.util.Iterator<McpClient> it = connected.iterator();
+            while (it.hasNext()) {
+                McpClient cl = it.next();
+                if (removed.endpoint.equals(cl.getEndpoint())) {
+                    try {
+                        cl.unregisterTools();
+                    } catch (Exception ignored) {
+                    }
+                    it.remove();
+                }
+            }
+        }
     }
 
     private void persist(List<McpServerConfig> list) {
@@ -135,10 +154,15 @@ public class McpServerManager {
         }
     }
 
-    /** 断开并移除所有已注册的 MCP 工具 */
+    /** 断开并移除所有 MCP 工具（仅注销 MCP 注册的工具，保留内置/插件工具） */
     public void disconnectAll() {
+        for (McpClient c : connected) {
+            try {
+                c.unregisterTools();
+            } catch (Exception ignored) {
+            }
+        }
         connected.clear();
-        com.digitallife.tools.ToolRegistry.getInstance().unregisterAll();
     }
 
     public String newId() {

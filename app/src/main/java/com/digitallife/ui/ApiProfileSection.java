@@ -543,7 +543,12 @@ public class ApiProfileSection {
         row.addView(btnEdit);
         Button btnDel = smallKeyButton("删除");
         btnDel.setTextColor(UiKit.color(activity, R.color.danger));
-        btnDel.setOnClickListener(v -> removePoolKey(key));
+        btnDel.setOnClickListener(v -> new android.app.AlertDialog.Builder(activity)
+                .setTitle("删除 Key")
+                .setMessage("确定从密钥池移除该 Key 吗？移除后需重新添加才能使用。")
+                .setPositiveButton("删除", (d, w) -> removePoolKey(key))
+                .setNegativeButton("取消", null)
+                .show());
         row.addView(btnDel);
         return row;
     }

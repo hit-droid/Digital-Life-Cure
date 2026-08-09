@@ -148,7 +148,7 @@ public class SettingsTabView extends LinearLayout {
             try {
                 activity.startActivity(new Intent(activity, CareModelsActivity.class));
             } catch (Exception e) {
-                Toast.makeText(activity, "无法打开形象管理: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(activity, "无法打开形象管理: " + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -195,9 +195,16 @@ public class SettingsTabView extends LinearLayout {
 
         Button btnClear = UiKit.button(activity, cChat, "清空对话记忆");
         btnClear.setOnClickListener(v -> {
-            AICore ai = getAiCore();
-            if (ai != null) ai.getMemory().clearContext();
-            Toast.makeText(activity, "记忆已清空", Toast.LENGTH_SHORT).show();
+            new android.app.AlertDialog.Builder(activity)
+                    .setTitle("清空对话记忆")
+                    .setMessage("确定清空她的全部对话记忆吗？此操作不可撤销。")
+                    .setPositiveButton("清空", (d, w) -> {
+                        AICore ai = getAiCore();
+                        if (ai != null) ai.getMemory().clearContext();
+                        Toast.makeText(activity, "记忆已清空", Toast.LENGTH_SHORT).show();
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
         });
 
         // ---------- 开发者选项（折叠） ----------

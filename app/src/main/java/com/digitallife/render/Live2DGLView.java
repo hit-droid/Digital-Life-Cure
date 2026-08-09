@@ -26,6 +26,14 @@ public class Live2DGLView extends GLSurfaceView {
     private Listener listener;
     private boolean ready = false;
 
+    /** 可交互触摸区域（相对本 View 坐标）；区域外触摸不消费、不触发模型交互，用于悬浮窗触摸穿透 */
+    private android.graphics.Rect touchRegion;
+
+    /** 设置可交互触摸区域；传 null 表示整个 View 都可交互 */
+    public void setTouchRegion(android.graphics.Rect r) {
+        this.touchRegion = r;
+    }
+
     /** 物理弹簧控制器（AI 行为参数接管通道） */
     public PhysicalController getPhysics() {
         return physics;
@@ -128,6 +136,12 @@ public class Live2DGLView extends GLSurfaceView {
 
         final float x = event.getX();
         final float y = event.getY();
+
+        // 触摸穿透：区域外（模型带外）不消费、不触发 native 触摸与点击回调
+        if (touchRegion != null && event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && !touchRegion.contains((int) x, (int) y)) {
+            return false;
+        }
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:

@@ -74,7 +74,7 @@ public class CareAutomation {
             try {
                 runHealthCheck();
             } catch (Exception e) {
-                if (report != null) report.onAutoReport("体检出错: " + e.getMessage());
+                if (report != null) report.onAutoReport("体检出错: " + com.digitallife.ui.UiKit.safeMsg(e));
             }
             handler.postDelayed(this, HEALTH_INTERVAL_MS);
         }
@@ -174,7 +174,7 @@ public class CareAutomation {
                     args.put("name", workflowName);
                     result = executor.getTools().execute("run_workflow", args);
                 } catch (Exception e) {
-                    result = "执行失败: " + e.getMessage();
+                    result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
                 }
                 careAI.logAutomationEvent("定时任务「" + name + "」触发，执行工作流「" + workflowName + "」:\n" + result);
                 if (report != null) report.onAutoReport("⏰ 定时任务「" + name + "」已触发\n" + result);

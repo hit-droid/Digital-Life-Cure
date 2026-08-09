@@ -82,7 +82,7 @@ public class STTEngine {
         });
         } catch (Exception e) {
             recognizer = null;
-            lastError = "语音识别服务不可用：" + e.getMessage();
+            lastError = "语音识别服务不可用：" + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 

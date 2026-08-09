@@ -73,68 +73,36 @@ public class PluginManager {
 
     /** 从 zip 输入流安装插件 */
     public InstallResult install(InputStream zipStream) {
+        File tempZip = null;
         try {
-            // 先读 zip 到临时文件，支持两遍遍历
-            File tempDir = new File(ctx.getCacheDir(), "plugin_install_" + System.nanoTime());
-            tempDir.mkdirs();
-            ZipInputStream zis = new ZipInputStream(zipStream);
-            ZipEntry entry;
-            long totalSize = 0;
-            String pluginDirName = null;
-            byte[] buf = new byte[8192];
-
-            // 第一遍：找 plugin.json，确定插件名
-            String manifestPath = null;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (entry.isDirectory()) continue;
-                String name = entry.getName();
-                totalSize += entry.getSize();
-                if (totalSize > MAX_ZIP_SIZE) {
-                    deleteDir(tempDir);
-                    return new InstallResult(false, "插件包过大（超过 10MB）", null);
-                }
-                if (name.endsWith("plugin.json")) {
-                    manifestPath = name;
-                    // 插件目录 = plugin.json 所在目录的上一级或同级
-                    int idx = name.lastIndexOf('/');
-                    pluginDirName = idx > 0 ? name.substring(0, idx) : "";
-                    // 只取第一级目录名
-                    idx = pluginDirName.indexOf('/');
-                    if (idx > 0) pluginDirName = pluginDirName.substring(0, idx);
-                    if (pluginDirName.isEmpty()) pluginDirName = name.replace("/plugin.json", "").replace("plugin.json", "");
-                    if (pluginDirName.isEmpty()) pluginDirName = "plugin_" + System.currentTimeMillis();
+            // 先把输入流整体落盘，installFromUri 需要对 zip 做两遍遍历
+            tempZip = new File(ctx.getCacheDir(), "plugin_dl_" + System.nanoTime() + ".zip");
+            try (OutputStream os = new java.io.FileOutputStream(tempZip)) {
+                byte[] buf = new byte[8192];
+                int n;
+                long total = 0;
+                while ((n = zipStream.read(buf)) != -1) {
+                    total += n;
+                    if (total > MAX_ZIP_SIZE) {
+                        return new InstallResult(false, "插件包过大（超过 10MB）", null);
+                    }
+                    os.write(buf, 0, n);
                 }
             }
-            zis.close();
-
-            if (manifestPath == null) {
-                deleteDir(tempDir);
-                return new InstallResult(false, "未找到 plugin.json", null);
+            try (FileInputStream fis = new FileInputStream(tempZip)) {
+                String pluginDir = detectPluginName(fis);
+                fis.close();
+                if (pluginDir == null) {
+                    return new InstallResult(false, "未找到 plugin.json", null);
+                }
+                try (FileInputStream fis2 = new FileInputStream(tempZip)) {
+                    return installFromUri(pluginDir, "plugin.json", fis2);
+                }
             }
-            // 清理目录名中的非法字符
-            pluginDirName = pluginDirName.replaceAll("[^a-zA-Z0-9_-]", "_");
-
-            // 第二遍：解压到 files/plugins/<name>/
-            File pluginsDir = getPluginsDir();
-            File targetDir = new File(pluginsDir, pluginDirName);
-            if (targetDir.exists()) {
-                deleteDir(targetDir);
-            }
-            targetDir.mkdirs();
-
-            zis = new ZipInputStream(new FileInputStream(tempDir.listFiles() != null && tempDir.listFiles().length > 0
-                    ? tempDir.listFiles()[0] : new File("x")));
-            // 重新打开zip流
-            ZipInputStream zis2 = new ZipInputStream(zipStream);
-            // 实际上我们缓存了zip流到临时文件
-            File tempZip = new File(tempDir, "plugin.zip");
-            // 把原始zip保存到临时文件
-            // 但我们已经消费了zipStream，需要重新打开
-            // 简化：用临时文件方式
-            deleteDir(tempDir);
-            return installFromUri(pluginDirName, manifestPath, zipStream);
         } catch (Exception e) {
-            return new InstallResult(false, "安装失败: " + e.getMessage(), null);
+            return new InstallResult(false, "安装失败: " + com.digitallife.ui.UiKit.safeMsg(e), null);
+        } finally {
+            if (tempZip != null) tempZip.delete();
         }
     }
 
@@ -243,7 +211,7 @@ public class PluginManager {
                 tempZip.delete();
             }
         } catch (Exception e) {
-            return new InstallResult(false, "安装失败: " + e.getMessage(), null);
+            return new InstallResult(false, "安装失败: " + com.digitallife.ui.UiKit.safeMsg(e), null);
         }
     }
 

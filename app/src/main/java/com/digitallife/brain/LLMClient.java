@@ -241,7 +241,7 @@ public class LLMClient {
                 }
                 listener.onDone(full.toString());
             } catch (Exception ex) {
-                listener.onError(ex.getMessage());
+                listener.onError(com.digitallife.ui.UiKit.safeMsg(ex));
             } finally {
                 if (conn != null) conn.disconnect();
             }
@@ -289,11 +289,14 @@ public class LLMClient {
                 String resp = readStream(conn.getInputStream());
                 JSONObject o = new JSONObject(resp);
                 JSONArray choices = o.optJSONArray("choices");
-                String content = (choices == null || choices.length() == 0) ? ""
-                        : choices.getJSONObject(0).optJSONObject("message").optString("content");
+                String content = "";
+                if (choices != null && choices.length() > 0) {
+                    JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+                    if (msg != null) content = msg.optString("content");
+                }
                 cb.onResult(content, null);
             } catch (Exception ex) {
-                cb.onResult(null, ex.getMessage());
+                cb.onResult(null, com.digitallife.ui.UiKit.safeMsg(ex));
             } finally {
                 if (conn != null) conn.disconnect();
             }
@@ -382,7 +385,7 @@ public class LLMClient {
             }
             listener.onDone(content);
         } catch (Exception ex) {
-            listener.onError(ex.getMessage());
+            listener.onError(com.digitallife.ui.UiKit.safeMsg(ex));
         } finally {
             if (conn != null) conn.disconnect();
         }
@@ -489,7 +492,7 @@ public class LLMClient {
             } catch (Exception ex) {
                 long cost = System.currentTimeMillis() - t0;
                 cb.onResult(null, "连接失败（" + cost + "ms）："
-                        + ex.getClass().getSimpleName() + " " + ex.getMessage());
+                        + ex.getClass().getSimpleName() + " " + com.digitallife.ui.UiKit.safeMsg(ex));
             } finally {
                 if (conn != null) conn.disconnect();
             }

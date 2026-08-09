@@ -687,8 +687,12 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onThinking(boolean thinking) {
-        if (overlayView != null && thinking) {
+        if (overlayView == null) return;
+        if (thinking) {
             overlayView.setExpression("F01");
+            overlayView.showThinking();
+        } else {
+            overlayView.hideThinking();
         }
     }
 

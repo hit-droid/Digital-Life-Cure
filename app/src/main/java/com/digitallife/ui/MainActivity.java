@@ -273,7 +273,7 @@ public class MainActivity extends Activity {
             i.putExtra("model_name", modelName);
             startActivity(i);
         } catch (Exception e) {
-            Toast.makeText(this, "无法打开对话: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "无法打开对话: " + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_SHORT).show();
         }
     }
 

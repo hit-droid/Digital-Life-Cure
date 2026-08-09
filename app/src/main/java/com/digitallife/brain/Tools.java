@@ -149,7 +149,7 @@ public class Tools {
                     String res = ex.execute(args != null ? args : new JSONObject());
                     cb.onResult(name, args, res, null);
                 } catch (Exception e) {
-                    cb.onResult(name, args, null, e.getMessage());
+                    cb.onResult(name, args, null, com.digitallife.ui.UiKit.safeMsg(e));
                 }
                 return;
             }

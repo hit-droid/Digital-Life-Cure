@@ -124,7 +124,7 @@ public class CareExecutor {
         try {
             return tools.execute("list_models", new JSONObject());
         } catch (Exception e) {
-            return "列出模型失败: " + e.getMessage();
+            return "列出模型失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -134,7 +134,7 @@ public class CareExecutor {
             args.put("modelName", modelName);
             return tools.execute("analyze_model", args);
         } catch (Exception e) {
-            return "分析模型失败: " + e.getMessage();
+            return "分析模型失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -144,7 +144,7 @@ public class CareExecutor {
             args.put("zipPath", zipPath);
             return tools.execute("install_model_from_zip", args);
         } catch (Exception e) {
-            return "安装模型失败: " + e.getMessage();
+            return "安装模型失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -154,7 +154,7 @@ public class CareExecutor {
             args.put("modelName", modelName);
             return tools.execute("repair_model", args);
         } catch (Exception e) {
-            return "修复模型失败: " + e.getMessage();
+            return "修复模型失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -164,7 +164,7 @@ public class CareExecutor {
             args.put("modelName", modelName);
             return tools.execute("list_motions", args);
         } catch (Exception e) {
-            return "列出动作失败: " + e.getMessage();
+            return "列出动作失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -177,7 +177,7 @@ public class CareExecutor {
             args.put("curves", curves);
             return tools.execute("generate_motion", args);
         } catch (Exception e) {
-            return "创建动作失败: " + e.getMessage();
+            return "创建动作失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 
@@ -189,7 +189,7 @@ public class CareExecutor {
             args.put("edits", edits);
             return tools.execute("edit_motion", args);
         } catch (Exception e) {
-            return "修改动作失败: " + e.getMessage();
+            return "修改动作失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
     }
 

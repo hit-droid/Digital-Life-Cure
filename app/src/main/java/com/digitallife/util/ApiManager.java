@@ -26,8 +26,8 @@ public class ApiManager {
     private static final String KEY_CURRENT = "_current";
 
     private final SharedPreferences sp;
-    /** 密钥池轮换游标（跨 profile 全局递增，保证逐次轮换） */
-    private final AtomicInteger keyCursor = new AtomicInteger(0);
+    /** 密钥池轮换游标（静态跨实例递增，保证每次 new ApiManager 后仍能逐次轮换） */
+    private static final AtomicInteger keyCursor = new AtomicInteger(0);
 
     public ApiManager(Context ctx) {
         sp = ctx.getApplicationContext().getSharedPreferences(PREF, Context.MODE_PRIVATE);
