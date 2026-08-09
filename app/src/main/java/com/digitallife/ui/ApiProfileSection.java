@@ -26,11 +26,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 统一「模型配置」管理（对齐 Operit 模型配置页）：
- * - 顶部：当前配置快捷切换（点击弹出列表）+「＋新建」只填名称
- * - 操作行：重命名 / 删除 / 测试连接
- * - 编辑表单：配置名称、API Base URL、模型名、主 API Key（单行，失焦脱敏）
- * - 密钥池（折叠）：启用多个 Key 后，每个 Key 单独一行显示名称/状态，可添加/编辑/删除
+ * 统一「模型配置」管理（对齐 Operit 模型配置页排版）：
+ *
+ * 卡片一「选择模型配置」：
+ *   - 标题行：左侧标题 + 右侧「＋ 新建」按钮（同排，新建只填名称）
+ *   - 当前配置选择器：整行可点，显示当前配置名 + ▾，点击弹出列表一键快捷切换
+ *   - 操作行：重命名 / 删除 / 测试连接
+ *
+ * 卡片二「API 设置」：
+ *   - 每个字段独立一行，带字段标签：配置名称 / API Base URL / 模型名 / API Key（失焦脱敏）
+ *   - 密钥池折叠：「启用多个 Key」开关 → 每个 Key 单独一行（后4位标识 + 编辑/删除）+「＋ 添加 Key」
+ *   - 「保存此配置」按钮 + 结果提示
+ *
  * 保存的配置互不覆盖，随时一键切换。
  */
 public class ApiProfileSection {
@@ -40,7 +47,7 @@ public class ApiProfileSection {
     private final Settings settings;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private final LinearLayout card;
+    private final LinearLayout root;
     private final Button btnScopeChat, btnScopeCare;
     private final TextView tvCurrent;
     private final EditText etName, etBase, etKey, etModel;
@@ -60,14 +67,32 @@ public class ApiProfileSection {
         this.activity = (Activity) ctx;
         this.apiManager = new ApiManager(ctx);
         this.settings = new Settings(ctx);
-        card = UiKit.card(ctx, root, "模型配置");
+        this.root = root;
 
-        TextView hint = new TextView(ctx);
-        hint.setText("可保存多套配置并在对话页/设置页一键切换；每套配置可启用密钥池，多个 Key 请求时自动轮换。");
-        hint.setTextSize(13f);
-        hint.setLineSpacing(2f, 1f);
-        hint.setTextColor(UiKit.color(ctx, R.color.text_secondary));
-        card.addView(hint, UiKit.lp(ctx, 0));
+        // ==================== 卡片一：选择模型配置 ====================
+        LinearLayout cardSel = sectionCard("选择模型配置");
+        LinearLayout titleRow = new LinearLayout(ctx);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = new TextView(ctx);
+        title.setText("选择模型配置");
+        title.setTextSize(15f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(UiKit.color(ctx, R.color.brand));
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button btnNew = new Button(ctx);
+        btnNew.setText("＋ 新建");
+        btnNew.setTextSize(13f);
+        btnNew.setAllCaps(false);
+        btnNew.setTextColor(UiKit.color(ctx, R.color.brand));
+        btnNew.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnNew.setPadding(UiKit.dp(ctx, 12), 0, UiKit.dp(ctx, 12), 0);
+        UiKit.pressScale(btnNew);
+        btnNew.setOnClickListener(v -> startNewProfile());
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(ctx, 36));
+        titleRow.addView(btnNew, nlp);
+        cardSel.addView(titleRow, UiKit.lp(ctx, 0));
 
         // 用途 Tab（对话大脑 / 护理大脑）
         LinearLayout scopeRow = new LinearLayout(ctx);
@@ -75,28 +100,22 @@ public class ApiProfileSection {
         scopeRow.setGravity(Gravity.CENTER_VERTICAL);
         btnScopeChat = tabButton("对话大脑", ApiManager.SCOPE_CHAT);
         btnScopeCare = tabButton("护理大脑", ApiManager.SCOPE_CARE);
-        scopeRow.addView(btnScopeChat, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 42), 1));
-        scopeRow.addView(btnScopeCare, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 42), 1));
-        card.addView(scopeRow, UiKit.lp(ctx, 8));
+        scopeRow.addView(btnScopeChat, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 40), 1));
+        scopeRow.addView(btnScopeCare, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 40), 1));
+        cardSel.addView(scopeRow, UiKit.lp(ctx, 10));
 
-        // 当前配置快捷切换（点击弹列表）+ 新建
-        LinearLayout pickerRow = new LinearLayout(ctx);
-        pickerRow.setOrientation(LinearLayout.HORIZONTAL);
-        pickerRow.setGravity(Gravity.CENTER_VERTICAL);
+        // 当前配置选择器（整行可点，点击弹出列表快捷切换）
         tvCurrent = new TextView(ctx);
-        tvCurrent.setTextSize(13f);
-        tvCurrent.setTextColor(UiKit.color(ctx, R.color.brand));
+        tvCurrent.setTextSize(14f);
+        tvCurrent.setTextColor(UiKit.color(ctx, R.color.text_primary));
         tvCurrent.setGravity(Gravity.CENTER_VERTICAL);
-        tvCurrent.setPadding(0, UiKit.dp(ctx, 10), 0, UiKit.dp(ctx, 10));
+        tvCurrent.setPadding(UiKit.dp(ctx, 14), UiKit.dp(ctx, 12), UiKit.dp(ctx, 14), UiKit.dp(ctx, 12));
+        tvCurrent.setBackgroundResource(R.drawable.bg_input);
         tvCurrent.setOnClickListener(v -> showPicker());
-        pickerRow.addView(tvCurrent, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button btnNew = UiKit.secondaryButton(ctx, pickerRow, "＋ 新建配置");
-        LinearLayout.LayoutParams nlp = (LinearLayout.LayoutParams) btnNew.getLayoutParams();
-        nlp.topMargin = 0;
-        btnNew.setOnClickListener(v -> startNewProfile());
-        card.addView(pickerRow, UiKit.lp(ctx, 0));
+        UiKit.ripple(ctx, tvCurrent, tvCurrent.getBackground(), 8);
+        cardSel.addView(tvCurrent, UiKit.lp(ctx, 8));
 
-        // 操作行：重命名 / 测试连接 / 删除
+        // 操作行：重命名 / 删除 / 测试连接
         LinearLayout opsRow = new LinearLayout(ctx);
         opsRow.setOrientation(LinearLayout.HORIZONTAL);
         Button btnRename = opButton("重命名");
@@ -109,13 +128,15 @@ public class ApiProfileSection {
         opsRow.addView(btnRename, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 36), 1));
         opsRow.addView(btnTest, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 36), 1));
         opsRow.addView(btnDel, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 36), 1));
-        card.addView(opsRow, UiKit.lp(ctx, 4));
+        cardSel.addView(opsRow, UiKit.lp(ctx, 6));
 
-        // 编辑表单：名称 / Base URL / 模型名 / 主 API Key
-        etName = UiKit.input(ctx, card, "配置名称（如：主用 DeepSeek）", "");
-        etBase = UiKit.input(ctx, card, "API Base URL（如 https://api.deepseek.com/v1）", "");
-        etModel = UiKit.input(ctx, card, "模型名（如 deepseek-chat）", "");
-        etKey = UiKit.input(ctx, card, "API Key", "");
+        // ==================== 卡片二：API 设置 ====================
+        LinearLayout cardApi = sectionCard("API 设置");
+
+        etName = fieldInput(cardApi, "配置名称", "如：主用 DeepSeek");
+        etBase = fieldInput(cardApi, "API Base URL", "如 https://api.deepseek.com/v1");
+        etModel = fieldInput(cardApi, "模型名", "如 deepseek-chat");
+        etKey = fieldInput(cardApi, "API Key", "粘贴你的 Key");
         etKey.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         etKey.setTransformationMethod(new PasswordTransformationMethod());
         etKey.setOnFocusChangeListener((v, hasFocus) -> {
@@ -123,11 +144,11 @@ public class ApiProfileSection {
         });
 
         // 密钥池（折叠）
-        swKeyPool = UiKit.switchRow(ctx, card, "启用多个 Key（密钥池）", false);
+        swKeyPool = UiKit.switchRow(ctx, cardApi, "启用多个 Key（密钥池）", false);
         keyPoolBox = new LinearLayout(ctx);
         keyPoolBox.setOrientation(LinearLayout.VERTICAL);
         keyPoolBox.setVisibility(View.GONE);
-        card.addView(keyPoolBox, UiKit.lp(ctx, 4));
+        cardApi.addView(keyPoolBox, UiKit.lp(ctx, 4));
         swKeyPool.setOnCheckedChangeListener((b, checked) -> {
             keyPoolBox.setVisibility(checked ? View.VISIBLE : View.GONE);
             if (checked) renderKeyPool();
@@ -142,7 +163,7 @@ public class ApiProfileSection {
         Button btnAddKey = UiKit.secondaryButton(ctx, keyPoolBox, "＋ 添加 Key");
         btnAddKey.setOnClickListener(v -> showAddKeyDialog(null));
 
-        Button btnSave = UiKit.button(ctx, card, "保存此配置");
+        Button btnSave = UiKit.button(ctx, cardApi, "保存此配置");
         btnSave.setOnClickListener(v -> saveProfile());
 
         tvResult = new TextView(ctx);
@@ -150,10 +171,41 @@ public class ApiProfileSection {
         tvResult.setLineSpacing(2f, 1f);
         tvResult.setPadding(0, UiKit.dp(ctx, 6), 0, 0);
         tvResult.setTextColor(UiKit.color(ctx, R.color.text_secondary));
-        tvResult.setHint("填写后点「保存此配置」；点「＋新建配置」可另存一套而不覆盖现有。");
-        card.addView(tvResult, UiKit.lp(ctx, 0));
+        tvResult.setHint("填写后点「保存此配置」；点「＋ 新建」可另存一套而不覆盖现有。");
+        cardApi.addView(tvResult, UiKit.lp(ctx, 0));
 
         switchScope(ApiManager.SCOPE_CHAT);
+    }
+
+    // ==================== 布局工具 ====================
+
+    /** 独立卡片容器（顶部外边距 12dp） */
+    private LinearLayout sectionCard(String title) {
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(UiKit.dp(activity, 16), UiKit.dp(activity, 14),
+                UiKit.dp(activity, 16), UiKit.dp(activity, 16));
+        box.setElevation(UiKit.dp(activity, 2));
+        box.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = UiKit.dp(activity, 12);
+        root.addView(box, blp);
+        return box;
+    }
+
+    /** 带字段标签的输入行：标签在上、输入框在下（对齐 Operit SettingsTextField） */
+    private EditText fieldInput(LinearLayout parent, String label, String placeholder) {
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView lab = new TextView(activity);
+        lab.setText(label);
+        lab.setTextSize(13f);
+        lab.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        box.addView(lab, UiKit.lp(activity, 0));
+        EditText et = UiKit.input(activity, box, placeholder, "");
+        parent.addView(box, UiKit.lp(activity, 10));
+        return et;
     }
 
     // ==================== 用途切换 ====================
@@ -209,11 +261,11 @@ public class ApiProfileSection {
         ApiProfile cur = apiManager.getCurrent(scope);
         if (cur != null) {
             tvCurrent.setText((cur.name.isEmpty() ? "（未命名）" : cur.name)
-                    + " · " + (cur.model.isEmpty() ? "?" : cur.model) + keyCountLabel(cur) + "  ▾");
+                    + " · " + (cur.model.isEmpty() ? "?" : cur.model) + keyCountLabel(cur) + "  切换 ▾");
             loadProfile(cur);
             syncKeyPoolSwitch(cur);
         } else {
-            tvCurrent.setText("尚未配置" + scopeLabel() + "模型，填写下方表单并保存  ▾");
+            tvCurrent.setText("尚未配置" + scopeLabel() + "模型，点「＋ 新建」或填写下方表单并保存  切换 ▾");
             clearForm();
             keyPoolBox.setVisibility(View.GONE);
             swKeyPool.setChecked(false);
@@ -232,7 +284,7 @@ public class ApiProfileSection {
         profiles.addAll(apiManager.list(scope));
         if (profiles.isEmpty()) {
             tvResult.setTextColor(UiKit.color(activity, R.color.warning));
-            tvResult.setText("还没有" + scopeLabel() + "模型配置，填写下方表单后点「保存此配置」即可创建。");
+            tvResult.setText("还没有" + scopeLabel() + "模型配置，点「＋ 新建」或填写下方表单保存即可创建。");
             return;
         }
         String curId = apiManager.getCurrentId(scope);
@@ -244,7 +296,6 @@ public class ApiProfileSection {
             names[i] = (p.name.isEmpty() ? "（未命名）" : p.name)
                     + " · " + (p.model.isEmpty() ? "?" : p.model) + keyCountLabel(p);
         }
-        final int idx = curIdx;
         new AlertDialog.Builder(activity)
                 .setTitle(scopeLabel() + " - 选择配置")
                 .setSingleChoiceItems(names, curIdx, (d, w) -> {
@@ -270,7 +321,7 @@ public class ApiProfileSection {
         input.setSingleLine(true);
         new AlertDialog.Builder(activity)
                 .setTitle("新建配置")
-                .setMessage("只填写名称即可创建一套新配置，URL / Key / 模型在下方表单填写，不会影响现有配置。")
+                .setMessage("只填写名称即可创建一套新配置，URL / Key / 模型在下方「API 设置」填写，不会影响现有配置。")
                 .setView(input)
                 .setPositiveButton("创建", (d, w) -> {
                     String name = input.getText().toString().trim();
@@ -286,7 +337,7 @@ public class ApiProfileSection {
                     syncSettings();
                     refreshList();
                     tvResult.setTextColor(UiKit.color(activity, R.color.success));
-                    tvResult.setText("已新建「" + name + "」并设为当前，请填写下方 Base URL / API Key / 模型名后保存。");
+                    tvResult.setText("已新建「" + name + "」并设为当前，请在「API 设置」填写 Base URL / API Key / 模型名后保存。");
                 })
                 .setNegativeButton("取消", null)
                 .show();
@@ -368,7 +419,7 @@ public class ApiProfileSection {
         if (!base.isEmpty() && !model.isEmpty()) {
             tvResult.setTextColor(UiKit.color(activity, R.color.text_secondary));
             tvResult.setText(isNew
-                    ? "已新建「" + name + "」并设为当前，正在自动测试连接…"
+                    ? "已保存「" + name + "」，正在自动测试连接…"
                     : "已更新「" + name + "」，正在自动测试连接…");
             testConnection();
         } else {
@@ -560,7 +611,6 @@ public class ApiProfileSection {
         ApiProfile cur = apiManager.getCurrent(scope);
         if (cur == null) return;
         List<String> merged = new ArrayList<>();
-        String mainKey = etKey.getText() == null ? "" : etKey.getText().toString().trim();
         for (String k : cur.effectiveKeys()) {
             if (!k.equals(key)) merged.add(k);
         }
