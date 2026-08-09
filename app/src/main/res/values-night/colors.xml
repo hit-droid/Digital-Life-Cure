@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#241634</color>
+
+    <!-- ===== 品牌色（深色下提亮） ===== -->
+    <color name="brand">#8B7DF4</color>
+    <color name="brand_dark">#7A6BF0</color>
+    <color name="brand_end">#A89BFF</color>
+    <color name="brand_light">#2B2740</color>
+    <color name="brand_soft">#1E1C2E</color>
+    <color name="brand_stroke">#3A3554</color>
+    <color name="ripple">#3D8B7DF4</color>
+    <color name="brand_glass_bg">#26FFFFFF</color>
+
+    <!-- ===== 中性色 ===== -->
+    <color name="page_bg">#111118</color>
+    <color name="card_bg">#1C1C28</color>
+    <color name="surface_glass">#B31C1C28</color>
+    <color name="text_primary">#F0F0F7</color>
+    <color name="text_secondary">#9C9CB0</color>
+    <color name="text_hint">#5C5C72</color>
+    <color name="divider">#2A2A3A</color>
+
+    <!-- ===== 语义色 ===== -->
+    <color name="success">#3ECB84</color>
+    <color name="success_bg">#1C3A2C</color>
+    <color name="danger">#F2555A</color>
+    <color name="danger_bg">#3A2225</color>
+    <color name="warning">#F0B24A</color>
+    <color name="warning_bg">#3A3020</color>
+
+    <!-- ===== 聊天 ===== -->
+    <color name="bubble_user">#7A6BF0</color>
+    <color name="bubble_ai">#1C1C28</color>
+
+    <!-- ===== 类型标签（深色下提亮） ===== -->
+    <color name="tag_care">#F2A54A</color>
+    <color name="tag_model">#6FC088</color>
+    <color name="tag_chat">#6FA8E8</color>
+    <color name="tag_builtin">#A0A0B6</color>
+
+    <!-- ===== Markdown 代码块（深色） ===== -->
+    <color name="code_bg">#2A2740</color>
+</resources>

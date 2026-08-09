@@ -1,0 +1,157 @@
+{
+  "Version": 3,
+  "FileReferences": {
+    "Moc": "huohuo.moc3",
+    "Textures": [
+      "huohuo.2048/texture_00.png",
+      "huohuo.2048/texture_01.png",
+      "huohuo.2048/texture_02.png",
+      "huohuo.2048/texture_03.png"
+    ],
+    "Physics": "huohuo.physics3.json",
+    "DisplayInfo": "huohuo.cdi3.json",
+    "Expressions": [
+      {
+        "Name": "F01",
+        "File": "white eyes.exp3.json"
+      },
+      {
+        "Name": "F02",
+        "File": "qizi1.exp3.json"
+      },
+      {
+        "Name": "F03",
+        "File": "cry.exp3.json"
+      },
+      {
+        "Name": "F04",
+        "File": "angry.exp3.json"
+      },
+      {
+        "Name": "F05",
+        "File": "qizi2.exp3.json"
+      },
+      {
+        "Name": "F06",
+        "File": "baozhen.exp3.json"
+      }
+    ],
+    "Motions": {
+      "Idle": [
+        {
+          "File": "Scene1.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "keshui.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "TapBody": [
+        {
+          "File": "haoqi.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "qizi.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "zhentou.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "linghun.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "yaotou.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "Scene1.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Wave": [
+        {
+          "File": "qizi.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Happy": [
+        {
+          "File": "haoqi.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "yaotou.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        },
+        {
+          "File": "zhentou.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Excited": [
+        {
+          "File": "linghun.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Sad": [
+        {
+          "File": "keshui.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Surprised": [
+        {
+          "File": "haoqi.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Shy": [
+        {
+          "File": "yaotou.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ],
+      "Sleepy": [
+        {
+          "File": "keshui.motion3.json",
+          "FadeInTime": 0.9,
+          "FadeOutTime": 0.9
+        }
+      ]
+    }
+  },
+  "Groups": [
+    {
+      "Target": "Parameter",
+      "Name": "EyeBlink",
+      "Ids": []
+    },
+    {
+      "Target": "Parameter",
+      "Name": "LipSync",
+      "Ids": []
+    }
+  ]
+}

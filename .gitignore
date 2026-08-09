@@ -1,0 +1,11 @@
+apk_artifact.zip
+app-debug.apk
+*.log
+*.apk
+*.zip
+*.p12
+app/build/
+out/
+app/.cxx/
+.gradle/
+local.properties
