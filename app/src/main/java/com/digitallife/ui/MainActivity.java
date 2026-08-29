@@ -305,6 +305,12 @@ public class MainActivity extends Activity {
         return getResources().getColor(res);
     }
 
+    public ConversationTabView getConversationTab() { return conversationTab; }
+    public ContactsTabView getContactsTab() { return contactsTab; }
+    public DiscoverTabView getDiscoverTab() { return discoverTab; }
+    public PluginTabView getPluginTab() { return pluginTab; }
+    public SettingsTabView getSettingsTab() { return settingsTab; }
+
     private int dp(float v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
     }
