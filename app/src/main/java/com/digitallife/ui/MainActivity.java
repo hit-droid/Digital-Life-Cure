@@ -39,6 +39,11 @@ public class MainActivity extends Activity {
     private LinearLayout navBar;
     private LinearLayout[] navItems = new LinearLayout[5];
 
+    // v1.23.0 Operit 侧栏
+    private com.digitallife.ui.shell.OperitDrawer operitDrawer;
+    private View drawerScrim;
+    private com.digitallife.ui.shell.OperitNavController navController;
+
     private ConversationTabView conversationTab;
     private ContactsTabView contactsTab;
     private DiscoverTabView discoverTab;
@@ -90,7 +95,17 @@ public class MainActivity extends Activity {
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackgroundColor(getColorCompat(R.color.brand_operit));
         topBar.setElevation(dp(4));
-        topBar.setPadding(dp(20), statusBarHeight() + dp(8), dp(20), dp(12));
+        topBar.setPadding(dp(8), statusBarHeight() + dp(8), dp(20), dp(12));
+
+        // v1.23.0 顶栏左侧汉堡按钮（仿 Operit TopAppBar navigationIcon）
+        TextView btnMenu = new TextView(this);
+        btnMenu.setText("\u2630");
+        btnMenu.setTextSize(22f);
+        btnMenu.setTextColor(Color.WHITE);
+        btnMenu.setPadding(dp(8), dp(8), dp(16), dp(8));
+        btnMenu.setIncludeFontPadding(false);
+        topBar.addView(btnMenu, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
@@ -117,9 +132,57 @@ public class MainActivity extends Activity {
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // ===== 内容区 =====
+        // ===== 内容 + 侧栏容器（FrameLayout 让侧栏浮在内容上） =====
+        FrameLayout shell = new FrameLayout(this);
+        shell.setBackgroundColor(getColorCompat(R.color.page_bg));
+
         content = new FrameLayout(this);
         content.setBackgroundColor(getColorCompat(R.color.page_bg));
+        shell.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 半透明遮罩
+        drawerScrim = new View(this);
+        drawerScrim.setBackgroundColor(0x99000000);
+        drawerScrim.setVisibility(View.GONE);
+        drawerScrim.setAlpha(0f);
+        drawerScrim.setOnClickListener(v -> closeDrawer());
+        shell.addView(drawerScrim, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // v1.23.0 Operit 侧栏
+        operitDrawer = new com.digitallife.ui.shell.OperitDrawer(this, route -> {
+            closeDrawer();
+            navController.navigate(route);
+        });
+        operitDrawer.setVisibility(View.GONE);
+        operitDrawer.setTranslationX(-dp(280));
+        shell.addView(operitDrawer, new FrameLayout.LayoutParams(
+                dp(280), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));
+
+        // 路由控制器
+        navController = new com.digitallife.ui.shell.OperitNavController(this, content,
+                new com.digitallife.ui.shell.OperitContentView.Host() {
+                    @Override public com.digitallife.ui.ConversationTabView getConversationTab() { return conversationTab; }
+                    @Override public com.digitallife.ui.ContactsTabView getContactsTab() { return contactsTab; }
+                    @Override public com.digitallife.ui.DiscoverTabView getDiscoverTab() { return discoverTab; }
+                    @Override public com.digitallife.ui.PluginTabView getPluginTab() { return pluginTab; }
+                    @Override public com.digitallife.ui.SettingsTabView getSettingsTab() { return settingsTab; }
+                    @Override public android.content.Context getContext() { return MainActivity.this; }
+                });
+        navController.addListener((old, newRoute) -> {
+            operitDrawer.setSelected(newRoute);
+            // 同步底部 Tab 选中态
+            for (int i = 0; i < TAB_TITLES.length; i++) {
+                if (TAB_TITLES[i].equals(getString(newRoute.titleRes))) {
+                    switchTab(i);
+                    return;
+                }
+            }
+        });
+
+        // 汉堡按钮打开侧栏
+        btnMenu.setOnClickListener(v -> openDrawer());
 
         conversationTab = new ConversationTabView(this, new ConversationTabView.Listener() {
             @Override
@@ -128,7 +191,6 @@ public class MainActivity extends Activity {
             }
         });
         contactsTab = new ContactsTabView(this, modelName -> {
-            // 每个模型一个独立会话（session_key=model_<name>）
             ChatStore cs = new ChatStore(MainActivity.this);
             String key = "model_" + modelName;
             cs.ensureSession(key, modelName, ChatStore.TYPE_MODEL, "model", modelName);
@@ -149,7 +211,7 @@ public class MainActivity extends Activity {
         content.addView(settingsTab, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        root.addView(content, new LinearLayout.LayoutParams(
+        root.addView(shell, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // ===== 底部导航（玻璃底 + 圆点指示 + 选中渐变胶囊） =====
@@ -310,6 +372,27 @@ public class MainActivity extends Activity {
     public DiscoverTabView getDiscoverTab() { return discoverTab; }
     public PluginTabView getPluginTab() { return pluginTab; }
     public SettingsTabView getSettingsTab() { return settingsTab; }
+
+    // v1.23.0 侧栏控制
+    private void openDrawer() {
+        if (operitDrawer == null) return;
+        operitDrawer.build(navController.current());
+        operitDrawer.setVisibility(View.VISIBLE);
+        operitDrawer.setTranslationX(0);
+        drawerScrim.setVisibility(View.VISIBLE);
+        operitDrawer.animate().translationX(0).setDuration(220).start();
+        drawerScrim.animate().alpha(1f).setDuration(220).start();
+    }
+
+    private void closeDrawer() {
+        if (operitDrawer == null) return;
+        operitDrawer.animate().translationX(-operitDrawer.getWidth()).setDuration(180)
+                .withEndAction(() -> operitDrawer.setVisibility(View.GONE))
+                .start();
+        drawerScrim.animate().alpha(0f).setDuration(180)
+                .withEndAction(() -> drawerScrim.setVisibility(View.GONE))
+                .start();
+    }
 
     private int dp(float v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
