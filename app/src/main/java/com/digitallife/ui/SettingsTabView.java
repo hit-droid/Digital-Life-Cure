@@ -63,7 +63,7 @@ public class SettingsTabView extends LinearLayout {
         this.settings = new Settings(activity);
         this.apiManager = new ApiManager(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.page_bg));
+        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
         updateStatus();
     }
@@ -73,22 +73,39 @@ public class SettingsTabView extends LinearLayout {
         scroll.setVerticalScrollBarEnabled(false);
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(UiKit.dp(activity, 16), UiKit.dp(activity, 8),
-                UiKit.dp(activity, 16), UiKit.dp(activity, 20));
+        root.setPadding(UiKit.dp(activity, 0), UiKit.dp(activity, 8),
+                UiKit.dp(activity, 0), UiKit.dp(activity, 20));
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // ---------- 状态 ----------
+        // v1.23.0: Operit 风格角色卡 (OverviewCard) - 紫色背景
+        LinearLayout overview = UiKit.roleCard(activity, root, "数字生命 · 小汐",
+                "设置、状态与权限集中管理");
         tvStatus = new TextView(activity);
-        tvStatus.setTextSize(13f);
-        tvStatus.setTextColor(UiKit.color(activity, R.color.success));
-        tvStatus.setPadding(0, UiKit.dp(activity, 4), 0, 0);
-        root.addView(tvStatus, UiKit.lp(activity, 0));
+        tvStatus.setTextSize(12f);
+        tvStatus.setTextColor(0xCCFFFFFF);
+        tvStatus.setPadding(0, UiKit.dp(activity, 12), 0, 0);
+        tvStatus.setIncludeFontPadding(false);
+        overview.addView(tvStatus);
+        // StatChip 行: 版本 / 启动状态 / 当前模型
+        LinearLayout chips = new LinearLayout(activity);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.setPadding(0, UiKit.dp(activity, 10), 0, 0);
+        overview.addView(chips);
+        UiKit.statChip(activity, chips, "v1.23.0");
+        UiKit.statChip(activity, chips, settings.isConfigured() ? "已配置" : "未配置");
 
+        // ---------- 4 个分组（v1.21.0 分组结构 + v1.23.0 Operit 色板） ----------
         LinearLayout gStart = UiKit.expandableCard(activity, root, "启动与权限", true);
         LinearLayout gMain = UiKit.expandableCard(activity, root, "桌宠与功能", true);
         LinearLayout gChat = UiKit.expandableCard(activity, root, "互动", true);
         LinearLayout gDev = UiKit.expandableCard(activity, root, "开发者与调试", false);
+
+        // v1.23.0: expandableCard 内的卡片改用 operit_surface 背景
+        LinearLayout[] groups = {gStart, gMain, gChat, gDev};
+        for (LinearLayout g : groups) {
+            g.setBackgroundColor(UiKit.color(activity, R.color.operit_surface));
+        }
 
         // ---------- 启停控制 ----------
         LinearLayout cCtrl = UiKit.card(activity, gStart, "启停控制");

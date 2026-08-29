@@ -226,4 +226,206 @@ public final class UiKit {
 
         return content;
     }
+
+    // v1.23.0: Operit 风格工具（深色紫色卡片列表）
+
+    /** Operit 风格 SectionHeader: 紫色大标题 + 副标题 + 顶部间距 */
+    public static View sectionTitle(Context c, LinearLayout root, String title, String subtitle) {
+        LinearLayout wrap = new LinearLayout(c);
+        wrap.setOrientation(VERTICAL);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = dp(c, 20);
+        wlp.bottomMargin = dp(c, 8);
+        wrap.setLayoutParams(wlp);
+
+        TextView t = new TextView(c);
+        t.setText(title);
+        t.setTextSize(15f);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setLetterSpacing(0.04f);
+        t.setTextColor(color(c, R.color.operit_accent));
+        t.setIncludeFontPadding(false);
+        wrap.addView(t);
+
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView s = new TextView(c);
+            s.setText(subtitle);
+            s.setTextSize(11f);
+            s.setTextColor(color(c, R.color.operit_text_hint));
+            s.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            slp.topMargin = dp(c, 2);
+            wrap.addView(s, slp);
+        }
+
+        root.addView(wrap);
+        return wrap;
+    }
+
+    /** Operit 风格 list_tile: 圆角卡片 + 图标 + 标题 + 副标题 + 右箭头 */
+    public static LinearLayout listTile(Context c, LinearLayout root, int iconRes,
+                                        String title, String subtitle, View.OnClickListener onClick) {
+        LinearLayout card = new LinearLayout(c);
+        card.setOrientation(HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackgroundColor(color(c, R.color.operit_surface));
+        card.setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(c, 1);
+        root.addView(card, clp);
+
+        if (iconRes != 0) {
+            ImageView ic = new ImageView(c);
+            ic.setImageResource(iconRes);
+            ic.setColorFilter(color(c, R.color.operit_accent));
+            ic.setScaleType(ImageView.ScaleType.CENTER);
+            card.addView(ic, new LinearLayout.LayoutParams(dp(c, 22), dp(c, 22)));
+        }
+
+        LinearLayout textCol = new LinearLayout(c);
+        textCol.setOrientation(VERTICAL);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.leftMargin = dp(c, 12);
+        textCol.setLayoutParams(tlp);
+
+        TextView t = new TextView(c);
+        t.setText(title);
+        t.setTextSize(14f);
+        t.setTextColor(color(c, R.color.operit_text_primary));
+        t.setIncludeFontPadding(false);
+        textCol.addView(t);
+
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView s = new TextView(c);
+            s.setText(subtitle);
+            s.setTextSize(11f);
+            s.setTextColor(color(c, R.color.operit_text_hint));
+            s.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            slp.topMargin = dp(c, 2);
+            textCol.addView(s, slp);
+        }
+        card.addView(textCol);
+
+        TextView chev = new TextView(c);
+        chev.setText("\u203A");
+        chev.setTextSize(20f);
+        chev.setTextColor(color(c, R.color.operit_text_hint));
+        chev.setIncludeFontPadding(false);
+        chev.setGravity(Gravity.CENTER);
+        card.addView(chev, new LinearLayout.LayoutParams(
+                dp(c, 24), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        if (onClick != null) {
+            card.setClickable(true);
+            card.setOnClickListener(onClick);
+        }
+
+        return card;
+    }
+
+    /** Operit 风格 switch_tile: 标题 + 副标题 + 右侧 Switch */
+    public static Switch switchTile(Context c, LinearLayout root,
+                                   String title, String subtitle, boolean checked) {
+        LinearLayout card = new LinearLayout(c);
+        card.setOrientation(HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setBackgroundColor(color(c, R.color.operit_surface));
+        card.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(c, 1);
+        root.addView(card, clp);
+
+        LinearLayout textCol = new LinearLayout(c);
+        textCol.setOrientation(VERTICAL);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        textCol.setLayoutParams(tlp);
+
+        TextView t = new TextView(c);
+        t.setText(title);
+        t.setTextSize(14f);
+        t.setTextColor(color(c, R.color.operit_text_primary));
+        t.setIncludeFontPadding(false);
+        textCol.addView(t);
+
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView s = new TextView(c);
+            s.setText(subtitle);
+            s.setTextSize(11f);
+            s.setTextColor(color(c, R.color.operit_text_hint));
+            s.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            slp.topMargin = dp(c, 2);
+            textCol.addView(s, slp);
+        }
+        card.addView(textCol);
+
+        Switch sw = new Switch(c);
+        sw.setChecked(checked);
+        card.addView(sw);
+
+        return sw;
+    }
+
+    /** Operit 风格角色卡（OverviewCard）: 紫色背景 + 角色名 + 描述 + StatChip 行 */
+    public static LinearLayout roleCard(Context c, LinearLayout root, String title, String subtitle) {
+        LinearLayout card = new LinearLayout(c);
+        card.setOrientation(VERTICAL);
+        card.setBackgroundColor(color(c, R.color.brand_operit_dark));
+        card.setPadding(dp(c, 20), dp(c, 20), dp(c, 20), dp(c, 20));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = dp(c, 12);
+        card.setLayoutParams(clp);
+        root.addView(card);
+
+        TextView t = new TextView(c);
+        t.setText(title);
+        t.setTextSize(20f);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setTextColor(Color.WHITE);
+        t.setIncludeFontPadding(false);
+        card.addView(t);
+
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView s = new TextView(c);
+            s.setText(subtitle);
+            s.setTextSize(12f);
+            s.setTextColor(0xCCFFFFFF);
+            s.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            slp.topMargin = dp(c, 6);
+            card.addView(s, slp);
+        }
+
+        return card;
+    }
+
+    /** Operit 风格 stat chip: 圆角胶囊 + 文字 */
+    public static TextView statChip(Context c, LinearLayout root, String text) {
+        TextView chip = new TextView(c);
+        chip.setText(text);
+        chip.setTextSize(11f);
+        chip.setTextColor(color(c, R.color.operit_text_primary));
+        int bgColor = color(c, R.color.operit_surface_variant);
+        int bgAlpha = (bgColor & 0x00FFFFFF) | 0x99000000;
+        chip.setBackgroundColor(bgAlpha);
+        chip.setPadding(dp(c, 10), dp(c, 5), dp(c, 10), dp(c, 5));
+        chip.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(c, 6);
+        lp.topMargin = dp(c, 4);
+        root.addView(chip, lp);
+        return chip;
+    }
 }
