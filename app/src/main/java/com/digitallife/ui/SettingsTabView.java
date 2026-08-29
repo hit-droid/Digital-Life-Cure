@@ -152,6 +152,17 @@ public class SettingsTabView extends LinearLayout {
             }
         });
 
+        // ---------- 记忆管理 ----------
+        LinearLayout cMemory = UiKit.card(activity, root, "记忆管理");
+        Button btnMemory = UiKit.button(activity, cMemory, "打开记忆管理（查看 / 修正 / 备份）");
+        btnMemory.setOnClickListener(v -> {
+            try {
+                activity.startActivity(new Intent(activity, MemoryManageActivity.class));
+            } catch (Exception e) {
+                Toast.makeText(activity, "无法打开记忆管理: " + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_SHORT).show();
+            }
+        });
+
         // ---------- 互动（语音 + 快速聊天） ----------
         LinearLayout cChat = UiKit.card(activity, root, "互动");
         Button btnVoice = UiKit.button(activity, cChat, "按住说话（语音对话）");

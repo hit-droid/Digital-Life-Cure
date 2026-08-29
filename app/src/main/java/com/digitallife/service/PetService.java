@@ -114,6 +114,16 @@ public class PetService extends Service implements AICore.Output,
     private boolean ttsAvailable = true;
     private boolean listening = false;
 
+    /** 生理状态机 1Hz tick 的自循环 Runnable（提取为字段以便 onDestroy 取消，防止泄漏） */
+    private final Runnable vitalsTickRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!vitalsTicking) return;
+            if (vitals != null) vitals.tick(PetVitalsManager.currentHour(), touching);
+            mainHandler.postDelayed(this, 1000L);
+        }
+    };
+
     private static PetService instance;
 
     public static PetService getInstance() { return instance; }
@@ -370,14 +380,8 @@ public class PetService extends Service implements AICore.Output,
     }
 
     private void startVitalsTick() {
-        mainHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (!vitalsTicking) return;
-                if (vitals != null) vitals.tick(PetVitalsManager.currentHour(), touching);
-                mainHandler.postDelayed(this, 1000L);
-            }
-        }, 1000L);
+        mainHandler.removeCallbacks(vitalsTickRunnable);
+        mainHandler.postDelayed(vitalsTickRunnable, 1000L);
     }
 
     // ================= 悬浮窗交互 =================
@@ -907,11 +911,15 @@ public class PetService extends Service implements AICore.Output,
             } catch (Exception ignored) {}
             displayListener = null;
         }
+        // 注销无障碍服务监听器，避免匿名内部类持有 Service 引用造成泄漏
+        com.digitallife.service.PetAccessibilityService.setListener(null);
         if (careAutomation != null) careAutomation.stop();
         if (heartbeat != null) heartbeat.stop();
         if (aiCore != null) aiCore.stop();
         if (thoughtLoop != null) thoughtLoop.stop();
         vitalsTicking = false;
+        // 取消 1Hz 自循环 tick，避免已 post 的 Runnable 仍持有 Service 引用
+        mainHandler.removeCallbacks(vitalsTickRunnable);
         vitals = null;
         thoughtLoop = null;
         if (tts != null) { tts.stop(); tts.destroy(); }
