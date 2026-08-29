@@ -96,6 +96,12 @@ public class ChatActivity extends Activity {
     private long lastTsLabel = 0;
 
     private boolean thinking = false;
+    private TextView thinkingBubble;
+    private Runnable thinkingUpdater;
+    private int thinkingStage = 0;
+    private static final String[] THINKING_STAGES = {
+            "正在发送…", "等待 AI 响应…", "AI 思考中…", "模型推理中…"
+    };
     /** 用户主动点击“停止生成”后吞掉取消触发的 onDone/onError */
     private boolean aborting = false;
 
@@ -178,6 +184,20 @@ public class ChatActivity extends Activity {
         clp.setMargins(dp(4), 0, dp(4), 0);
         btnClear.setOnClickListener(v -> confirmClear());
         topBar.addView(btnClear, clp);
+
+        Button btnExport = new Button(this);
+        btnExport.setText("导出");
+        btnExport.setTextSize(13f);
+        btnExport.setTextColor(Color.WHITE);
+        btnExport.setAllCaps(false);
+        btnExport.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnExport.setPadding(dp(12), dp(4), dp(12), dp(4));
+        UiKit.pressScale(btnExport);
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        elp.setMargins(dp(4), 0, dp(4), 0);
+        btnExport.setOnClickListener(v -> exportChat());
+        topBar.addView(btnExport, elp);
 
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1028,7 +1048,7 @@ public class ChatActivity extends Activity {
         String pretty = prettyJson(argsText);
         String head = "🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
                 + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty);
-        String statusLine = "\n\n状态：执行中…";
+        String statusLine = "\n\n状态：执行中 🔄";
         SpannableString ss = new SpannableString(head + statusLine);
         ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.brand)),
                 head.length() + "\n\n状态：".length(), ss.length(),
@@ -1106,14 +1126,32 @@ public class ChatActivity extends Activity {
 
     private void renderThinkingDot() {
         hideThinkingDot();
+        thinkingStage = 0;
         TextView b = newTextViewBubble();
-        b.setText("……");
+        b.setText(THINKING_STAGES[0]);
         b.setTag("thinking");
         listContainer.addView(b);
+        thinkingBubble = b;
+        thinkingUpdater = new Runnable() {
+            @Override
+            public void run() {
+                if (thinkingBubble == null || thinkingStage >= THINKING_STAGES.length - 1) return;
+                thinkingStage++;
+                if (thinkingBubble != null) {
+                    thinkingBubble.setText(THINKING_STAGES[thinkingStage]);
+                }
+            }
+        };
+        handler.postDelayed(thinkingUpdater, 2200);
         scrollToBottom();
     }
 
     private void hideThinkingDot() {
+        if (thinkingUpdater != null) {
+            handler.removeCallbacks(thinkingUpdater);
+            thinkingUpdater = null;
+        }
+        thinkingBubble = null;
         if (listContainer == null) return;
         for (int i = listContainer.getChildCount() - 1; i >= 0; i--) {
             View v = listContainer.getChildAt(i);
@@ -1194,6 +1232,95 @@ public class ChatActivity extends Activity {
         return b;
     }
 
+    /** 导出当前会话：弹格式选择，再走系统分享面板分发 */
+    private void exportChat() {
+        if (chatStore == null) chatStore = new ChatStore(this);
+        List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 1000);
+        if (msgs.isEmpty()) {
+            Toast.makeText(this, "本会话暂无消息可导出", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("导出对话")
+                .setMessage("选择导出格式\n\n" + msgs.size() + " 条消息")
+                .setPositiveButton("Markdown", (d, w) -> doExport("md"))
+                .setNegativeButton("纯文本", (d, w) -> doExport("txt"))
+                .setNeutralButton("取消", null)
+                .show();
+    }
+
+    private void doExport(String format) {
+        try {
+            String content = "md".equals(format) ? buildMarkdownExport() : buildTextExport();
+            String subject = (title == null || title.isEmpty() ? "对话" : title) + " 导出";
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_SUBJECT, subject);
+            send.putExtra(Intent.EXTRA_TEXT, content);
+            startActivity(Intent.createChooser(send, "分享导出的对话"));
+        } catch (Exception e) {
+            Toast.makeText(this, "导出失败：" + UiKit.safeMsg(e), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String buildMarkdownExport() {
+        List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 1000);
+        StringBuilder sb = new StringBuilder();
+        String exportTitle = (title == null || title.isEmpty() ? "对话" : title);
+        sb.append("# ").append(exportTitle).append(" - 会话导出\n\n");
+        sb.append("> 导出时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+                .format(new Date())).append("\n");
+        sb.append("> 会话类型：").append(isCare ? "护理大脑" : "对话大脑").append("\n");
+        sb.append("> 消息数量：").append(msgs.size()).append("\n\n");
+        sb.append("---\n\n");
+        SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
+        for (ChatStore.StoredMsg m : msgs) {
+            String time = timeFmt.format(new Date(m.timestamp));
+            if ("user".equals(m.role)) {
+                sb.append("## 用户 · ").append(time).append("\n\n");
+                sb.append(m.content == null ? "" : m.content).append("\n\n");
+            } else if ("tool".equals(m.role)) {
+                sb.append("## 工具结果 · ").append(time).append("\n\n");
+                sb.append("```\n").append(m.content == null ? "" : m.content).append("\n```\n\n");
+            } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
+                sb.append("## AI 调用工具 · ").append(time).append("\n\n");
+                sb.append("**工具**：").append(parseToolName(m.toolCalls)).append("\n\n");
+                sb.append("**参数**：\n```json\n").append(parseToolArgs(m.toolCalls)).append("\n```\n\n");
+            } else {
+                sb.append("## AI · ").append(time).append("\n\n");
+                sb.append(m.content == null ? "" : m.content).append("\n\n");
+            }
+            sb.append("---\n\n");
+        }
+        sb.append("\n*由「数字生命」导出*\n");
+        return sb.toString();
+    }
+
+    private String buildTextExport() {
+        List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 1000);
+        StringBuilder sb = new StringBuilder();
+        sb.append("[【").append(title == null || title.isEmpty() ? "对话" : title).append("】]\n");
+        sb.append("导出时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
+                .format(new Date())).append("\n");
+        sb.append("会话类型：").append(isCare ? "护理大脑" : "对话大脑").append("\n");
+        sb.append("消息数：").append(msgs.size()).append("\n\n");
+        SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
+        for (ChatStore.StoredMsg m : msgs) {
+            String time = timeFmt.format(new Date(m.timestamp));
+            if ("user".equals(m.role)) {
+                sb.append("[").append(time).append("] 用户：\n").append(m.content == null ? "" : m.content).append("\n\n");
+            } else if ("tool".equals(m.role)) {
+                sb.append("[").append(time).append("] 工具结果：\n").append(m.content == null ? "" : m.content).append("\n\n");
+            } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
+                sb.append("[").append(time).append("] AI 调用工具：").append(parseToolName(m.toolCalls)).append("\n");
+                sb.append("参数：").append(parseToolArgs(m.toolCalls)).append("\n\n");
+            } else {
+                sb.append("[").append(time).append("] AI：\n").append(m.content == null ? "" : m.content).append("\n\n");
+            }
+        }
+        return sb.toString();
+    }
+
     private LinearLayout.LayoutParams btnLp(int w, int h) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(w), dp(h));
         lp.setMargins(dp(4), 0, dp(4), 0);
@@ -1239,6 +1366,7 @@ public class ChatActivity extends Activity {
         }
     }
 
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         if (careAI != null && careListener != null) careAI.removeListener(careListener);
@@ -1247,6 +1375,10 @@ public class ChatActivity extends Activity {
             tts.stop();
             tts.shutdown();
             tts = null;
+        }
+        if (thinkingUpdater != null) {
+            handler.removeCallbacks(thinkingUpdater);
+            thinkingUpdater = null;
         }
         if (scrollWatcher != null) {
             try {

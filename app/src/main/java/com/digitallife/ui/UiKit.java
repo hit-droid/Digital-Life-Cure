@@ -183,4 +183,47 @@ public final class UiKit {
         }
         return hint;
     }
+
+    public static LinearLayout expandableCard(Context c, LinearLayout root, String title, boolean defaultExpanded) {
+        LinearLayout group = new LinearLayout(c);
+        group.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        glp.topMargin = dp(c, 18);
+        root.addView(group, glp);
+
+        LinearLayout header = new LinearLayout(c);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(0, dp(c, 4), 0, dp(c, 4));
+        header.setClickable(true);
+
+        TextView t = new TextView(c);
+        t.setText(title);
+        t.setTextSize(15f);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setLetterSpacing(0.03f);
+        t.setTextColor(color(c, R.color.brand));
+        header.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView arrow = new TextView(c);
+        arrow.setText(defaultExpanded ? "▾" : "▸");
+        arrow.setTextSize(14f);
+        arrow.setTextColor(color(c, R.color.text_secondary));
+        header.addView(arrow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        group.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout content = new LinearLayout(c);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setVisibility(defaultExpanded ? View.VISIBLE : View.GONE);
+        group.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        header.setOnClickListener(v -> {
+            boolean visible = content.getVisibility() == View.VISIBLE;
+            content.setVisibility(visible ? View.GONE : View.VISIBLE);
+            arrow.setText(visible ? "▸" : "▾");
+        });
+
+        return content;
+    }
 }
