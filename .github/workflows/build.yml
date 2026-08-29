@@ -57,10 +57,17 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d "{\"tag_name\":\"v1.20.0\",\"name\":\"数字生命 v1.20.0\",\"body\":\"修复 5 个 bug 并新增记忆管理功能（设置页查看/编辑/删除/导出/导入长期记忆）。CI 签名改为 actions/cache 持久化 p12。\",\"target_commitish\":\"${{ github.sha }}\"}")
-          echo "$RELEASE_RESPONSE"
-          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
-          if [ "$RELEASE_ID" = "null" ] || [ -z "$RELEASE_ID" ]; then
-            echo "Release creation failed"
+          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id // empty')
+          if [ -z "$RELEASE_ID" ]; then
+            echo "Release v1.20.0 already exists, fetching its id"
+            RELEASE_ID=$(curl -sS \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/releases/tags/v1.20.0 | jq -r '.id // empty')
+          fi
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "Failed to resolve release id"
+            echo "$RELEASE_RESPONSE"
             exit 1
           fi
           curl -sS -X POST \
