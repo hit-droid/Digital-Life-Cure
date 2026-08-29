@@ -54,6 +54,9 @@ public class PetService extends Service implements AICore.Output,
     public static final String ACTION_START = "com.digitallife.START";
     public static final String ACTION_STOP = "com.digitallife.STOP";
     public static final String ACTION_TOGGLE_VOICE = "com.digitallife.TOGGLE_VOICE";
+    // v1.23.0 长按桌面图标快捷方式启动
+    public static final String ACTION_START_OVERLAY = "com.digitallife.START_OVERLAY";
+    public static final String ACTION_STOP_OVERLAY = "com.digitallife.STOP_OVERLAY";
 
     private static final String CHANNEL_ID = "pet_overlay";
     private static final int NOTIFY_ID = 1001;
@@ -140,7 +143,7 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+        if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_STOP_OVERLAY.equals(intent.getAction()))) {
             stopSelf();
             return START_NOT_STICKY;
         }

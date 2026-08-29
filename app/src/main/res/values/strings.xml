@@ -19,4 +19,7 @@
     <string name="route_themes">主题</string>
     <string name="route_developer">开发者</string>
     <string name="route_about">关于</string>
+    <!-- v1.23.0 长按图标快捷方式 -->
+    <string name="action_start_overlay">打开悬浮窗</string>
+    <string name="action_stop_overlay">停止桌宠</string>
 </resources>

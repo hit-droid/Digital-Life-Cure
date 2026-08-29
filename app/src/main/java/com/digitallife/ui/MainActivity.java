@@ -84,6 +84,42 @@ public class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(0);
 
         buildUi();
+        registerShortcuts();
+    }
+
+    // v1.23.0: 长按桌面图标显示快捷菜单 (打开悬浮窗 / 停止桌宠)
+    private void registerShortcuts() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N_MR1) return;
+        try {
+            android.content.pm.ShortcutManager sm = getSystemService(android.content.pm.ShortcutManager.class);
+            if (sm == null) return;
+
+            // 1) 打开悬浮窗
+            android.content.Intent startOverlay = new android.content.Intent(this, com.digitallife.service.PetService.class);
+            startOverlay.setAction(com.digitallife.service.PetService.ACTION_START_OVERLAY);
+            android.graphics.drawable.Icon startIcon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_tab_chat);
+            android.content.pm.ShortcutInfo startSi = new android.content.pm.ShortcutInfo.Builder(this, "start_overlay")
+                    .setShortLabel(getString(R.string.action_start_overlay))
+                    .setLongLabel(getString(R.string.action_start_overlay))
+                    .setIcon(startIcon)
+                    .setIntent(startOverlay)
+                    .build();
+
+            // 2) 停止桌宠
+            android.content.Intent stopOverlay = new android.content.Intent(this, com.digitallife.service.PetService.class);
+            stopOverlay.setAction(com.digitallife.service.PetService.ACTION_STOP_OVERLAY);
+            android.graphics.drawable.Icon stopIcon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_tab_settings);
+            android.content.pm.ShortcutInfo stopSi = new android.content.pm.ShortcutInfo.Builder(this, "stop_overlay")
+                    .setShortLabel(getString(R.string.action_stop_overlay))
+                    .setLongLabel(getString(R.string.action_stop_overlay))
+                    .setIcon(stopIcon)
+                    .setIntent(stopOverlay)
+                    .build();
+
+            sm.setDynamicShortcuts(java.util.Arrays.asList(startSi, stopSi));
+        } catch (Exception ignored) {
+            // 某些设备/ROM 限制，失败不影响主功能
+        }
     }
 
     private void buildUi() {
