@@ -20,6 +20,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup signing keystore
+        run: |
+          if [ ! -f app/release-key.p12 ]; then
+            keytool -genkeypair -v \
+              -keystore app/release-key.p12 \
+              -storepass android -keypass android \
+              -alias maidenkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Digital Life, OU=App, O=DigitalLife, C=CN"
+          fi
+
+      - name: Cache signing keystore
+        uses: actions/cache@v4
+        with:
+          path: app/release-key.p12
+          key: digital-life-signing-p12-stable
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
