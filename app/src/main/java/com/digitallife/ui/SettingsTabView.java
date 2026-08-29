@@ -85,8 +85,13 @@ public class SettingsTabView extends LinearLayout {
         tvStatus.setPadding(0, UiKit.dp(activity, 4), 0, 0);
         root.addView(tvStatus, UiKit.lp(activity, 0));
 
+        LinearLayout gStart = UiKit.expandableCard(activity, root, "启动与权限", true);
+        LinearLayout gMain = UiKit.expandableCard(activity, root, "桌宠与功能", true);
+        LinearLayout gChat = UiKit.expandableCard(activity, root, "互动", true);
+        LinearLayout gDev = UiKit.expandableCard(activity, root, "开发者与调试", false);
+
         // ---------- 启停控制 ----------
-        LinearLayout cCtrl = UiKit.card(activity, root, "启停控制");
+        LinearLayout cCtrl = UiKit.card(activity, gStart, "启停控制");
         LinearLayout rowBtn = new LinearLayout(activity);
         rowBtn.setOrientation(LinearLayout.HORIZONTAL);
         Button btnStart = new Button(activity);
@@ -108,15 +113,15 @@ public class SettingsTabView extends LinearLayout {
         cCtrl.addView(rowBtn, UiKit.lp(activity, 0));
 
         // ---------- 悬浮窗权限 ----------
-        LinearLayout cOverlay = UiKit.card(activity, root, "悬浮窗权限");
+        LinearLayout cOverlay = UiKit.card(activity, gStart, "悬浮窗权限");
         Button btnOverlay = UiKit.button(activity, cOverlay, "授予悬浮窗权限 / 检查授权");
         btnOverlay.setOnClickListener(v -> requestOverlayPermission());
 
         // ---------- 模型配置（统一管理对话/护理两套） ----------
-        modelSection = new ApiProfileSection(activity, root);
+        modelSection = new ApiProfileSection(activity, gMain);
 
         // ---------- 功能设置 ----------
-        LinearLayout cSwitch = UiKit.card(activity, root, "功能设置");
+        LinearLayout cSwitch = UiKit.card(activity, gMain, "功能设置");
         etPetName = UiKit.input(activity, cSwitch, "角色名字（默认 小汐）", settings.getPetName());
         swVoice = UiKit.switchRow(activity, cSwitch, "语音互动（说话+发声）", settings.isVoiceEnabled());
         swProactive = UiKit.switchRow(activity, cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
@@ -130,7 +135,7 @@ public class SettingsTabView extends LinearLayout {
         cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
 
         // ---------- 桌宠形象（Live2D 形象管理，与上面的 LLM 模型配置区分开） ----------
-        LinearLayout cAppearance = UiKit.card(activity, root, "桌宠形象");
+        LinearLayout cAppearance = UiKit.card(activity, gMain, "桌宠形象");
         Button btnSwitchModel = UiKit.button(activity, cAppearance, "切换形象（当前: " + getCurrentModelName() + "）");
         btnSwitchModel.setOnClickListener(v -> showModelPicker(btnSwitchModel));
 
@@ -153,7 +158,7 @@ public class SettingsTabView extends LinearLayout {
         });
 
         // ---------- 记忆管理 ----------
-        LinearLayout cMemory = UiKit.card(activity, root, "记忆管理");
+        LinearLayout cMemory = UiKit.card(activity, gMain, "记忆管理");
         Button btnMemory = UiKit.button(activity, cMemory, "打开记忆管理（查看 / 修正 / 备份）");
         btnMemory.setOnClickListener(v -> {
             try {
@@ -164,7 +169,7 @@ public class SettingsTabView extends LinearLayout {
         });
 
         // ---------- 互动（语音 + 快速聊天） ----------
-        LinearLayout cChat = UiKit.card(activity, root, "互动");
+        LinearLayout cChat = UiKit.card(activity, gChat, "互动");
         Button btnVoice = UiKit.button(activity, cChat, "按住说话（语音对话）");
         btnVoice.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
@@ -219,7 +224,7 @@ public class SettingsTabView extends LinearLayout {
         });
 
         // ---------- 开发者选项（折叠） ----------
-        LinearLayout cDev = UiKit.card(activity, root, "开发者选项");
+        LinearLayout cDev = UiKit.card(activity, gDev, "开发者选项");
         TextView devHint = new TextView(activity);
         devHint.setText("面向调试的高级功能，日常使用无需打开。");
         devHint.setTextSize(13f);
