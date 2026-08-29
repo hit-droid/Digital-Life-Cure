@@ -84,10 +84,11 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(getColorCompat(R.color.page_bg));
 
         // ===== 顶部标题栏（大标题 + 副标题） =====
+        // v1.23.0: 仿 Operit AI 深色紫色顶栏 56dp
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_top_bar);
+        topBar.setBackgroundColor(getColorCompat(R.color.brand_operit));
         topBar.setElevation(dp(4));
         topBar.setPadding(dp(20), statusBarHeight() + dp(8), dp(20), dp(12));
 
