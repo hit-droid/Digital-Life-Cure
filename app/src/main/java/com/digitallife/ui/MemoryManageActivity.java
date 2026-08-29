@@ -1,0 +1,420 @@
+package com.digitallife.ui;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.digitallife.R;
+import com.digitallife.util.MemoryStore;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.InputStreamReader;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+public class MemoryManageActivity extends Activity {
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private MemoryStore ms;
+    private LinearLayout listContainer;
+    private TextView tvEmpty;
+    private volatile boolean destroyed = false;
+    private int currentTab = 0;
+    private static final int REQ_IMPORT = 1001;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        destroyed = false;
+        ms = new MemoryStore(this);
+        buildUi();
+        refreshList();
+    }
+
+    private void buildUi() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(getColorCompat(R.color.page_bg));
+
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setBackgroundColor(getColorCompat(R.color.brand));
+        topBar.setPadding(dp(6), dp(12), dp(6), dp(12));
+
+        ImageButton btnBack = iconButton(R.drawable.ic_back);
+        btnBack.setContentDescription("返回");
+        btnBack.setOnClickListener(v -> finish());
+        topBar.addView(btnBack, btnLp(40, 40));
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("记忆管理");
+        tvTitle.setTextSize(17f);
+        tvTitle.setTextColor(Color.WHITE);
+        tvTitle.setGravity(Gravity.CENTER);
+        tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        topBar.addView(tvTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button btnRefresh = new Button(this);
+        btnRefresh.setText("刷新");
+        btnRefresh.setTextSize(13f);
+        btnRefresh.setTextColor(Color.WHITE);
+        btnRefresh.setAllCaps(false);
+        btnRefresh.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnRefresh.setPadding(dp(12), dp(4), dp(12), dp(4));
+        btnRefresh.setOnClickListener(v -> refreshList());
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        rlp.setMargins(dp(6), 0, dp(6), 0);
+        topBar.addView(btnRefresh, rlp);
+        root.addView(topBar);
+
+        LinearLayout seg = new LinearLayout(this);
+        seg.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnFacts = makeSegButton("事实 / 画像 / 事件", 0);
+        Button btnSum = makeSegButton("每日摘要", 1);
+        seg.addView(btnFacts, segLp());
+        seg.addView(btnSum, segLp());
+        root.addView(seg);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setPadding(dp(12), dp(10), dp(12), dp(10));
+        listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(listContainer, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        tvEmpty = new TextView(this);
+        tvEmpty.setText("暂无记忆");
+        tvEmpty.setTextSize(14f);
+        tvEmpty.setTextColor(getColorCompat(R.color.text_hint));
+        tvEmpty.setGravity(Gravity.CENTER);
+        tvEmpty.setPadding(0, dp(30), 0, 0);
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setPadding(dp(12), dp(10), dp(12), dp(12));
+        Button btnExport = new Button(this);
+        btnExport.setText("导出备份");
+        btnExport.setTextSize(14f);
+        btnExport.setTextColor(Color.WHITE);
+        btnExport.setAllCaps(false);
+        btnExport.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnExport.setOnClickListener(v -> doExport());
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        elp.setMargins(0, 0, dp(6), 0);
+        bottom.addView(btnExport, elp);
+
+        Button btnImport = new Button(this);
+        btnImport.setText("导入备份");
+        btnImport.setTextSize(14f);
+        btnImport.setTextColor(getColorCompat(R.color.brand));
+        btnImport.setAllCaps(false);
+        btnImport.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnImport.setOnClickListener(v -> doImport());
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        ilp.setMargins(dp(6), 0, 0, 0);
+        bottom.addView(btnImport, ilp);
+        root.addView(bottom);
+
+        setContentView(root);
+    }
+
+    private Button makeSegButton(String text, int tab) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(13f);
+        b.setAllCaps(false);
+        b.setOnClickListener(v -> {
+            currentTab = tab;
+            refreshList();
+        });
+        return b;
+    }
+
+    private LinearLayout.LayoutParams segLp() {
+        return new LinearLayout.LayoutParams(0, dp(44), 1f);
+    }
+
+    private void refreshList() {
+        listContainer.removeAllViews();
+        if (currentTab == 0) {
+            List<MemoryStore.Fact> facts = ms.getAllFacts();
+            if (facts.isEmpty()) {
+                listContainer.addView(tvEmpty);
+                return;
+            }
+            for (MemoryStore.Fact f : facts) {
+                listContainer.addView(buildFactRow(f));
+            }
+        } else {
+            List<MemoryStore.DailySummary> sums = ms.getAllSummaries();
+            if (sums.isEmpty()) {
+                listContainer.addView(tvEmpty);
+                return;
+            }
+            for (MemoryStore.DailySummary s : sums) {
+                listContainer.addView(buildSummaryRow(s));
+            }
+        }
+    }
+
+    private View buildFactRow(MemoryStore.Fact f) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+        box.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.bottomMargin = dp(10);
+        box.setLayoutParams(blp);
+
+        TextView tvCat = new TextView(this);
+        tvCat.setText("[" + f.category + "]  " + fmt(f.lastConfirmed));
+        tvCat.setTextSize(11f);
+        tvCat.setTextColor(getColorCompat(R.color.text_secondary));
+        box.addView(tvCat);
+
+        TextView tvContent = new TextView(this);
+        tvContent.setText(f.content);
+        tvContent.setTextSize(14f);
+        tvContent.setTextColor(getColorCompat(R.color.text_primary));
+        tvContent.setPadding(0, dp(4), 0, 0);
+        box.addView(tvContent);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END);
+        actions.setPadding(0, dp(8), 0, 0);
+        actions.addView(makeSmallButton("编辑", v -> editFact(f)));
+        actions.addView(makeSmallButton("删除", v -> deleteFact(f)));
+        box.addView(actions);
+        return box;
+    }
+
+    private View buildSummaryRow(MemoryStore.DailySummary s) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+        box.setBackgroundResource(R.drawable.bg_card);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.bottomMargin = dp(10);
+        box.setLayoutParams(blp);
+
+        TextView tvDate = new TextView(this);
+        tvDate.setText(s.date + "  " + fmt(s.createdAt));
+        tvDate.setTextSize(11f);
+        tvDate.setTextColor(getColorCompat(R.color.text_secondary));
+        box.addView(tvDate);
+
+        TextView tvSummary = new TextView(this);
+        tvSummary.setText(s.summary);
+        tvSummary.setTextSize(14f);
+        tvSummary.setTextColor(getColorCompat(R.color.text_primary));
+        tvSummary.setPadding(0, dp(4), 0, 0);
+        box.addView(tvSummary);
+
+        if (s.moodSummary != null && !s.moodSummary.isEmpty()) {
+            TextView tvMood = new TextView(this);
+            tvMood.setText("心情：" + s.moodSummary);
+            tvMood.setTextSize(12f);
+            tvMood.setTextColor(getColorCompat(R.color.text_secondary));
+            tvMood.setPadding(0, dp(2), 0, 0);
+            box.addView(tvMood);
+        }
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END);
+        actions.setPadding(0, dp(8), 0, 0);
+        actions.addView(makeSmallButton("编辑", v -> editSummary(s)));
+        actions.addView(makeSmallButton("删除", v -> deleteSummary(s)));
+        box.addView(actions);
+        return box;
+    }
+
+    private Button makeSmallButton(String text, View.OnClickListener l) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(12f);
+        b.setAllCaps(false);
+        b.setTextColor(getColorCompat(R.color.brand));
+        b.setBackgroundResource(R.drawable.bg_btn_secondary);
+        b.setPadding(dp(14), dp(4), dp(14), dp(4));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        lp.setMargins(dp(6), 0, 0, 0);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(l);
+        return b;
+    }
+
+    private void editFact(MemoryStore.Fact f) {
+        EditText et = new EditText(this);
+        et.setText(f.content);
+        et.setMinLines(3);
+        new AlertDialog.Builder(this)
+                .setTitle("编辑事实")
+                .setView(et)
+                .setPositiveButton("保存", (d, w) -> {
+                    String txt = et.getText().toString();
+                    if (txt.trim().isEmpty()) {
+                        toast("内容不能为空");
+                        return;
+                    }
+                    ms.updateFact(f.id, txt);
+                    toast("已保存");
+                    refreshList();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void deleteFact(MemoryStore.Fact f) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除记忆")
+                .setMessage(f.content)
+                .setPositiveButton("删除", (d, w) -> {
+                    ms.deleteFact(f.id);
+                    toast("已删除");
+                    refreshList();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void editSummary(MemoryStore.DailySummary s) {
+        EditText et = new EditText(this);
+        et.setText(s.summary);
+        et.setMinLines(3);
+        new AlertDialog.Builder(this)
+                .setTitle("编辑摘要")
+                .setView(et)
+                .setPositiveButton("保存", (d, w) -> {
+                    String txt = et.getText().toString();
+                    if (txt.trim().isEmpty()) {
+                        toast("内容不能为空");
+                        return;
+                    }
+                    ms.updateSummary(s.id, txt, s.moodSummary);
+                    toast("已保存");
+                    refreshList();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void deleteSummary(MemoryStore.DailySummary s) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除摘要")
+                .setMessage(s.summary)
+                .setPositiveButton("删除", (d, w) -> {
+                    ms.deleteSummary(s.id);
+                    toast("已删除");
+                    refreshList();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void doExport() {
+        try {
+            String json = ms.exportJson();
+            File dir = getExternalFilesDir(null);
+            if (dir == null) dir = getFilesDir();
+            File file = new File(dir, "memory_backup_" + System.currentTimeMillis() + ".json");
+            try (FileWriter fw = new FileWriter(file)) {
+                fw.write(json);
+            }
+            toast("已导出：" + file.getAbsolutePath());
+        } catch (Exception e) {
+            toast("导出失败：" + UiKit.safeMsg(e));
+        }
+    }
+
+    private void doImport() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, REQ_IMPORT);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IMPORT && resultCode == Activity.RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri == null) return;
+            try {
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(getContentResolver().openInputStream(uri)))) {
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                }
+                ms.importJson(sb.toString());
+                toast("导入成功");
+                refreshList();
+            } catch (org.json.JSONException e) {
+                toast("备份文件无效：" + UiKit.safeMsg(e));
+            } catch (Exception e) {
+                toast("导入失败：" + UiKit.safeMsg(e));
+            }
+        }
+    }
+
+    private String fmt(long ts) {
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date(ts));
+    }
+
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private int getColorCompat(int res) {
+        return getResources().getColor(res);
+    }
+
+    private int dp(float v) {
+        return Math.round(getResources().getDisplayMetrics().density * v);
+    }
+
+    private ImageButton iconButton(int res) {
+        ImageButton b = new ImageButton(this);
+        b.setImageResource(res);
+        b.setBackgroundColor(Color.TRANSPARENT);
+        b.setScaleType(ImageView.ScaleType.CENTER);
+        b.setPadding(dp(8), dp(8), dp(8), dp(8));
+        return b;
+    }
+
+    private LinearLayout.LayoutParams btnLp(int w, int h) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(w), dp(h));
+        lp.setMargins(dp(4), 0, dp(4), 0);
+        return lp;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        destroyed = true;
+    }
+}

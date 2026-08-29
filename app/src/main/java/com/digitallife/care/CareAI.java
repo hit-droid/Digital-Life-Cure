@@ -87,6 +87,8 @@ public class CareAI {
     private volatile int generation = 0;
     /** 当前 LLM 配置指纹；发送前检测变化自动重建（解决"改配置后单例仍用旧配置"） */
     private volatile String configFingerprint = "";
+    /** 对话进行中时收到新用户消息则置 true；当前轮 LLM 完成后会自动接续，避免消息丢失 */
+    private final AtomicBoolean pendingMessage = new AtomicBoolean(false);
 
     /** 护理大脑对话历史持久化会话 key */
     private static final String SESSION_CARE = "care";
@@ -233,7 +235,11 @@ public class CareAI {
         history.add(new LLMClient.ChatMessage("user", text));
         persistHistory();
         if (running.compareAndSet(false, true)) {
+            pendingMessage.set(false);
             pool.execute(this::converse);
+        } else {
+            // 对话进行中：标记新消息待处理，当前轮 LLM 完成后会自动接续，避免消息被吞
+            pendingMessage.set(true);
         }
     }
     public void handleFile(String fileName, String filePath) {
@@ -480,20 +486,17 @@ public class CareAI {
                     persistHistory();
                     postDone(fullText);
                 }
-                // 判断是否继续对话
+                // 是否继续对话：
+                // 1) 纯文本回复 → 默认结束，仅当有用户排队的新消息时才接续（防死循环）
+                // 2) 无文本但调用了工具 → 继续让 LLM 看工具结果
+                boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
                 boolean shouldContinue = false;
                 if (fullText.isEmpty()) {
-                    // 空文本：检查是否有工具调用结果需要继续
                     if (!history.isEmpty() && "tool".equals(history.get(history.size() - 1).role)) {
                         shouldContinue = true;
                     }
-                } else {
-                    // 有文本回复后，检查是否有未处理的新用户消息
-                    for (int i = history.size() - 1; i >= 0; i--) {
-                        String role = history.get(i).role;
-                        if ("assistant".equals(role) && i != history.size() - 1) break;
-                        if ("user".equals(role)) { shouldContinue = true; break; }
-                    }
+                } else if (hasPendingUser) {
+                    shouldContinue = true;
                 }
                 if (shouldContinue) {
                     doConverse();
@@ -505,7 +508,13 @@ public class CareAI {
             @Override
             public void onError(String error) {
                 postError(error);
-                if (gen == generation) running.set(false);
+                // 出错后也要尝试接续排队的新消息，避免用户输入被吞
+                boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
+                if (hasPendingUser && gen == generation) {
+                    doConverse();
+                } else {
+                    if (gen == generation) running.set(false);
+                }
             }
         });
     }

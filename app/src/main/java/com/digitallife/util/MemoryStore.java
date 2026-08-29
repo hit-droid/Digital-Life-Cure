@@ -201,6 +201,125 @@ public class MemoryStore {
         return out;
     }
 
+    public synchronized List<Fact> getAllFacts() {
+        ArrayList<Fact> out = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery(
+                "SELECT id, category, content, confidence, last_confirmed FROM facts ORDER BY last_confirmed DESC, id DESC",
+                null);
+        try {
+            while (c.moveToNext()) {
+                out.add(new Fact(c.getLong(0), c.getString(1), c.getString(2), c.getDouble(3), c.getLong(4)));
+            }
+        } finally {
+            c.close();
+        }
+        return out;
+    }
+
+    public synchronized List<DailySummary> getAllSummaries() {
+        return getRecentSummaries(Integer.MAX_VALUE);
+    }
+
+    public synchronized void deleteFact(long id) {
+        dbHelper.getWritableDatabase().delete("facts", "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    public synchronized void updateFact(long id, String newContent) {
+        if (newContent == null || newContent.trim().isEmpty()) return;
+        ContentValues v = new ContentValues();
+        v.put("content", newContent.trim());
+        v.put("last_confirmed", System.currentTimeMillis());
+        dbHelper.getWritableDatabase().update("facts", v, "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    public synchronized void deleteSummary(long id) {
+        dbHelper.getWritableDatabase().delete("daily_summaries", "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    public synchronized void updateSummary(long id, String summary, String moodSummary) {
+        if (summary == null || summary.trim().isEmpty()) return;
+        ContentValues v = new ContentValues();
+        v.put("summary", summary.trim());
+        if (moodSummary != null) v.put("mood_summary", moodSummary);
+        dbHelper.getWritableDatabase().update("daily_summaries", v, "id = ?", new String[]{String.valueOf(id)});
+    }
+
+    public synchronized String exportJson() {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("version", 1);
+            JSONArray facts = new JSONArray();
+            for (Fact f : getAllFacts()) {
+                facts.put(new JSONObject()
+                        .put("id", f.id)
+                        .put("category", f.category)
+                        .put("content", f.content)
+                        .put("confidence", f.confidence)
+                        .put("lastConfirmed", f.lastConfirmed));
+            }
+            JSONArray summaries = new JSONArray();
+            for (DailySummary s : getAllSummaries()) {
+                summaries.put(new JSONObject()
+                        .put("id", s.id)
+                        .put("date", s.date)
+                        .put("summary", s.summary)
+                        .put("moodSummary", s.moodSummary)
+                        .put("createdAt", s.createdAt));
+            }
+            o.put("facts", facts);
+            o.put("dailySummaries", summaries);
+            return o.toString(2);
+        } catch (Exception ex) {
+            return "{}";
+        }
+    }
+
+    public synchronized void importJson(String json) throws org.json.JSONException {
+        JSONObject o = new JSONObject(json);
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            if (o.has("facts")) {
+                JSONArray facts = o.getJSONArray("facts");
+                for (int i = 0; i < facts.length(); i++) {
+                    JSONObject f = facts.getJSONObject(i);
+                    ContentValues v = new ContentValues();
+                    v.put("category", f.optString("category", "profile"));
+                    v.put("content", f.getString("content"));
+                    v.put("confidence", f.optDouble("confidence", 1.0));
+                    v.put("last_confirmed", f.optLong("lastConfirmed", System.currentTimeMillis()));
+                    if (f.has("id")) {
+                        v.put("id", f.getLong("id"));
+                        db.insertWithOnConflict("facts", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+                    } else {
+                        db.insertWithOnConflict("facts", null, v, SQLiteDatabase.CONFLICT_IGNORE);
+                    }
+                }
+            }
+            if (o.has("dailySummaries")) {
+                JSONArray summaries = o.getJSONArray("dailySummaries");
+                for (int i = 0; i < summaries.length(); i++) {
+                    JSONObject s = summaries.getJSONObject(i);
+                    ContentValues v = new ContentValues();
+                    v.put("date", s.optString("date", todayKey()));
+                    v.put("summary", s.getString("summary"));
+                    v.put("mood_summary", s.optString("moodSummary", ""));
+                    v.put("created_at", s.optLong("createdAt", System.currentTimeMillis()));
+                    if (s.has("id")) {
+                        v.put("id", s.getLong("id"));
+                        db.insertWithOnConflict("daily_summaries", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+                    } else {
+                        db.insert("daily_summaries", null, v);
+                    }
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     public synchronized String buildDebugSnapshot() {
         StringBuilder sb = new StringBuilder();
         List<Message> messages = getContext();
@@ -414,32 +533,62 @@ public class MemoryStore {
         if (json != null && !json.isEmpty()) {
             try {
                 JSONObject o = new JSONObject(json);
-                JSONArray c = o.optJSONArray("context");
                 long now = System.currentTimeMillis();
-                if (c != null) {
-                    for (int i = 0; i < c.length(); i++) {
-                        JSONObject mo = c.getJSONObject(i);
-                        insertRawMessage(
-                                mo.optString("role"),
-                                mo.optString("content"),
-                                mo.optString("emotion_tag", null),
-                                now + i
-                        );
+                // 用事务批量插入：避免每条 insertRawMessage 触发 trim 把早期消息丢掉。
+                // 迁移完成后再统一 trim 一次到 CONTEXT_LIMIT。
+                SQLiteDatabase db = dbHelper.getWritableDatabase();
+                db.beginTransaction();
+                try {
+                    JSONArray c = o.optJSONArray("context");
+                    if (c != null) {
+                        for (int i = 0; i < c.length(); i++) {
+                            JSONObject mo = c.getJSONObject(i);
+                            String role = mo.optString("role");
+                            String content = mo.optString("content");
+                            String emotionTag = mo.optString("emotion_tag", null);
+                            if (content == null || content.trim().isEmpty()) continue;
+                            ContentValues cv = new ContentValues();
+                            cv.put("role", role);
+                            cv.put("content", content.trim());
+                            cv.put("emotion_tag", emotionTag);
+                            cv.put("timestamp", now + i);
+                            db.insert("raw_messages", null, cv);
+                        }
                     }
-                }
-                JSONArray events = o.optJSONArray("events");
-                if (events != null) {
-                    for (int i = 0; i < events.length(); i++) {
-                        upsertFact("event", events.getString(i), 1.0, now + i);
+                    JSONArray events = o.optJSONArray("events");
+                    if (events != null) {
+                        for (int i = 0; i < events.length(); i++) {
+                            String ev = events.optString(i, "");
+                            if (ev == null || ev.trim().isEmpty()) continue;
+                            ContentValues cv = new ContentValues();
+                            cv.put("category", "event");
+                            cv.put("content", ev.trim());
+                            cv.put("confidence", 1.0);
+                            cv.put("last_confirmed", now + i);
+                            db.insertWithOnConflict("facts", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+                        }
                     }
-                }
-                JSONArray profile = o.optJSONArray("profile");
-                if (profile != null) {
-                    for (int i = 0; i < profile.length(); i++) {
-                        upsertFact("profile", profile.getString(i), 1.0, now + i);
+                    JSONArray profile = o.optJSONArray("profile");
+                    if (profile != null) {
+                        for (int i = 0; i < profile.length(); i++) {
+                            String pf = profile.optString(i, "");
+                            if (pf == null || pf.trim().isEmpty()) continue;
+                            ContentValues cv = new ContentValues();
+                            cv.put("category", "profile");
+                            cv.put("content", pf.trim());
+                            cv.put("confidence", 1.0);
+                            cv.put("last_confirmed", now + i);
+                            db.insertWithOnConflict("facts", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+                        }
                     }
+                    db.setTransactionSuccessful();
+                    migratedOk = true;
+                } finally {
+                    db.endTransaction();
                 }
-                migratedOk = true;
+                // 迁移结束后统一 trim 一次（复用上面事务里的 db 句柄）
+                trimRawMessages(db);
+                trimFacts(db);
             } catch (Exception e) {
                 // 迁移失败必须保留旧数据：不标记已迁移、不删除，下次启动重试
                 Log.w("MemoryStore", "旧记忆迁移失败，保留旧数据等待重试", e);
