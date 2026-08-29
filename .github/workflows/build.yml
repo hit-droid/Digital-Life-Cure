@@ -52,26 +52,48 @@ jobs:
           set -e
           APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
           echo "APK=$APK_PATH"
+          VERSION_NAME=$(grep -oE 'versionName\s+"[^"]+"' app/build.gradle | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$VERSION_NAME" ]; then
+            echo "Failed to read versionName from app/build.gradle"
+            exit 1
+          fi
+          TAG="v${VERSION_NAME}"
+          echo "TAG=$TAG"
           RELEASE_RESPONSE=$(curl -sS -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
-            -d "{\"tag_name\":\"v1.20.0\",\"name\":\"数字生命 v1.20.0\",\"body\":\"修复 5 个 bug 并新增记忆管理功能（设置页查看/编辑/删除/导出/导入长期记忆）。CI 签名改为 actions/cache 持久化 p12。\",\"target_commitish\":\"${{ github.sha }}\"}")
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"数字生命 ${TAG}\",\"body\":\"自动发布：基于当前构建 versionName=${VERSION_NAME}。请查看 CHANGELOG.md 了解本次变更。\",\"target_commitish\":\"${{ github.sha }}\"}")
           RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id // empty')
           if [ -z "$RELEASE_ID" ]; then
-            echo "Release v1.20.0 already exists, fetching its id"
+            echo "Release ${TAG} already exists, fetching its id"
             RELEASE_ID=$(curl -sS \
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              https://api.github.com/repos/${{ github.repository }}/releases/tags/v1.20.0 | jq -r '.id // empty')
+              https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG} | jq -r '.id // empty')
           fi
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-            echo "Failed to resolve release id"
+            echo "Failed to resolve release id for ${TAG}"
             echo "$RELEASE_RESPONSE"
             exit 1
+          fi
+          APK_NAME=$(basename "$APK_PATH")
+          # 若 release 下已有同名 asset，先删除再上传，避免 422 already_exists
+          EXISTING_ASSET_ID=$(curl -sS \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets" \
+            | jq -r --arg n "$APK_NAME" '.[] | select(.name==$n) | .id' | head -n1)
+          if [ -n "$EXISTING_ASSET_ID" ] && [ "$EXISTING_ASSET_ID" != "null" ]; then
+            echo "Deleting existing asset ${APK_NAME} (id=${EXISTING_ASSET_ID})"
+            curl -sS -X DELETE \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/assets/${EXISTING_ASSET_ID}"
           fi
           curl -sS -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Content-Type: application/vnd.android.package-archive" \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$(basename "$APK_PATH")" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=${APK_NAME}" \
             --data-binary @"$APK_PATH"
+          echo "Uploaded ${APK_NAME} to release ${TAG}"
