@@ -430,21 +430,17 @@ public class ChatActivity extends Activity {
         if (!isText) {
             return "\n\n[附件 " + name + "]（该类型文件暂未解析内容）";
         }
-        try {
-            File f = new File(path);
-            if (!f.exists() || f.length() > 200 * 1024) {
-                return "\n\n[附件 " + name + "]（文件过大或不存在，内容未读取）";
-            }
-            java.io.FileInputStream fis = new java.io.FileInputStream(f);
-            byte[] buf = new byte[(int) f.length()];
-            int off = 0;
-            while (off < buf.length) {
-                int r = fis.read(buf, off, buf.length - off);
-                if (r < 0) break;
-                off += r;
-            }
-            fis.close();
-            String content = new String(buf, java.nio.charset.StandardCharsets.UTF_8);
+        File f = new File(path);
+        if (!f.exists() || f.length() > 200 * 1024) {
+            return "\n\n[附件 " + name + "]（文件过大或不存在，内容未读取）";
+        }
+        // 用 try-with-resources 保证流一定关闭；按块读避免一次性分配大数组
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = fis.read(buf)) > 0) bos.write(buf, 0, n);
+            String content = bos.toString(java.nio.charset.StandardCharsets.UTF_8);
             if (content.length() > 20000) {
                 content = content.substring(0, 20000) + "\n…（内容已截断）";
             }
