@@ -3,19 +3,22 @@ package com.digitallife.ui.shell;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
+import android.view.ViewGroup;
 
 import com.digitallife.ui.ConversationTabView;
 import com.digitallife.ui.ContactsTabView;
 import com.digitallife.ui.DiscoverTabView;
-import com.digitallife.ui.MainActivity;
 import com.digitallife.ui.MemoryManageActivity;
 import com.digitallife.ui.PluginTabView;
 import com.digitallife.ui.SettingsTabView;
 import com.digitallife.ui.UiKit;
 
+import java.util.EnumMap;
+import java.util.Map;
+
 /**
  * Operit 路由 → 内容视图工厂（v1.23.0 全量重构仿 Operit AI）。
- * 每个 route 返回一个可放入主内容区的 View。
+ * 缓存主壳 5 个 Tab 的 View 实例以保留滚动/输入状态。
  * 独立子页（记忆管理/护理大脑）走 Intent 跳转，不在主壳内。
  */
 public class OperitContentView {
@@ -29,32 +32,56 @@ public class OperitContentView {
         Context getContext();
     }
 
-    public static View create(OperitRoute route, Host host) {
+    private final Map<OperitRoute, View> cache = new EnumMap<>(OperitRoute.class);
+
+    public View obtain(OperitRoute route, Host host) {
+        if (cache.containsKey(route)) return cache.get(route);
+        View v = create(route, host);
+        if (v != null) cache.put(route, v);
+        return v;
+    }
+
+    private View create(OperitRoute route, Host host) {
         Context ctx = host.getContext();
         switch (route) {
-            case CHAT:
-                ConversationTabView ct = host.getConversationTab();
-                if (ct != null) ct.refresh();
-                return ct;
-            case CONTACTS:
-                ContactsTabView cts = host.getContactsTab();
-                if (cts != null) cts.refresh();
-                return cts;
-            case DISCOVER:
-                DiscoverTabView dt = host.getDiscoverTab();
-                if (dt != null) dt.refresh();
-                return dt;
-            case PLUGIN:
+            case CHAT: {
+                ConversationTabView v = host.getConversationTab();
+                if (v != null) v.refresh();
+                return v;
+            }
+            case CONTACTS: {
+                ContactsTabView v = host.getContactsTab();
+                if (v != null) v.refresh();
+                return v;
+            }
+            case DISCOVER: {
+                DiscoverTabView v = host.getDiscoverTab();
+                if (v != null) v.refresh();
+                return v;
+            }
+            case PLUGIN: {
                 return host.getPluginTab();
-            case SETTINGS:
-                SettingsTabView st = host.getSettingsTab();
-                if (st != null) st.onResume();
-                return st;
+            }
+            case SETTINGS: {
+                SettingsTabView v = host.getSettingsTab();
+                if (v != null) v.onResume();
+                return v;
+            }
             case MEMORY:
                 openActivity(ctx, MemoryManageActivity.class);
-                return placeholder(ctx);
+                return null;
+            case CARE:
+                openActivity(ctx, com.digitallife.care.CareModelsActivity.class);
+                return null;
+            case THEMES:
+            case DEVELOPER:
+            case ABOUT:
+                UiKit.toast(ctx, route == OperitRoute.THEMES ? "主题设置开发中"
+                        : route == OperitRoute.DEVELOPER ? "开发者选项开发中"
+                        : "关于开发中");
+                return null;
             default:
-                return placeholder(ctx);
+                return null;
         }
     }
 
@@ -68,13 +95,5 @@ public class OperitContentView {
         } catch (Exception e) {
             UiKit.toast(ctx, "无法打开: " + UiKit.safeMsg(e));
         }
-    }
-
-    private static View placeholder(Context ctx) {
-        android.widget.TextView tv = new android.widget.TextView(ctx);
-        tv.setText("暂未实现");
-        tv.setTextColor(0xFFB0B0B8);
-        tv.setGravity(android.view.Gravity.CENTER);
-        return tv;
     }
 }
