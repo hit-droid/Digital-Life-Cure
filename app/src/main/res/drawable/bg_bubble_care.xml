@@ -5,9 +5,9 @@
         <shape android:shape="rectangle">
             <!-- v1.27.0：液态玻璃渐变（对齐护理顶栏深绿体系），不再是扁平死色块 -->
             <gradient
-                android:startColor="#14432F"
-                android:centerColor="#123830"
-                android:endColor="#0F2A22"
+                android:startColor="#1B5E45"
+                android:centerColor="#16493A"
+                android:endColor="#0F3D2E"
                 android:angle="270" />
             <corners android:radius="16dp" />
         </shape>
