@@ -129,7 +129,7 @@ public final class UiKit {
                     view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90).start();
                     break;
                 case MotionEvent.ACTION_UP:
-                case MotionEvent.CANCEL:
+                case MotionEvent.ACTION_CANCEL:
                     view.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
                     break;
             }

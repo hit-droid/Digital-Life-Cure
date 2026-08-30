@@ -254,10 +254,10 @@ public class ChatActivity extends Activity {
             chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
             chip.setBackgroundResource(R.drawable.bg_chip_outline);
             chip.setPadding(dp(12), dp(6), dp(12), dp(6));
-            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            clp.rightMargin = dp(8);
-            chip.setLayoutParams(clp);
+            chipLp.rightMargin = dp(8);
+            chip.setLayoutParams(chipLp);
             chip.setOnClickListener(v -> {
                 UiKit.flash(v);
                 etInput.setText(insert);
