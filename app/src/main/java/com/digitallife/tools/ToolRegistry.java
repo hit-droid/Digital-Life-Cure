@@ -50,6 +50,15 @@ public class ToolRegistry {
         return new ArrayList<>(tools.values());
     }
 
+    /** v1.26.0：返回所有已注册工具名（用于容错匹配） */
+    public List<String> allToolNames() {
+        List<String> out = new ArrayList<>();
+        for (Tool t : tools.values()) {
+            if (t != null && t.getName() != null) out.add(t.getName());
+        }
+        return out;
+    }
+
     public boolean isEmpty() {
         return tools.isEmpty();
     }
