@@ -36,6 +36,7 @@ import com.digitallife.util.ChatStore;
 import com.digitallife.util.Settings;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -70,6 +71,14 @@ public class ChatActivity extends Activity {
     private ImageButton btnAttach;
     private ImageButton btnSend;
     private Button btnModel;
+    /** v1.27.0：输入建议栏（基于历史对话的 3 条短建议） */
+    private LinearLayout suggestionBar;
+    private long lastSuggestionAt = 0;
+    private static final long SUGGESTION_COOLDOWN_MS = 30_000L;
+    private static final long SUGGESTION_DEBOUNCE_MS = 1_000L;
+    private final Runnable suggestionDebounce = new Runnable() {
+        @Override public void run() { requestSuggestions(); }
+    };
     /** 气泡最大宽度 = 屏幕宽度 82%，对齐 Operit 比例 */
     private int maxBubbleWidth;
     private CareAI careAI;
@@ -300,6 +309,15 @@ public class ChatActivity extends Activity {
         root.addView(chipScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        // v1.27.0：输入建议栏（默认隐藏；空内容+焦点时 LLM 生成 3 条短建议）
+        suggestionBar = new LinearLayout(this);
+        suggestionBar.setOrientation(LinearLayout.HORIZONTAL);
+        suggestionBar.setGravity(Gravity.CENTER_VERTICAL);
+        suggestionBar.setPadding(dp(12), dp(6), dp(12), dp(6));
+        suggestionBar.setVisibility(View.GONE);
+        root.addView(suggestionBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         // ===== 底部输入栏（玻璃感容器） =====
         LinearLayout inputBar = new LinearLayout(this);
         inputBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -364,6 +382,31 @@ public class ChatActivity extends Activity {
         etInput.setPadding(dp(14), dp(10), dp(14), dp(10));
         etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
                 has ? R.drawable.bg_input_focused : R.drawable.bg_input));
+        // v1.27.0：输入监听 → 触发输入建议
+        etInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                String t = s == null ? "" : s.toString().trim();
+                if (t.isEmpty() && etInput.hasFocus()) {
+                    handler.removeCallbacks(suggestionDebounce);
+                    handler.postDelayed(suggestionDebounce, SUGGESTION_DEBOUNCE_MS);
+                } else {
+                    handler.removeCallbacks(suggestionDebounce);
+                    if (suggestionBar != null) suggestionBar.setVisibility(View.GONE);
+                }
+            }
+        });
+        etInput.setOnFocusChangeListener((v, has) -> {
+            v.setBackgroundResource(has ? R.drawable.bg_input_focused : R.drawable.bg_input);
+            if (has && (etInput.getText() == null || etInput.getText().toString().trim().isEmpty())) {
+                handler.removeCallbacks(suggestionDebounce);
+                handler.postDelayed(suggestionDebounce, SUGGESTION_DEBOUNCE_MS);
+            } else if (!has) {
+                handler.removeCallbacks(suggestionDebounce);
+                if (suggestionBar != null) suggestionBar.setVisibility(View.GONE);
+            }
+        });
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         // 语音按钮（占位：v1.25.0 短按弹提示，v1.26.0 起接入 SpeechRecognizer）
@@ -696,6 +739,130 @@ public class ChatActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    // ==================== v1.27.0：输入建议（基于历史对话的 3 条短建议） ====================
+
+    /**
+     * 基于近 10 条对话 + 相关事实，让 LLM 生成 3 条 ≤12 字的输入建议。
+     * 失败/超时/无 API 静默隐藏 suggestionBar。
+     */
+    private void requestSuggestions() {
+        if (suggestionBar == null) return;
+        if (etInput == null || etInput.getText() == null
+                || !etInput.getText().toString().trim().isEmpty()) {
+            suggestionBar.setVisibility(View.GONE);
+            return;
+        }
+        if (!etInput.hasFocus()) {
+            suggestionBar.setVisibility(View.GONE);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastSuggestionAt < SUGGESTION_COOLDOWN_MS) return;
+        lastSuggestionAt = now;
+
+        ensureChatLlm();
+        if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) return;
+
+        List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 10);
+        if (hist.isEmpty()) {
+            // 冷启动：用 settings 里的 petName 生成首次建议
+            String petName = new Settings(this).getPetName();
+            renderSuggestions(new String[]{
+                    "和" + petName + "聊聊天",
+                    "问问" + petName + "今天心情",
+                    "让" + petName + "讲个笑话"
+            });
+            return;
+        }
+
+        StringBuilder context = new StringBuilder();
+        context.append("你是「").append(new Settings(this).getPetName()).append("」。\n");
+        context.append("基于以下最近的对话，为用户生成 3 条他可能想问的简短问题（每条 ≤12 字）。\n");
+        context.append("要求：贴合上下文、自然、口语化。\n");
+        context.append("输出 JSON 数组：[\"...\",\"...\",\"...\"]。只输出 JSON。\n\n");
+        for (ChatStore.StoredMsg m : hist) {
+            String role = m.role == null ? "user" : m.role;
+            String content = m.content == null ? "" : m.content;
+            if (content.length() > 80) content = content.substring(0, 80) + "…";
+            context.append(role).append(": ").append(content).append("\n");
+        }
+
+        List<LLMClient.ChatMessage> msgs = new ArrayList<>();
+        msgs.add(new LLMClient.ChatMessage("user", context.toString()));
+        JSONObject extra = new JSONObject();
+        try {
+            extra.put("system", "你只输出 JSON 数组，不要任何解释。");
+        } catch (Exception ignored) {}
+
+        llm.chatOnce(msgs, extra, (text, err) -> {
+            if (err != null || text == null) {
+                handler.post(() -> suggestionBar.setVisibility(View.GONE));
+                return;
+            }
+            String[] suggestions = parseSuggestions(text);
+            handler.post(() -> {
+                if (suggestions == null) {
+                    suggestionBar.setVisibility(View.GONE);
+                } else {
+                    renderSuggestions(suggestions);
+                }
+            });
+        });
+    }
+
+    private String[] parseSuggestions(String text) {
+        if (text == null) return null;
+        String t = text.trim();
+        // 去除 markdown 代码块包裹
+        if (t.startsWith("```")) {
+            int firstNewline = t.indexOf('\n');
+            if (firstNewline > 0) t = t.substring(firstNewline + 1);
+            int lastFence = t.lastIndexOf("```");
+            if (lastFence > 0) t = t.substring(0, lastFence);
+            t = t.trim();
+        }
+        try {
+            JSONArray arr = new JSONArray(t);
+            if (arr.length() == 0) return null;
+            String[] out = new String[Math.min(3, arr.length())];
+            for (int i = 0; i < out.length; i++) {
+                String s = arr.optString(i, "").trim();
+                if (s.isEmpty()) return null;
+                if (s.length() > 20) s = s.substring(0, 20);
+                out[i] = s;
+            }
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void renderSuggestions(String[] suggestions) {
+        if (suggestionBar == null) return;
+        suggestionBar.removeAllViews();
+        for (int i = 0; i < suggestions.length; i++) {
+            final String text = suggestions[i];
+            TextView chip = new TextView(this);
+            chip.setText("✦ " + text);
+            chip.setTextSize(12f);
+            chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            chip.setBackgroundResource(R.drawable.bg_chip_outline);
+            chip.setPadding(dp(12), dp(6), dp(12), dp(6));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = dp(8);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(v -> {
+                UiKit.flash(v);
+                etInput.setText(text);
+                etInput.setSelection(text.length());
+                suggestionBar.setVisibility(View.GONE);
+            });
+            suggestionBar.addView(chip);
+        }
+        suggestionBar.setVisibility(View.VISIBLE);
     }
 
     // ==================== 对话大脑独立对话（不依赖桌宠） ====================
