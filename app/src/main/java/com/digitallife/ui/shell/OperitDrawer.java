@@ -106,7 +106,7 @@ public class OperitDrawer extends LinearLayout {
 
     private View buildSectionTitle(int titleRes, String fallback) {
         TextView tv = new TextView(getContext());
-        tv.setText(titleRes != 0 ? titleRes : fallback);
+        if (titleRes != 0) tv.setText(titleRes); else tv.setText(fallback);
         tv.setTextSize(11f);
         tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         tv.setTextColor(UiKit.color(getContext(), R.color.operit_accent));

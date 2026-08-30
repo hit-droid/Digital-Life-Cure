@@ -238,7 +238,7 @@ public final class UiKit {
     public static void aboutDialog(Activity activity) {
         android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity);
         LinearLayout wrap = new LinearLayout(activity);
-        wrap.setOrientation(VERTICAL);
+        wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setBackgroundColor(color(activity, R.color.operit_bg));
         int pad = dp(activity, 20);
         wrap.setPadding(pad, pad, pad, pad / 2);
@@ -261,7 +261,7 @@ public final class UiKit {
 
         // 信息卡片
         LinearLayout info = new LinearLayout(activity);
-        info.setOrientation(VERTICAL);
+        info.setOrientation(LinearLayout.VERTICAL);
         info.setBackgroundColor(color(activity, R.color.operit_surface));
         info.setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
@@ -290,7 +290,7 @@ public final class UiKit {
 
     private static void addInfoRow(Context c, LinearLayout root, String key, String val) {
         LinearLayout row = new LinearLayout(c);
-        row.setOrientation(HORIZONTAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, dp(c, 6), 0, dp(c, 6));
         TextView k = new TextView(c);
         k.setText(key);
@@ -310,7 +310,7 @@ public final class UiKit {
     /** Operit 风格 SectionHeader: 紫色大标题 + 副标题 + 顶部间距 */
     public static View sectionTitle(Context c, LinearLayout root, String title, String subtitle) {
         LinearLayout wrap = new LinearLayout(c);
-        wrap.setOrientation(VERTICAL);
+        wrap.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         wlp.topMargin = dp(c, 20);
@@ -346,7 +346,7 @@ public final class UiKit {
     public static LinearLayout listTile(Context c, LinearLayout root, int iconRes,
                                         String title, String subtitle, View.OnClickListener onClick) {
         LinearLayout card = new LinearLayout(c);
-        card.setOrientation(HORIZONTAL);
+        card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setBackgroundColor(color(c, R.color.operit_surface));
         card.setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14));
@@ -364,7 +364,7 @@ public final class UiKit {
         }
 
         LinearLayout textCol = new LinearLayout(c);
-        textCol.setOrientation(VERTICAL);
+        textCol.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         tlp.leftMargin = dp(c, 12);
@@ -411,7 +411,7 @@ public final class UiKit {
     public static Switch switchTile(Context c, LinearLayout root,
                                    String title, String subtitle, boolean checked) {
         LinearLayout card = new LinearLayout(c);
-        card.setOrientation(HORIZONTAL);
+        card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setBackgroundColor(color(c, R.color.operit_surface));
         card.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
@@ -421,7 +421,7 @@ public final class UiKit {
         root.addView(card, clp);
 
         LinearLayout textCol = new LinearLayout(c);
-        textCol.setOrientation(VERTICAL);
+        textCol.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         textCol.setLayoutParams(tlp);
@@ -456,7 +456,7 @@ public final class UiKit {
     /** Operit 风格角色卡（OverviewCard）: 紫色背景 + 角色名 + 描述 + StatChip 行 */
     public static LinearLayout roleCard(Context c, LinearLayout root, String title, String subtitle) {
         LinearLayout card = new LinearLayout(c);
-        card.setOrientation(VERTICAL);
+        card.setOrientation(LinearLayout.VERTICAL);
         card.setBackgroundColor(color(c, R.color.brand_operit_dark));
         card.setPadding(dp(c, 20), dp(c, 20), dp(c, 20), dp(c, 20));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
