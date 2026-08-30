@@ -41,6 +41,7 @@
 
     <!-- ===== Markdown 代码块（深色） ===== -->
     <color name="code_bg">#2A2740</color>
+    <color name="code_text">#E6EDF3</color>
 
     <!-- ===== Operit 主题色（深色模式与亮色一致，全 App 强制深色） ===== -->
     <color name="brand_operit">#6D5BBA</color>

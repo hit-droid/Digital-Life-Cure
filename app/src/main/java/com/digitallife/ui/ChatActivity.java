@@ -69,6 +69,8 @@ public class ChatActivity extends Activity {
     private ImageButton btnAttach;
     private ImageButton btnSend;
     private Button btnModel;
+    /** 气泡最大宽度 = 屏幕宽度 82%，对齐 Operit 比例 */
+    private int maxBubbleWidth;
     private CareAI careAI;
     private CareAI.CareListener careListener;
     private LLMClient llm;
@@ -120,14 +122,15 @@ public class ChatActivity extends Activity {
         buildUi();
         mdRenderer = new MarkdownRenderer(
                 getColorCompat(R.color.code_bg),
-                getColorCompat(R.color.operit_text_primary),
+                getColorCompat(R.color.code_text),
                 getColorCompat(R.color.operit_text_secondary),
                 getColorCompat(R.color.operit_text_primary),
-                getColorCompat(R.color.brand));
+                getColorCompat(R.color.operit_accent));
         restoreHistory();
     }
 
     private void buildUi() {
+        maxBubbleWidth = (int) (getResources().getDisplayMetrics().widthPixels * 0.82f);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(getColorCompat(R.color.operit_bg));
@@ -220,20 +223,25 @@ public class ChatActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        // 输入区与对话区的细分隔线
+        View inputDivider = new View(this);
+        inputDivider.setBackgroundColor(getColorCompat(R.color.operit_divider));
+        root.addView(inputDivider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+
         // ===== 底部输入栏（玻璃感容器） =====
         LinearLayout inputBar = new LinearLayout(this);
         inputBar.setOrientation(LinearLayout.HORIZONTAL);
         inputBar.setGravity(Gravity.CENTER_VERTICAL);
-        inputBar.setBackgroundColor(getColorCompat(R.color.surface_glass));
-        inputBar.setElevation(dp(10));
-        inputBar.setPadding(dp(8), dp(6), dp(8), dp(8));
+        inputBar.setBackgroundResource(R.drawable.bg_input_bar);
+        inputBar.setPadding(dp(8), dp(8), dp(8), dp(8));
 
         // 待发送附件条（选文件后先暂存，与文字一起发送）
         attachBar = new LinearLayout(this);
         attachBar.setOrientation(LinearLayout.HORIZONTAL);
         attachBar.setGravity(Gravity.CENTER_VERTICAL);
-        attachBar.setBackgroundColor(getColorCompat(R.color.card_bg));
-        attachBar.setPadding(dp(12), dp(2), dp(12), dp(2));
+        attachBar.setBackgroundColor(getColorCompat(R.color.operit_surface));
+        attachBar.setPadding(dp(14), dp(6), dp(14), dp(6));
         attachBar.setVisibility(View.GONE);
         tvAttachName = new TextView(this);
         tvAttachName.setTextSize(13f);
@@ -282,10 +290,10 @@ public class ChatActivity extends Activity {
             return false;
         });
         etInput.setBackgroundResource(R.drawable.bg_input);
-        etInput.setPadding(dp(12), dp(6), dp(12), dp(6));
+        etInput.setPadding(dp(14), dp(10), dp(14), dp(10));
         etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
                 has ? R.drawable.bg_input_focused : R.drawable.bg_input));
-        inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         ImageButton btnSendView = new ImageButton(this);
         btnSend = btnSendView;
@@ -906,8 +914,8 @@ public class ChatActivity extends Activity {
         b.setTextSize(15f);
         b.setTextColor(getColorCompat(R.color.operit_text_primary));
         b.setLineSpacing(3f, 1f);
-        b.setPadding(dp(12), dp(8), dp(12), dp(8));
-        b.setMaxWidth(dp(260));
+        b.setPadding(dp(12), dp(10), dp(12), dp(10));
+        b.setMaxWidth(maxBubbleWidth);
         b.setElevation(dp(2));
         b.setBackgroundResource(R.drawable.bg_bubble_ai);
         b.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
@@ -928,8 +936,8 @@ public class ChatActivity extends Activity {
         bubble.setTextSize(15f);
         bubble.setTextColor(Color.WHITE);
         bubble.setLineSpacing(3f, 1f);
-        bubble.setPadding(dp(12), dp(8), dp(12), dp(8));
-        bubble.setMaxWidth(dp(260));
+        bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
+        bubble.setMaxWidth(maxBubbleWidth);
         bubble.setElevation(dp(2));
         bubble.setBackgroundResource(R.drawable.bg_bubble_user);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -1220,7 +1228,11 @@ public class ChatActivity extends Activity {
 
     private void scrollToBottom() {
         if (userScrolledAway) return;
-        scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+        scroll.post(() -> {
+            View child = scroll.getChildAt(0);
+            if (child == null) return;
+            scroll.smoothScrollTo(0, child.getBottom());
+        });
     }
 
     private ImageButton iconButton(int res) {
