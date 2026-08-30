@@ -126,14 +126,18 @@ public class PlanExecutor {
                 && plan.optJSONObject(endIdx).optBoolean("parallel", false)) {
             endIdx++;
         }
-        if (endIdx == startIdx) {
+        // 提取 final 副本用于 lambda 捕获
+        final int finalStart = startIdx;
+        final int finalEnd = endIdx;
+        final boolean finalAllOk = allOk;
+        if (finalEnd == finalStart) {
             // 单步串行
-            executeStep(plan, startIdx, tools, listener, () ->
-                    executeGroup(plan, startIdx + 1, tools, listener, allOk));
+            executeStep(plan, finalStart, tools, listener, () ->
+                    executeGroup(plan, finalStart + 1, tools, listener, finalAllOk));
         } else {
-            // [startIdx, endIdx) 并行
-            executeParallelGroup(plan, startIdx, endIdx, tools, listener, () ->
-                    executeGroup(plan, endIdx, tools, listener, allOk));
+            // [finalStart, finalEnd) 并行
+            executeParallelGroup(plan, finalStart, finalEnd, tools, listener, () ->
+                    executeGroup(plan, finalEnd, tools, listener, finalAllOk));
         }
     }
 
