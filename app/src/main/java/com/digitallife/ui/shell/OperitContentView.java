@@ -83,6 +83,9 @@ public class OperitContentView {
             case TOOLMARKET:
                 openActivity(ctx, com.digitallife.ui.ToolMarketActivity.class);
                 return null;
+            case CONSOLE:
+                openActivity(ctx, com.digitallife.ui.AgentConsoleActivity.class);
+                return null;
             case THEMES:
                 openActivity(ctx, ThemesActivity.class);
                 return null;

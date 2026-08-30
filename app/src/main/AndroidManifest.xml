@@ -119,6 +119,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 智能体控制台 -->
+        <activity
+            android:name="com.digitallife.ui.AgentConsoleActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
         <activity
             android:name="com.digitallife.ui.ChatActivity"

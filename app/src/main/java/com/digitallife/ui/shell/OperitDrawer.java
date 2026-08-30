@@ -60,6 +60,7 @@ public class OperitDrawer extends LinearLayout {
         addRouteItem(OperitRoute.PERSONA);
         addRouteItem(OperitRoute.CARE);
         addRouteItem(OperitRoute.TOOLMARKET);
+        addRouteItem(OperitRoute.CONSOLE);
         addRouteItem(OperitRoute.THEMES);
         addRouteItem(OperitRoute.DEVELOPER);
         addRouteItem(OperitRoute.ABOUT);

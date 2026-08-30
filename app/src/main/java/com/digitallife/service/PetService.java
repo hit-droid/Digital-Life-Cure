@@ -70,7 +70,7 @@ public class PetService extends Service implements AICore.Output,
     private WindowManager.LayoutParams overlayParams;
     private DisplayManager.DisplayListener displayListener;
 
-    private AICore aiCore;
+    public AICore aiCore; // v1.24.0: AgentConsoleActivity 需访问
     private CareAutomation careAutomation;
     private TTSEngine tts;
     private STTEngine stt;
@@ -237,6 +237,7 @@ public class PetService extends Service implements AICore.Output,
 
         // v1.24.0：主动行为引擎
         proactiveEngine = new com.digitallife.brain.ProactiveEngine(this);
+        com.digitallife.brain.BrainLog.getInstance().log("init", "主动行为引擎就绪（30min tick）");
 
         // 双层 AI 协作：注入执行层（AI-2），让大脑的行为意图落到真实动作/模型上
         CareExecutor careExecutor = CareExecutor.getInstance(this);
