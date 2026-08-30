@@ -62,13 +62,15 @@ public class PetService extends Service implements AICore.Output,
     private static final int NOTIFY_ID = 1001;
     private static final String TAG = "PetService";
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private com.digitallife.brain.ProactiveEngine proactiveEngine; // v1.24.0
+    private long lastProactiveTickMs = 0;
 
     private WindowManager windowManager;
     private PetOverlayView overlayView;
     private WindowManager.LayoutParams overlayParams;
     private DisplayManager.DisplayListener displayListener;
 
-    private AICore aiCore;
+    public AICore aiCore; // v1.24.0: AgentConsoleActivity 需访问
     private CareAutomation careAutomation;
     private TTSEngine tts;
     private STTEngine stt;
@@ -98,6 +100,7 @@ public class PetService extends Service implements AICore.Output,
             if (aiCore != null) {
                 aiCore.onUserInteraction();
                 aiCore.onUserSays(text);
+                if (proactiveEngine != null) proactiveEngine.markUserActive(); // v1.24.0
             }
         }
 
@@ -123,6 +126,13 @@ public class PetService extends Service implements AICore.Output,
         public void run() {
             if (!vitalsTicking) return;
             if (vitals != null) vitals.tick(PetVitalsManager.currentHour(), touching);
+            // v1.24.0：每 30 分钟巡检一次主动行为
+            long now = System.currentTimeMillis();
+            if (proactiveEngine != null
+                    && now - lastProactiveTickMs > com.digitallife.brain.ProactiveEngine.INTERVAL_MS) {
+                lastProactiveTickMs = now;
+                try { proactiveEngine.tick(); } catch (Exception ignored) {}
+            }
             mainHandler.postDelayed(this, 1000L);
         }
     };
@@ -224,6 +234,10 @@ public class PetService extends Service implements AICore.Output,
         aiCore.setOutput(this);
         aiCore.start();
         memory = aiCore.getMemory();
+
+        // v1.24.0：主动行为引擎
+        proactiveEngine = new com.digitallife.brain.ProactiveEngine(this);
+        com.digitallife.brain.BrainLog.getInstance().log("init", "主动行为引擎就绪（30min tick）");
 
         // 双层 AI 协作：注入执行层（AI-2），让大脑的行为意图落到真实动作/模型上
         CareExecutor careExecutor = CareExecutor.getInstance(this);
@@ -447,6 +461,7 @@ public class PetService extends Service implements AICore.Output,
         aiCore.onUserInteraction();
         noteUserInteraction();
         aiCore.onUserSays(text);
+        if (proactiveEngine != null) proactiveEngine.markUserActive(); // v1.24.0
     }
 
     @Override
@@ -690,6 +705,11 @@ public class PetService extends Service implements AICore.Output,
     @Override
     public void onBubble(String text, float seconds) {
         if (overlayView != null) overlayView.showBubble(text, seconds);
+    }
+
+    /** v1.24.0：主动行为冒泡（由 ProactiveEngine.tick 调用） */
+    public void showProactiveBubble(String text) {
+        onBubble(text, 4f);
     }
 
     @Override

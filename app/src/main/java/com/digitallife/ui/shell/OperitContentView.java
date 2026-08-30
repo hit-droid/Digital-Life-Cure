@@ -77,6 +77,15 @@ public class OperitContentView {
             case CARE:
                 openActivity(ctx, com.digitallife.care.CareModelsActivity.class);
                 return null;
+            case PERSONA:
+                openActivity(ctx, com.digitallife.ui.PersonaActivity.class);
+                return null;
+            case TOOLMARKET:
+                openActivity(ctx, com.digitallife.ui.ToolMarketActivity.class);
+                return null;
+            case CONSOLE:
+                openActivity(ctx, com.digitallife.ui.AgentConsoleActivity.class);
+                return null;
             case THEMES:
                 openActivity(ctx, ThemesActivity.class);
                 return null;

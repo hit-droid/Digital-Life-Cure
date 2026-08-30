@@ -103,6 +103,30 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 工具市场 -->
+        <activity
+            android:name="com.digitallife.ui.ToolMarketActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
+        <!-- 角色管理 -->
+        <activity
+            android:name="com.digitallife.ui.PersonaActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
+        <!-- 智能体控制台 -->
+        <activity
+            android:name="com.digitallife.ui.AgentConsoleActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
         <activity
             android:name="com.digitallife.ui.ChatActivity"

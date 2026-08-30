@@ -57,7 +57,10 @@ public class OperitDrawer extends LinearLayout {
         addView(buildDivider());
         addView(buildSectionTitle("高级"));
         addRouteItem(OperitRoute.MEMORY);
+        addRouteItem(OperitRoute.PERSONA);
         addRouteItem(OperitRoute.CARE);
+        addRouteItem(OperitRoute.TOOLMARKET);
+        addRouteItem(OperitRoute.CONSOLE);
         addRouteItem(OperitRoute.THEMES);
         addRouteItem(OperitRoute.DEVELOPER);
         addRouteItem(OperitRoute.ABOUT);
@@ -113,7 +116,7 @@ public class OperitDrawer extends LinearLayout {
         textCol.addView(brand);
 
         TextView version = new TextView(getContext());
-        version.setText("v1.23.1 · 小汐 · 在线");
+        version.setText("v1.24.0 · 小汐 · 在线");
         version.setTextSize(11f);
         version.setTextColor(UiKit.color(getContext(), R.color.operit_text_hint));
         LinearLayout.LayoutParams vlp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);

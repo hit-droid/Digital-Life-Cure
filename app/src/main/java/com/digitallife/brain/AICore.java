@@ -67,6 +67,30 @@ public class AICore {
     private LLMClient llm;
     private final BehaviorStyle style = new BehaviorStyle();
     private CareExecutor executor; // 执行层（AI-2），行为包/动作最终交给它落地
+    private final com.digitallife.brain.PlanExecutor planExecutor = new com.digitallife.brain.PlanExecutor();
+    private final com.digitallife.brain.PlanExecutor.PlanListener planListener =
+            new com.digitallife.brain.PlanExecutor.PlanListener() {
+                @Override
+                public void onPlanStart(int steps) {
+                    if (out != null) out.onBubble("正在执行多步计划（" + steps + " 步）…", 2f);
+                }
+                @Override
+                public void onStepStart(int index, String tool, JSONObject args) {
+                    if (out != null) {
+                        out.onBubble("步骤 " + (index + 1) + ": " + tool, 1.5f);
+                    }
+                }
+                @Override
+                public void onStepEnd(int index, String tool, String result, String error) {
+                    // 错误也继续；结果反馈给 LLM 下一轮
+                }
+                @Override
+                public void onPlanEnd(boolean allOk) {
+                    if (out != null) {
+                        out.onBubble(allOk ? "✓ 计划完成" : "⚠ 计划部分失败", 2f);
+                    }
+                }
+            };
 
     private Output out;
     private boolean running = false;
@@ -95,6 +119,20 @@ public class AICore {
         this.memory = loadMemory();
         this.emotion = new EmotionState();
         this.llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
+        // 挂载扩展工具（20+）
+        com.digitallife.tools.BuiltinTools.install(tools, settings.getContext().getApplicationContext());
+        // 注册默认 Hook Runner 钩子（AICore 独立维护一份日志）
+        com.digitallife.tools.HookRunner.getInstance().addPreHook(
+                new com.digitallife.tools.HookRunner.PreHook() {
+                    @Override
+                    public String preCall(String toolName, org.json.JSONObject args) {
+                        if (com.digitallife.ui.ToolMarketActivity.isDisabled(
+                                settings.getContext(), toolName)) {
+                            return "工具已被用户禁用：" + toolName;
+                        }
+                        return null;
+                    }
+                });
         this.llm.setTools(tools.toJsonArray());
 
         tools.setExpressionListener((e, i) -> {
@@ -117,6 +155,11 @@ public class AICore {
     /** 注入执行层（CareExecutor）。行为包应用后，表情/动作交给执行层落地并执行。 */
     public void setExecutor(CareExecutor executor) {
         this.executor = executor;
+    }
+
+    /** v1.24.0：访问计划执行器（控制台展示用） */
+    public com.digitallife.brain.PlanExecutor getPlanExecutor() {
+        return planExecutor;
     }
 
     public MemoryStore getMemory() { return memory; }
@@ -304,6 +347,7 @@ public class AICore {
         refreshMode = true;
         final int gen = ++requestGen;
         if (out != null) out.onThinking(true);
+        com.digitallife.brain.BrainLog.getInstance().log("refresh", "30s 自主刷新：调整行为风格");
 
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         msgs.add(new LLMClient.ChatMessage("system", buildRefreshPrompt()));
@@ -393,6 +437,8 @@ public class AICore {
         refreshMode = false;
         final int gen = ++requestGen;
         if (out != null) out.onThinking(true);
+        com.digitallife.brain.BrainLog.getInstance().log("thinking",
+                proactiveHint != null ? "主动：" + proactiveHint : "响应用户…");
 
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         for (MemoryStore.Message m : memory.getContext()) {
@@ -452,6 +498,22 @@ public class AICore {
             @Override
             public void onDone(String fullText) {
                 if (gen != requestGen) return;
+                // v1.24.0：检测 LLM 回复中是否包含多步计划（纯文本模式）
+                String stripped = streamBuf.toString();
+                org.json.JSONArray plan =
+                        com.digitallife.brain.PlanExecutor.extractPlan(stripped);
+                if (plan != null && plan.length() > 1) {
+                    String text = stripPlanJson(stripped);
+                    streamBuf.setLength(0);
+                    streamBuf.append(text);
+                    streamFirst = true;
+                    lastSentLen = 0;
+                    handleReplyDone(gen);
+                    if (planExecutor != null) {
+                        planExecutor.executePlan(plan, tools, planListener);
+                    }
+                    return;
+                }
                 handleReplyDone(gen);
             }
 
@@ -627,6 +689,10 @@ public class AICore {
         sb.append("其中 reply 是你对用户说的话。mood 和 behavior 描述你接下来一段时间的行为状态。\n");
         sb.append("你还需要输出 new_facts 数组，用于记录值得长期记住的事实。格式为 [{\"category\":\"preference\",\"content\":\"...\"}]；如果没有就返回空数组。\n");
         sb.append("如果你要调用工具，可以调用工具后再输出 JSON。\n");
+        sb.append("\n## 多步操作（plan）\n");
+        sb.append("当用户请求需要多步操作（例如「查天气后发提醒」「先查时间再播报」），");
+        sb.append("请在 JSON 中加一个 \"plan\" 字段，格式为 [{\"tool\":\"get_time\",\"args\":{}},{\"tool\":\"set_reminder\",\"args\":{...}}]，");
+        sb.append("系统会自动顺序执行并把每步结果反馈给你。\n");
         return sb.toString();
     }
 
@@ -700,13 +766,17 @@ public class AICore {
     }
 
     private String buildFactsSection() {
+        // v1.24.0：使用 MemoryRetriever 混合检索
+        com.digitallife.memory.MemoryRetriever retriever =
+                new com.digitallife.memory.MemoryRetriever(settings.getContext());
+        java.util.List<com.digitallife.memory.MemoryEntry> entries = retriever.retrieve("");
+        if (entries.isEmpty()) return "- 暂时还没有稳定的长期事实\n";
         StringBuilder sb = new StringBuilder();
-        List<String> profile = memory.getProfile();
-        if (profile.isEmpty()) {
-            sb.append("- 暂时还没有稳定的长期事实\n");
-            return sb.toString();
+        for (com.digitallife.memory.MemoryEntry e : entries) {
+            sb.append("- [").append(e.category).append("] ").append(e.content);
+            if (e.weight >= 0.7) sb.append(" ⭐");
+            sb.append("\n");
         }
-        for (String p : profile) sb.append("- ").append(p).append("\n");
         return sb.toString();
     }
 
@@ -742,5 +812,30 @@ public class AICore {
     }
 
     public void persist() {
+    }
+
+    /** 从 LLM 回复中剥离 plan JSON 段，避免显示给用户。 */
+    private String stripPlanJson(String text) {
+        if (text == null) return "";
+        int idx = text.indexOf("\"plan\"");
+        if (idx < 0) return text;
+        int braceStart = text.lastIndexOf('{', idx);
+        if (braceStart < 0) return text;
+        int depth = 0;
+        int braceEnd = -1;
+        for (int i = braceStart; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    braceEnd = i;
+                    break;
+                }
+            }
+        }
+        if (braceEnd < 0) return text;
+        String stripped = text.substring(0, braceStart) + text.substring(braceEnd + 1);
+        return stripped.trim();
     }
 }
