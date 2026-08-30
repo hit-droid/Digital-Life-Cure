@@ -3,7 +3,12 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#0F2A22" />
+            <!-- v1.27.0：液态玻璃渐变（对齐护理顶栏深绿体系），不再是扁平死色块 -->
+            <gradient
+                android:startColor="#14432F"
+                android:centerColor="#123830"
+                android:endColor="#0F2A22"
+                android:angle="270" />
             <corners android:radius="16dp" />
         </shape>
     </item>
@@ -12,7 +17,7 @@
                android:insetBottom="8dp" android:insetRight="13dp">
             <shape android:shape="rectangle">
                 <size android:width="3dp" />
-                <solid android:color="#6EE7B7" />
+                <solid android:color="#5BD9A8" />
                 <corners android:radius="2dp" />
             </shape>
         </inset>
