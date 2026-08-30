@@ -44,11 +44,48 @@ public class AgentConsoleActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setTitle("智能体控制台");
+        setContentView(buildUi());
+    }
 
+    private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(0xFFF6F7FB);
+        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+
+        // 顶栏
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
+        topBar.setPadding(dp(12), dp(12), dp(12), dp(12));
+        topBar.setElevation(dp(4));
+
+        Button btnBack = new Button(this);
+        btnBack.setText("←");
+        btnBack.setTextSize(20f);
+        btnBack.setTextColor(android.graphics.Color.WHITE);
+        btnBack.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        btnBack.setAllCaps(false);
+        btnBack.setOnClickListener(v -> finish());
+        topBar.addView(btnBack, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+        TextView title = new TextView(this);
+        title.setText("智能体控制台");
+        title.setTextSize(18f);
+        title.setTextColor(android.graphics.Color.WHITE);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.leftMargin = dp(8);
+        topBar.addView(title, tlp);
+
+        TextView stat = new TextView(this);
+        stat.setText("v1.24.0");
+        stat.setTextSize(12f);
+        stat.setTextColor(android.graphics.Color.WHITE);
+        topBar.addView(stat);
+
+        root.addView(topBar);
 
         // Tab 栏
         LinearLayout tabBar = new LinearLayout(this);

@@ -128,13 +128,13 @@ public class ToolMarketActivity extends Activity {
 
         root.addView(topBar);
 
-        // ===== 滚动列表 =====
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
+        // ===== 总览卡 =====
         listContainer = new LinearLayout(this);
         listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setPadding(UiKit.dp(this, 12), UiKit.dp(this, 12),
+        listContainer.setPadding(UiKit.dp(this, 12), UiKit.dp(this, 8),
                 UiKit.dp(this, 12), UiKit.dp(this, 12));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
         scroll.addView(listContainer);
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -143,8 +143,57 @@ public class ToolMarketActivity extends Activity {
         return root;
     }
 
+    /** 顶部统计卡：今日调用 + 已启用/总工具。 */
+    private void renderSummary() {
+        listContainer.removeAllViews();
+        SharedPreferences sp = getSharedPreferences(PREF, MODE_PRIVATE);
+        ToolUsageLog log = new ToolUsageLog(this);
+        int enabled = 0;
+        for (ToolInfo t : TOOLS) {
+            if (!isDisabled(sp, t.name)) enabled++;
+        }
+        int today = log.countToday();
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setBackgroundResource(R.drawable.bg_summary_card);
+        card.setPadding(UiKit.dp(this, 16), UiKit.dp(this, 14),
+                UiKit.dp(this, 16), UiKit.dp(this, 14));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.bottomMargin = UiKit.dp(this, 8);
+        card.setLayoutParams(clp);
+
+        card.addView(buildSummaryStat("今日调用", String.valueOf(today), 0xFF6366F1));
+        card.addView(buildSummaryStat("已启用", enabled + "/" + TOOLS.size(), 0xFF10B981));
+        card.addView(buildSummaryStat("分类", "5", 0xFFF59E0B));
+        listContainer.addView(card, 0);
+    }
+
+    private View buildSummaryStat(String label, String value, int valueColor) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        col.setLayoutParams(lp);
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextSize(20f);
+        v.setTextColor(valueColor);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(v);
+        TextView l = new TextView(this);
+        l.setText(label);
+        l.setTextSize(11f);
+        l.setTextColor(0xFF6B7280);
+        col.addView(l);
+        return col;
+    }
+
     private void renderList() {
         listContainer.removeAllViews();
+        renderSummary();
         String currentCategory = null;
         SharedPreferences sp = getSharedPreferences(PREF, MODE_PRIVATE);
         for (ToolInfo t : TOOLS) {
@@ -158,13 +207,16 @@ public class ToolMarketActivity extends Activity {
 
     private View buildCategoryHeader(String cat) {
         TextView tv = new TextView(this);
-        tv.setText(cat);
-        tv.setTextSize(14f);
-        tv.setTextColor(UiKit.color(this, R.color.operit_accent));
+        tv.setText("  " + cat + "  ");
+        tv.setTextSize(12f);
+        tv.setTextColor(Color.WHITE);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setBackgroundResource(R.drawable.bg_category_badge);
+        tv.setPadding(UiKit.dp(this, 10), UiKit.dp(this, 4),
+                UiKit.dp(this, 10), UiKit.dp(this, 4));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = UiKit.dp(this, 12);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = UiKit.dp(this, 14);
         lp.bottomMargin = UiKit.dp(this, 6);
         tv.setLayoutParams(lp);
         return tv;
