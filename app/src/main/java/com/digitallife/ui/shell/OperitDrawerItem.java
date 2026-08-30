@@ -89,7 +89,8 @@ public class OperitDrawerItem extends LinearLayout {
         this.listener = l;
         icon.setImageResource(route.iconRes);
         title.setText(route.titleRes);
-        subtitle.setVisibility(GONE);
+        subtitle.setText(route.subtitle);
+        subtitle.setVisibility(VISIBLE);
         chevron.setVisibility(VISIBLE);
     }
 
