@@ -234,6 +234,36 @@ public class MemoryStore {
         return out;
     }
 
+    /** v1.26.0：返回 facts 总数（用于触发摘要压缩） */
+    public synchronized int countFacts() {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery("SELECT COUNT(*) FROM facts", null);
+        try {
+            if (c.moveToFirst()) return c.getInt(0);
+        } finally {
+            c.close();
+        }
+        return 0;
+    }
+
+    /** v1.26.0：取最老的 N 条事实（按 last_confirmed 升序） */
+    public synchronized List<Fact> getOldestFacts(int n) {
+        ArrayList<Fact> out = new ArrayList<>();
+        if (n <= 0) return out;
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor c = db.rawQuery(
+                "SELECT id, category, content, confidence, last_confirmed FROM facts ORDER BY last_confirmed ASC, id ASC LIMIT ?",
+                new String[]{String.valueOf(n)});
+        try {
+            while (c.moveToNext()) {
+                out.add(new Fact(c.getLong(0), c.getString(1), c.getString(2), c.getDouble(3), c.getLong(4)));
+            }
+        } finally {
+            c.close();
+        }
+        return out;
+    }
+
     /**
      * v1.26.0：基于关键词的轻量语义检索。
      * 流程：query → 提取中文/英文关键词（去停用词） → 扫 facts 表，
