@@ -140,6 +140,26 @@ public class Tools {
         return sb.toString();
     }
 
+    /** v1.26.0：返回所有已知工具名（用于容错匹配） */
+    public java.util.List<String> allToolNames() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (int i = 0; i < schemas.size(); i++) {
+            JSONObject t = schemas.optJSONObject(i);
+            if (t == null) continue;
+            JSONObject fn = t.optJSONObject("function");
+            if (fn == null) continue;
+            String name = fn.optString("name");
+            if (!name.isEmpty()) out.add(name);
+        }
+        // 追加全局工具名
+        try {
+            for (String n : ToolRegistry.getInstance().allToolNames()) {
+                if (n != null && !n.isEmpty() && !out.contains(n)) out.add(n);
+            }
+        } catch (Exception ignored) {}
+        return out;
+    }
+
     /** 执行一次工具调用（内置优先，未命中则委托全局注册表） */
     public void execute(String name, JSONObject args, Callback cb) {
         for (int i = 0; i < schemas.size(); i++) {

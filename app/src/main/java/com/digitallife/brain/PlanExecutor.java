@@ -185,12 +185,45 @@ public class PlanExecutor {
             return;
         }
         long t0 = System.currentTimeMillis();
+        executeWithRetry(tools, tool, args, 0, t0, idx, listener, next);
+    }
+
+    /**
+     * v1.26.0：自纠错执行。
+     * 规则：
+     * - 可重试错误（网络超时、临时不可用、5xx、超时）→ 延迟 500ms 重试 1 次
+     * - 工具不存在（tool not found）→ 大小写不敏感容错匹配重试 1 次
+     * - 其他错误（参数错误、未授权）→ 直接报告失败，让 LLM 在下一轮调整
+     */
+    private void executeWithRetry(Tools tools, String tool, JSONObject args, int attempt,
+                                  long t0, int idx,
+                                  PlanListener listener, Runnable next) {
         tools.execute(tool, args, new Callback() {
             @Override
-            public void onResult(String toolName, JSONObject args,
+            public void onResult(String toolName, JSONObject toolArgs,
                                  String resultText, String error) {
+                if (error != null && attempt < 1) {
+                    if (isRetryableError(error)) {
+                        com.digitallife.brain.BrainLog.getInstance().log("plan",
+                                "步骤 " + (idx + 1) + " 失败，可重试：" + error);
+                        try { Thread.sleep(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                        executeWithRetry(tools, tool, args, attempt + 1, t0, idx, listener, next);
+                        return;
+                    }
+                    // 工具名容错匹配
+                    if (error.contains("not found") || error.contains("不存在")
+                            || error.contains("unknown")) {
+                        String fuzzy = fuzzyMatchTool(tools, tool);
+                        if (fuzzy != null && !fuzzy.equals(tool)) {
+                            com.digitallife.brain.BrainLog.getInstance().log("plan",
+                                    "工具名容错：" + tool + " → " + fuzzy);
+                            executeWithRetry(tools, fuzzy, args, attempt + 1, t0, idx, listener, next);
+                            return;
+                        }
+                    }
+                }
                 long dt = System.currentTimeMillis() - t0;
-                Step s = new Step(idx, toolName, args, resultText, error, dt);
+                Step s = new Step(idx, toolName, toolArgs, resultText, error, dt);
                 history.add(s);
                 if (listener != null) {
                     listener.onStepEnd(idx, toolName, resultText, error);
@@ -198,5 +231,31 @@ public class PlanExecutor {
                 next.run();
             }
         });
+    }
+
+    /** v1.26.0：判断错误是否可重试（网络/超时/5xx） */
+    private static boolean isRetryableError(String error) {
+        if (error == null) return false;
+        String e = error.toLowerCase();
+        return e.contains("timeout") || e.contains("timed out")
+                || e.contains("5xx") || e.contains("503") || e.contains("502")
+                || e.contains("504") || e.contains("500")
+                || e.contains("temporarily") || e.contains("unavailable")
+                || e.contains("network") || e.contains("connection");
+    }
+
+    /** v1.26.0：工具名容错匹配。返回最佳匹配工具名，无匹配返回 null。 */
+    private String fuzzyMatchTool(Tools tools, String requested) {
+        if (requested == null) return null;
+        String lower = requested.toLowerCase();
+        try {
+            for (String name : tools.allToolNames()) {
+                if (name == null) continue;
+                String n = name.toLowerCase();
+                if (n.equals(lower)) return name;       // 精确
+                if (n.contains(lower) || lower.contains(n)) return name;  // 包含
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 }
