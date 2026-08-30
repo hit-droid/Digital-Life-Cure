@@ -39,7 +39,7 @@ public class MemoryExtractor {
      * 手动触发一次提取。
      */
     public void extractNow(Listener listener) {
-        Settings s = Settings.get(ctx);
+        Settings s = new Settings(ctx);
         // 没有 API 配置则跳过
         if (s.getApiBase() == null || s.getApiBase().isEmpty()
                 || s.getApiKey() == null || s.getApiKey().isEmpty()) {

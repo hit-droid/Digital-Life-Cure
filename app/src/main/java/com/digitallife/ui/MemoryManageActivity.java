@@ -135,9 +135,9 @@ public class MemoryManageActivity extends Activity {
         btnExport.setAllCaps(false);
         btnExport.setBackgroundResource(R.drawable.bg_btn_primary);
         btnExport.setOnClickListener(v -> doExport());
-        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(0, dp(44), 1f);
-        elp.setMargins(0, 0, dp(6), 0);
-        bottom.addView(btnExport, elp);
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        btnLp.setMargins(0, 0, dp(6), 0);
+        bottom.addView(btnExport, btnLp);
 
         Button btnImport = new Button(this);
         btnImport.setText("导入备份");

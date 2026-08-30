@@ -49,8 +49,10 @@ public class ProactiveEngine {
             String msg = candidates[random.nextInt(candidates.length)];
 
             // 推气泡（桌面上） + 系统通知（锁屏）
-            if (PetService.instance != null) {
-                PetService.instance.showProactiveBubble(msg);
+            com.digitallife.service.PetService svc =
+                    com.digitallife.service.PetService.getInstance();
+            if (svc != null) {
+                svc.showProactiveBubble(msg);
             }
             AgentNotifier.notify(appCtx, "小汐", msg);
 
