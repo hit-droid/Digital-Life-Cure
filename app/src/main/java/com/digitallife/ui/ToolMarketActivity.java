@@ -146,11 +146,10 @@ public class ToolMarketActivity extends Activity {
     /** 顶部统计卡：今日调用 + 已启用/总工具。 */
     private void renderSummary() {
         listContainer.removeAllViews();
-        SharedPreferences sp = getSharedPreferences(PREF, MODE_PRIVATE);
         ToolUsageLog log = new ToolUsageLog(this);
         int enabled = 0;
         for (ToolInfo t : TOOLS) {
-            if (!isDisabled(sp, t.name)) enabled++;
+            if (!isDisabled(this, t.name)) enabled++;
         }
         int today = log.countToday();
 
@@ -193,15 +192,13 @@ public class ToolMarketActivity extends Activity {
 
     private void renderList() {
         listContainer.removeAllViews();
-        renderSummary();
         String currentCategory = null;
-        SharedPreferences sp = getSharedPreferences(PREF, MODE_PRIVATE);
         for (ToolInfo t : TOOLS) {
             if (!t.category.equals(currentCategory)) {
                 currentCategory = t.category;
                 listContainer.addView(buildCategoryHeader(currentCategory));
             }
-            listContainer.addView(buildToolRow(t, sp));
+            listContainer.addView(buildToolRow(t));
         }
     }
 
@@ -222,7 +219,7 @@ public class ToolMarketActivity extends Activity {
         return tv;
     }
 
-    private View buildToolRow(ToolInfo t, SharedPreferences sp) {
+    private View buildToolRow(ToolInfo t) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -261,7 +258,7 @@ public class ToolMarketActivity extends Activity {
         row.addView(info, ilp);
 
         // 开关
-        boolean enabled = !isDisabled(sp, t.name);
+        boolean enabled = !isDisabled(this, t.name);
         Button btnToggle = new Button(this);
         btnToggle.setText(enabled ? "已启用" : "已禁用");
         btnToggle.setTextSize(12f);
@@ -272,8 +269,8 @@ public class ToolMarketActivity extends Activity {
         btnToggle.setPadding(UiKit.dp(this, 10), 0,
                 UiKit.dp(this, 10), 0);
         btnToggle.setOnClickListener(v -> {
-            boolean nowEnabled = isDisabled(sp, t.name);
-            setDisabled(sp, t.name, nowEnabled);
+            boolean nowEnabled = isDisabled(this, t.name);
+            setDisabled(this, t.name, nowEnabled);
             btnToggle.setText(nowEnabled ? "已启用" : "已禁用");
             btnToggle.setBackgroundResource(nowEnabled
                     ? R.drawable.bg_btn_primary : R.drawable.bg_btn_secondary);
