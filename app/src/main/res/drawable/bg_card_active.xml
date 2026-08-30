@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.24.0：当前角色卡片的高亮样式（淡紫渐变 + 紫色描边） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="135"
+        android:startColor="#EEF2FF"
+        android:endColor="#E0E7FF" />
+    <corners android:radius="20dp" />
+    <stroke android:width="2dp" android:color="#6366F1" />
+</shape>
