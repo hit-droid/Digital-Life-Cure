@@ -234,7 +234,7 @@ public class AICore {
             cancel();
         }
         memory.addUserMessage(text.trim());
-        requestLLM();
+        requestLLM(text.trim());
     }
 
     // ============ 快速循环（100ms） ============
@@ -444,6 +444,15 @@ public class AICore {
         com.digitallife.brain.BrainLog.getInstance().log("thinking",
                 proactiveHint != null ? "主动：" + proactiveHint : "响应用户…");
 
+        // v1.26.0：推断召回用的 query（用户消息 > 主动 hint > 最近消息）
+        String recQuery = proactiveHint;
+        if (recQuery == null || recQuery.trim().isEmpty()) {
+            List<MemoryStore.Message> ctx = memory.getContext();
+            for (int i = ctx.size() - 1; i >= 0; i--) {
+                if ("user".equals(ctx.get(i).role)) { recQuery = ctx.get(i).content; break; }
+            }
+        }
+
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         for (MemoryStore.Message m : memory.getContext()) {
             msgs.add(new LLMClient.ChatMessage(m.role, m.content));
@@ -451,7 +460,13 @@ public class AICore {
 
         JSONObject extra = new JSONObject();
         try {
-            extra.put("system", buildSystemPrompt());
+            // v1.26.0：把相关事实注入 system prompt
+            String system = buildSystemPrompt();
+            String related = memory.getRelatedFactsPrompt(recQuery, 5);
+            if (!related.isEmpty()) {
+                system = system + "\n" + related;
+            }
+            extra.put("system", system);
             extra.put("tools_desc", tools.describe());
             if (proactiveHint != null && !proactiveHint.trim().isEmpty()) {
                 extra.put("proactive_hint", proactiveHint);
