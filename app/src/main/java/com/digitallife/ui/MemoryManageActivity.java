@@ -87,6 +87,19 @@ public class MemoryManageActivity extends Activity {
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
         rlp.setMargins(dp(6), 0, dp(6), 0);
         topBar.addView(btnRefresh, rlp);
+
+        // v1.24.0：自动提取按钮
+        Button btnExtract = new Button(this);
+        btnExtract.setText("AI 提取");
+        btnExtract.setTextSize(13f);
+        btnExtract.setTextColor(Color.WHITE);
+        btnExtract.setAllCaps(false);
+        btnExtract.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnExtract.setPadding(dp(12), dp(4), dp(12), dp(4));
+        btnExtract.setOnClickListener(v -> triggerExtraction());
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        elp.setMargins(dp(6), 0, dp(6), 0);
+        topBar.addView(btnExtract, elp);
         root.addView(topBar);
 
         LinearLayout seg = new LinearLayout(this);
@@ -159,6 +172,8 @@ public class MemoryManageActivity extends Activity {
 
     private void refreshList() {
         listContainer.removeAllViews();
+        // v1.24.0：在顶部加词云视图
+        renderWordCloud();
         if (currentTab == 0) {
             List<MemoryStore.Fact> facts = ms.getAllFacts();
             if (facts.isEmpty()) {
@@ -416,5 +431,49 @@ public class MemoryManageActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         destroyed = true;
+    }
+
+    /** v1.24.0：渲染词云 */
+    private void renderWordCloud() {
+        try {
+            com.digitallife.memory.MemoryRetriever retriever =
+                    new com.digitallife.memory.MemoryRetriever(this);
+            java.util.List<com.digitallife.memory.MemoryEntry> entries = retriever.retrieve("");
+            if (entries.isEmpty()) return;
+            com.digitallife.memory.MemoryGraphView cloud =
+                    new com.digitallife.memory.MemoryGraphView(this);
+            cloud.setEntries(entries);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(160));
+            lp.bottomMargin = dp(8);
+            listContainer.addView(cloud, lp);
+        } catch (Exception e) {
+            // 静默失败
+        }
+    }
+
+    /** v1.24.0：触发 LLM 提取 */
+    private void triggerExtraction() {
+        com.digitallife.memory.MemoryExtractor extractor =
+                new com.digitallife.memory.MemoryExtractor(this);
+        Toast.makeText(this, "正在让 AI 整理记忆…", Toast.LENGTH_SHORT).show();
+        extractor.extractNow(new com.digitallife.memory.MemoryExtractor.Listener() {
+            @Override
+            public void onExtracted(int newCount, int forgottenCount) {
+                if (destroyed) return;
+                handler.post(() -> {
+                    String msg = "提取完成：新增 " + newCount + " 条";
+                    if (forgottenCount > 0) msg += "，遗忘 " + forgottenCount + " 条";
+                    Toast.makeText(MemoryManageActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    refreshList();
+                });
+            }
+            @Override
+            public void onError(String err) {
+                if (destroyed) return;
+                handler.post(() -> Toast.makeText(MemoryManageActivity.this,
+                        "提取失败：" + err, Toast.LENGTH_SHORT).show());
+            }
+        });
     }
 }
