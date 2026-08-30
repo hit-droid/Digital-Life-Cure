@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.24.0 (2026-08-30)
+
+### 智能体升级（7 大模块全量升级）
+
+- **1. 工具系统**（核心）：内置工具从 5 个扩展到 20+（新增 15 个），覆盖表达/记忆/系统/实用/信息 5 大类。ToolMarketActivity 可视化开关、查看今日调用统计。Hook Runner 拦截器链（pre/post/error）：权限检查（用户禁用工具直接拒绝）、使用统计（ToolUsageLog 持久化 500 条）、上下文注入。MemoryTools 把记忆操作（search/recall/save/forget）作为 LLM 工具暴露。侧栏加「工具市场」入口。参考 Operit AI 工具市场 + Hook Runner 架构。
+- **2. 记忆系统重构**：MemoryRetriever 混合检索（最近 20 + 关键词 10 + 高重要度 5，时间衰减 + 重要度加权）+ MemoryExtractor 每 6h LLM 自动提取关键信息到 facts 表 + MemoryEntry 统一条目 + MemoryGraphView 词云可视化（按分类着色）。MemoryManageActivity 加"AI 提取"按钮和词云头部。系统 prompt 接入，让 LLM 看到"我记起来…"。借鉴 Operit AI hybrid retrieval + auto-extraction。
+- **3. 角色系统 Persona**：Persona（角色卡：人格/API配置/记忆空间/工具集/Live2D/语音）+ PersonaStore（SharedPreferences 持久化，默认角色"小汐"）+ PersonaManager（全局入口 + 切换回调）+ PersonaActivity（卡片式 UI，可创建/编辑/删除/切换）。AgentBrain system prompt 接入 Persona 人格。侧栏加「角色管理」入口。借鉴 Operit AI per-character binding。
+- **4. 计划模式 + 主动行为**：PlanExecutor 解析 LLM 回复中的 `{"plan":[...]}` JSON 段，顺序执行多步工具调用（每步结果反馈 LLM 继续决策）；ProactiveEngine 每 30 分钟 tick 一次，根据时间/情绪/未读时长触发主动气泡（"主人～晚上好"）+ 系统通知（锁屏可见），内置静默时段（23-8）、每日上限（6 次）；AgentNotifier（NotificationCompat + BigTextStyle + Android 8+ 渠道）。AICore system prompt 加 plan 提示。PetService 1Hz tick 循环每 30 分钟调度一次。借鉴 Operit AI multi-step plan + proactive tick。
+- **5. 智能体控制台 AgentConsoleActivity**：4 个 Tab（活动 / 工具日志 / 计划 / 脑日志），1s 实时刷新，显示 AICore 忙碌状态、Hook 钩子数、最近 200 条工具调用、最近 150 条脑日志、最近 50 个计划步骤。底部操作：主动互动 / 清空 / 导出。BrainLog 500 条 ring buffer，AICore / PlanExecutor / PetService 关键节点打日志。侧栏加「智能体控制台」入口。借鉴 Operit AI agent log console。
+- **6. 视觉精致化**：PersonaActivity 当前角色卡 `bg_card_active`（淡紫渐变 + 紫色描边）高亮。ToolMarketActivity 加总览卡（今日调用/已启用/分类 3 列统计），分类 header 紫色 pill 徽章。AgentConsoleActivity 补渐变顶栏。新增 `bg_card_active.xml` / `bg_category_badge.xml` / `bg_summary_card.xml` 三个 drawable。借鉴 Operit AI 统计卡 + pill badge。
+- **7. 开发者工具 + 文档**：DeveloperActivity 重写：版本信息（App/角色/智能体/Java/Android）、智能体状态（Hook 计数/脑日志/工具调用）、调试操作（导出/清空脑日志 + 工具日志到剪贴板）。ToolUsageLog 加 `getInstance()` 单例。
+
 ## v1.23.2 (2026-08-30)
 
 ### 改进
