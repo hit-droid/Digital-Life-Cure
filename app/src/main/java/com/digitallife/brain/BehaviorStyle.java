@@ -71,6 +71,33 @@ public class BehaviorStyle {
         return (float) Math.max(0.0, Math.min(1.0, v));
     }
 
+    /** v1.26.0：序列化为 SharedPreferences 键值 */
+    public java.util.Map<String, Object> snapshot() {
+        java.util.Map<String, Object> map = new java.util.HashMap<>();
+        map.put("bs_energy", energy);
+        map.put("bs_alertness", alertness);
+        map.put("bs_sociability", sociability);
+        map.put("bs_amplitude", amplitude);
+        map.put("bs_speed", speed);
+        map.put("bs_gazeMode", gazeMode);
+        map.put("bs_expression", expression);
+        map.put("bs_posture", posture);
+        return map;
+    }
+
+    /** v1.26.0：从 SharedPreferences 恢复（缺失字段保持当前值） */
+    public void restore(java.util.Map<String, Object> map) {
+        if (map == null) return;
+        Object e = map.get("bs_energy"); if (e instanceof Number) energy = ((Number) e).floatValue();
+        Object al = map.get("bs_alertness"); if (al instanceof Number) alertness = ((Number) al).floatValue();
+        Object so = map.get("bs_sociability"); if (so instanceof Number) sociability = ((Number) so).floatValue();
+        Object am = map.get("bs_amplitude"); if (am instanceof Number) amplitude = ((Number) am).floatValue();
+        Object sp = map.get("bs_speed"); if (sp instanceof Number) speed = ((Number) sp).floatValue();
+        Object gm = map.get("bs_gazeMode"); if (gm instanceof Number) gazeMode = ((Number) gm).intValue();
+        Object ex = map.get("bs_expression"); if (ex instanceof String) expression = (String) ex;
+        Object po = map.get("bs_posture"); if (po instanceof String) posture = (String) po;
+    }
+
     /** 行为包应包含的字段描述（注入 prompt 用） */
     public static String describeFormat() {
         return "{\n"

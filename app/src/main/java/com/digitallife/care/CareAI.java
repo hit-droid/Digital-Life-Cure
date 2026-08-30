@@ -169,6 +169,8 @@ public class CareAI {
         if (profile != null) {
             llm = new LLMClient(profile.baseUrl,
                     apiManager.nextKey(ApiManager.SCOPE_CARE, profile.id), profile.model);
+            // v1.26.0：注入完整密钥池，401/429 时 LLMClient 自动轮换
+            llm.setApiKeys(profile.effectiveKeys());
         } else {
             Settings settings = new Settings(ctx);
             llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());

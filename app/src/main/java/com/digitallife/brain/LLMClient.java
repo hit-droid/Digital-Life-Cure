@@ -67,15 +67,20 @@ public class LLMClient {
 
     private final ExecutorService pool = Executors.newSingleThreadExecutor();
     private String baseUrl, apiKey, model;
+    private String[] keyPool;           // v1.26.0：密钥池（401/429 自动轮换）
+    private int keyCursor = 0;          // 当前 key 索引
     private JSONArray tools;
     private volatile boolean cancelled = false;
     /** 标记本次会话是否已做过非流式兜底重试（避免死循环） */
     private volatile boolean streamFallbackDone = false;
+    /** 标记本次会话是否已做过密钥轮换重试（避免死循环） */
+    private volatile boolean keyRetryDone = false;
 
     public LLMClient(String baseUrl, String apiKey, String model) {
         this.baseUrl = baseUrl;
         this.apiKey = apiKey;
         this.model = model;
+        this.keyPool = new String[]{apiKey};
         this.tools = new JSONArray();
     }
 
@@ -86,6 +91,30 @@ public class LLMClient {
     /** 更新 API Key（密钥池轮换时复用同一客户端实例） */
     public void setApiKey(String key) {
         this.apiKey = key;
+    }
+
+    /**
+     * v1.26.0：注入密钥池。401/429 时自动轮换下一个 key 重试。
+     * 传入 null 或单元素数组退化为单 key 行为。
+     */
+    public void setApiKeys(java.util.List<String> keys) {
+        if (keys == null || keys.isEmpty()) return;
+        java.util.List<String> nonEmpty = new java.util.ArrayList<>();
+        for (String k : keys) {
+            if (k != null && !k.isEmpty()) nonEmpty.add(k);
+        }
+        if (nonEmpty.isEmpty()) return;
+        this.keyPool = nonEmpty.toArray(new String[0]);
+        this.apiKey = this.keyPool[0];
+        this.keyCursor = 0;
+    }
+
+    /** 轮换到下一个 key（返回 true 表示还有下一个可换） */
+    private boolean rotateKey() {
+        if (keyPool == null || keyPool.length <= 1) return false;
+        keyCursor = (keyCursor + 1) % keyPool.length;
+        this.apiKey = keyPool[keyCursor];
+        return true;
     }
 
     public String getBaseUrl() {
@@ -105,6 +134,7 @@ public class LLMClient {
         pool.execute(() -> {
             cancelled = false;
             streamFallbackDone = false;
+            keyRetryDone = false;
             // 首次带 tools；若端点不支持（HTTP 400/415），自动去掉 tools 重试一次
             chatStreamInner(messages, extraSystem, listener, true);
         });
@@ -154,6 +184,17 @@ public class LLMClient {
             int code = conn.getResponseCode();
             if (code != 200) {
                 String err = readStream(conn.getErrorStream());
+                // v1.26.0：429 立即重试前短暂等待（指数退避 - 500ms 首次）
+                if (code == 429) {
+                    try { Thread.sleep(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
+                // v1.26.0：401/429 自动轮换下一个 key 重试
+                if (!keyRetryDone && (code == 401 || code == 429) && rotateKey()) {
+                    keyRetryDone = true;
+                    conn.disconnect();
+                    chatStreamInner(messages, extraSystem, listener, withTools);
+                    return;
+                }
                 // 部分 OpenAI 兼容端点拒绝 tools 字段：降级为不带 tools 重试一次
                 if (withTools && tools.length() > 0 && (code == 400 || code == 415)) {
                     conn.disconnect();
