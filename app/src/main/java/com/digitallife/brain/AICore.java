@@ -95,6 +95,20 @@ public class AICore {
         this.memory = loadMemory();
         this.emotion = new EmotionState();
         this.llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
+        // 挂载扩展工具（20+）
+        com.digitallife.tools.BuiltinTools.install(tools, settings.getContext().getApplicationContext());
+        // 注册默认 Hook Runner 钩子（AICore 独立维护一份日志）
+        com.digitallife.tools.HookRunner.getInstance().addPreHook(
+                new com.digitallife.tools.HookRunner.PreHook() {
+                    @Override
+                    public String preCall(String toolName, org.json.JSONObject args) {
+                        if (com.digitallife.ui.ToolMarketActivity.isDisabled(
+                                settings.getContext(), toolName)) {
+                            return "工具已被用户禁用：" + toolName;
+                        }
+                        return null;
+                    }
+                });
         this.llm.setTools(tools.toJsonArray());
 
         tools.setExpressionListener((e, i) -> {

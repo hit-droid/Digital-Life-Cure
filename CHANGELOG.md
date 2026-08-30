@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.24.0 (2026-08-30)
+
+### 智能体升级
+- **工具市场**（核心）：内置工具从 5 个扩展到 20+（新增 15 个），覆盖表达/记忆/系统/实用/信息 5 大类。ToolMarketActivity 可视化开关、查看今日调用统计。借鉴 Operit AI 工具市场设计。
+- **Hook Runner**：工具调用拦截器链（pre/post/error），用于权限检查（用户禁用工具直接拒绝）、使用统计（ToolUsageLog 持久化 500 条）、上下文注入。参考 Operit AI Hook Runner 架构。
+- **MemoryTools**：新建 brain/MemoryTools.java 把记忆操作（search/recall/save/forget）作为 LLM 工具暴露，让 Agent 能主动搜索、回忆、保存、遗忘记忆。
+- **Drawer 新增「工具市场」入口**：高级分组里加 TOOLMARKET 路由，点击启动 ToolMarketActivity。
+
 ## v1.23.2 (2026-08-30)
 
 ### 改进

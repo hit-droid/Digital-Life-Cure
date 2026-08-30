@@ -103,6 +103,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 工具市场 -->
+        <activity
+            android:name="com.digitallife.ui.ToolMarketActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
         <activity
             android:name="com.digitallife.ui.ChatActivity"
