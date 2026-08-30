@@ -44,7 +44,8 @@ public class AgentConsoleActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(buildUi());
+        View root = buildUi();
+        setContentView(root);
     }
 
     private View buildUi() {
@@ -164,12 +165,12 @@ public class AgentConsoleActivity extends Activity {
         footer.addView(btnExport);
         root.addView(footer);
 
-        setContentView(root);
         txtActivity = (TextView) tabBodies[0];
         txtTools = (TextView) tabBodies[1];
         txtPlan = (TextView) tabBodies[2];
         txtBrain = (TextView) tabBodies[3];
         showTab(0);
+        return root;
     }
 
     @Override
