@@ -1,5 +1,6 @@
 package com.digitallife.ui;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -11,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -228,6 +230,82 @@ public final class UiKit {
     }
 
     // v1.23.0: Operit 风格工具（深色紫色卡片列表）
+
+    /**
+     * 弹 Operit 风格「关于」对话框：紫色头部 + 卡片式信息列表 + 关闭按钮。
+     * 复用：侧栏「关于」菜单项。
+     */
+    public static void aboutDialog(Activity activity) {
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(activity);
+        LinearLayout wrap = new LinearLayout(activity);
+        wrap.setOrientation(VERTICAL);
+        wrap.setBackgroundColor(color(activity, R.color.operit_bg));
+        int pad = dp(activity, 20);
+        wrap.setPadding(pad, pad, pad, pad / 2);
+
+        TextView title = new TextView(activity);
+        title.setText("数字生命");
+        title.setTextSize(20f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(color(activity, R.color.operit_accent));
+        wrap.addView(title);
+
+        TextView subtitle = new TextView(activity);
+        subtitle.setText("AI 桌宠 · 仿 Operit AI 视觉骨架");
+        subtitle.setTextSize(12f);
+        subtitle.setTextColor(color(activity, R.color.operit_text_hint));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        slp.topMargin = dp(activity, 4);
+        wrap.addView(subtitle, slp);
+
+        // 信息卡片
+        LinearLayout info = new LinearLayout(activity);
+        info.setOrientation(VERTICAL);
+        info.setBackgroundColor(color(activity, R.color.operit_surface));
+        info.setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        ilp.topMargin = dp(activity, 16);
+        wrap.addView(info, ilp);
+
+        addInfoRow(activity, info, "版本", "1.23.0");
+        addInfoRow(activity, info, "包名", "com.digitallife");
+        addInfoRow(activity, info, "角色", "小汐");
+        addInfoRow(activity, info, "构建", "v1.23.0-Operit-Shell");
+
+        Button close = button(activity, wrap, "关闭");
+        close.setOnClickListener(v -> {
+            if (b.create().isShowing()) {
+                // 通过反射关闭（避免引用外部 dialog）
+            }
+        });
+
+        b.setView(wrap);
+        android.app.AlertDialog dlg = b.create();
+        // 绑定关闭按钮到真实 dialog
+        close.setOnClickListener(v -> dlg.dismiss());
+        dlg.show();
+    }
+
+    private static void addInfoRow(Context c, LinearLayout root, String key, String val) {
+        LinearLayout row = new LinearLayout(c);
+        row.setOrientation(HORIZONTAL);
+        row.setPadding(0, dp(c, 6), 0, dp(c, 6));
+        TextView k = new TextView(c);
+        k.setText(key);
+        k.setTextSize(13f);
+        k.setTextColor(color(c, R.color.operit_text_hint));
+        k.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(k);
+        TextView v = new TextView(c);
+        v.setText(val);
+        v.setTextSize(13f);
+        v.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        v.setTextColor(color(c, R.color.operit_text_primary));
+        row.addView(v);
+        root.addView(row);
+    }
 
     /** Operit 风格 SectionHeader: 紫色大标题 + 副标题 + 顶部间距 */
     public static View sectionTitle(Context c, LinearLayout root, String title, String subtitle) {

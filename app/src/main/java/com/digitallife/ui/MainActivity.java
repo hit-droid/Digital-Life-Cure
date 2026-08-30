@@ -208,6 +208,7 @@ public class MainActivity extends Activity {
                     @Override public com.digitallife.ui.PluginTabView getPluginTab() { return pluginTab; }
                     @Override public com.digitallife.ui.SettingsTabView getSettingsTab() { return settingsTab; }
                     @Override public android.content.Context getContext() { return MainActivity.this; }
+                    @Override public android.app.Activity getActivity() { return MainActivity.this; }
                 });
         navController.addListener((old, newRoute) -> {
             operitDrawer.setSelected(newRoute);

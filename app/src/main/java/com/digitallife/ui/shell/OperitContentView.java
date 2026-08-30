@@ -30,6 +30,7 @@ public class OperitContentView {
         PluginTabView getPluginTab();
         SettingsTabView getSettingsTab();
         Context getContext();
+        android.app.Activity getActivity();
     }
 
     private final Map<OperitRoute, View> cache = new EnumMap<>(OperitRoute.class);
@@ -74,11 +75,15 @@ public class OperitContentView {
                 openActivity(ctx, com.digitallife.care.CareModelsActivity.class);
                 return null;
             case THEMES:
+                android.widget.Toast.makeText(ctx, "主题设置开发中，下版本支持",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return null;
             case DEVELOPER:
+                android.widget.Toast.makeText(ctx, "开发者选项开发中，下版本支持",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return null;
             case ABOUT:
-                UiKit.toast(ctx, route == OperitRoute.THEMES ? "主题设置开发中"
-                        : route == OperitRoute.DEVELOPER ? "开发者选项开发中"
-                        : "关于开发中");
+                UiKit.aboutDialog(host.getActivity());
                 return null;
             default:
                 return null;
@@ -93,7 +98,8 @@ public class OperitContentView {
             }
             ctx.startActivity(i);
         } catch (Exception e) {
-            UiKit.toast(ctx, "无法打开: " + UiKit.safeMsg(e));
+            android.widget.Toast.makeText(ctx, "无法打开: " + e.getMessage(),
+                    android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 }
