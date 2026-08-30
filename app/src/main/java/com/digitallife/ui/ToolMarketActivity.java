@@ -163,9 +163,12 @@ public class ToolMarketActivity extends Activity {
         clp.bottomMargin = UiKit.dp(this, 8);
         card.setLayoutParams(clp);
 
-        card.addView(buildSummaryStat("今日调用", String.valueOf(today), 0xFF6366F1));
-        card.addView(buildSummaryStat("已启用", enabled + "/" + TOOLS.size(), 0xFF10B981));
-        card.addView(buildSummaryStat("分类", "5", 0xFFF59E0B));
+        card.addView(buildSummaryStat("今日调用", String.valueOf(today),
+                UiKit.color(this, R.color.operit_accent)));
+        card.addView(buildSummaryStat("已启用", enabled + "/" + TOOLS.size(),
+                0xFF10B981));
+        card.addView(buildSummaryStat("分类", "5",
+                UiKit.color(this, R.color.brand_end)));
         listContainer.addView(card, 0);
     }
 
@@ -185,7 +188,7 @@ public class ToolMarketActivity extends Activity {
         TextView l = new TextView(this);
         l.setText(label);
         l.setTextSize(11f);
-        l.setTextColor(0xFF6B7280);
+        l.setTextColor(UiKit.color(this, R.color.operit_text_hint));
         col.addView(l);
         return col;
     }
