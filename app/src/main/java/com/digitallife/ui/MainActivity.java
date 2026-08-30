@@ -81,7 +81,13 @@ public class MainActivity extends Activity {
         apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);
 
         getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().getDecorView().setSystemUiVisibility(0);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            getWindow().getInsetsController().setSystemBarsAppearance(0,
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        }
 
         buildUi();
         registerShortcuts();
@@ -322,18 +328,22 @@ public class MainActivity extends Activity {
         operitDrawer.setVisibility(View.VISIBLE);
         operitDrawer.setTranslationX(0);
         drawerScrim.setVisibility(View.VISIBLE);
-        operitDrawer.animate().translationX(0).setDuration(220).start();
-        drawerScrim.animate().alpha(1f).setDuration(220).start();
+        android.view.animation.DecelerateInterpolator decel = new android.view.animation.DecelerateInterpolator(1.8f);
+        operitDrawer.animate().translationX(0).setDuration(280).setInterpolator(decel).start();
+        drawerScrim.animate().alpha(1f).setDuration(280).setInterpolator(decel).start();
+        content.animate().translationX(dp(20)).setDuration(280).setInterpolator(decel).start();
     }
 
     private void closeDrawer() {
         if (operitDrawer == null) return;
-        operitDrawer.animate().translationX(-operitDrawer.getWidth()).setDuration(180)
+        android.view.animation.DecelerateInterpolator decel = new android.view.animation.DecelerateInterpolator(1.8f);
+        operitDrawer.animate().translationX(-operitDrawer.getWidth()).setDuration(220).setInterpolator(decel)
                 .withEndAction(() -> operitDrawer.setVisibility(View.GONE))
                 .start();
-        drawerScrim.animate().alpha(0f).setDuration(180)
+        drawerScrim.animate().alpha(0f).setDuration(220).setInterpolator(decel)
                 .withEndAction(() -> drawerScrim.setVisibility(View.GONE))
                 .start();
+        content.animate().translationX(0).setDuration(220).setInterpolator(decel).start();
     }
 
     private int dp(float v) {
