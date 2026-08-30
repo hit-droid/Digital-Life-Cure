@@ -120,9 +120,9 @@ public class ChatActivity extends Activity {
         buildUi();
         mdRenderer = new MarkdownRenderer(
                 getColorCompat(R.color.code_bg),
-                getColorCompat(R.color.text_primary),
-                getColorCompat(R.color.text_secondary),
-                getColorCompat(R.color.text_primary),
+                getColorCompat(R.color.operit_text_primary),
+                getColorCompat(R.color.operit_text_secondary),
+                getColorCompat(R.color.operit_text_primary),
                 getColorCompat(R.color.brand));
         restoreHistory();
     }
@@ -130,7 +130,7 @@ public class ChatActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.page_bg));
+        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
         // ===== 顶栏 =====
         LinearLayout topBar = new LinearLayout(this);
@@ -237,7 +237,7 @@ public class ChatActivity extends Activity {
         attachBar.setVisibility(View.GONE);
         tvAttachName = new TextView(this);
         tvAttachName.setTextSize(13f);
-        tvAttachName.setTextColor(getColorCompat(R.color.text_primary));
+        tvAttachName.setTextColor(getColorCompat(R.color.operit_text_primary));
         tvAttachName.setSingleLine(true);
         tvAttachName.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         attachBar.addView(tvAttachName, new LinearLayout.LayoutParams(0,
@@ -245,7 +245,7 @@ public class ChatActivity extends Activity {
         TextView tvRemove = new TextView(this);
         tvRemove.setText("✕");
         tvRemove.setTextSize(15f);
-        tvRemove.setTextColor(getColorCompat(R.color.text_hint));
+        tvRemove.setTextColor(getColorCompat(R.color.operit_text_hint));
         tvRemove.setPadding(dp(10), dp(2), dp(2), dp(2));
         tvRemove.setOnClickListener(v -> clearPendingFile());
         attachBar.addView(tvRemove, new LinearLayout.LayoutParams(
@@ -894,7 +894,7 @@ public class ChatActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(now)));
         t.setTextSize(10f);
-        t.setTextColor(getColorCompat(R.color.text_hint));
+        t.setTextColor(getColorCompat(R.color.operit_text_hint));
         t.setGravity(Gravity.CENTER);
         t.setPadding(0, dp(8), 0, dp(6));
         listContainer.addView(t, new LinearLayout.LayoutParams(
@@ -904,7 +904,7 @@ public class ChatActivity extends Activity {
     private TextView newTextViewBubble() {
         TextView b = new TextView(this);
         b.setTextSize(15f);
-        b.setTextColor(getColorCompat(R.color.text_primary));
+        b.setTextColor(getColorCompat(R.color.operit_text_primary));
         b.setLineSpacing(3f, 1f);
         b.setPadding(dp(12), dp(8), dp(12), dp(8));
         b.setMaxWidth(dp(260));
@@ -1040,7 +1040,7 @@ public class ChatActivity extends Activity {
         hideThinkingDot();
         final TextView b = new TextView(this);
         b.setTextSize(13f);
-        b.setTextColor(getColorCompat(R.color.text_primary));
+        b.setTextColor(getColorCompat(R.color.operit_text_primary));
         b.setLineSpacing(2f, 1f);
         b.setPadding(dp(12), dp(8), dp(12), dp(8));
         b.setElevation(dp(1));
@@ -1084,7 +1084,7 @@ public class ChatActivity extends Activity {
             } else {
                 text.append("\n\n📋 结果：\n").append(full);
             }
-            int statusColor = ok == null ? getColorCompat(R.color.text_secondary)
+            int statusColor = ok == null ? getColorCompat(R.color.operit_text_secondary)
                     : (ok ? 0xFF2E7D32 : 0xFFC62828);
             SpannableString ss = new SpannableString(text.toString());
             int start = text.indexOf(status);

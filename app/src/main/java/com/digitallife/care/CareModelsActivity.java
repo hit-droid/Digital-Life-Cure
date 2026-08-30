@@ -56,7 +56,7 @@ public class CareModelsActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.page_bg));
+        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
         // ===== 顶栏 =====
         LinearLayout topBar = new LinearLayout(this);
@@ -113,7 +113,7 @@ public class CareModelsActivity extends Activity {
         tvDetail.setTextSize(12f);
         tvDetail.setLineSpacing(3f, 1f);
         tvDetail.setPadding(dp(14), dp(12), dp(14), dp(12));
-        tvDetail.setTextColor(getColorCompat(R.color.text_primary));
+        tvDetail.setTextColor(getColorCompat(R.color.operit_text_primary));
         tvDetail.setText("点击上方模型查看详情。");
         detailScroll.addView(tvDetail, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -139,7 +139,7 @@ public class CareModelsActivity extends Activity {
             TextView empty = new TextView(this);
             empty.setText("暂无可用模型。\n可在护理大脑对话中发送模型 zip 压缩包完成安装。");
             empty.setTextSize(13f);
-            empty.setTextColor(getColorCompat(R.color.text_secondary));
+            empty.setTextColor(getColorCompat(R.color.operit_text_secondary));
             empty.setPadding(dp(8), dp(20), dp(8), dp(20));
             empty.setGravity(Gravity.CENTER);
             listContainer.addView(empty);
@@ -183,7 +183,7 @@ public class CareModelsActivity extends Activity {
         TextView tvName = new TextView(this);
         tvName.setText(name);
         tvName.setTextSize(15f);
-        tvName.setTextColor(getColorCompat(R.color.text_primary));
+        tvName.setTextColor(getColorCompat(R.color.operit_text_primary));
         tvName.setTypeface(Typeface.DEFAULT_BOLD);
         row1.addView(tvName, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -301,7 +301,7 @@ public class CareModelsActivity extends Activity {
         b.setText(text);
         b.setTextSize(12f);
         b.setAllCaps(false);
-        b.setTextColor(getColorCompat(R.color.text_primary));
+        b.setTextColor(getColorCompat(R.color.operit_text_primary));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setOnClickListener(l);
         return b;
