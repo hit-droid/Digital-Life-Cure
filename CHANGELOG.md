@@ -3,8 +3,9 @@
 ## v1.24.0 (2026-08-30)
 
 ### 智能体升级
-- **角色系统 Persona**（核心）：新建 `persona/Persona.java`（角色卡：人格/API配置/记忆空间/工具集/Live2D/语音）+ `PersonaStore.java`（SharedPreferences 持久化，默认角色"小汐"）+ `PersonaManager.java`（全局访问入口 + 角色切换回调）+ `PersonaActivity.java`（卡片式 UI，可创建/编辑/删除/切换）。AgentBrain 的 system prompt 接入当前 Persona 的人格。侧栏高级分组加「角色管理」入口。借鉴 Operit AI per-character binding 设计。
-- **记忆系统重构**：新建 `memory/MemoryRetriever.java`（混合检索：最近 20 条 + 关键词 10 条 + 高重要度 5 条，时间衰减 + 重要度加权排序）+ `MemoryExtractor.java`（每 6 小时 LLM 自动提取关键信息到 facts 表）+ `MemoryEntry.java`（统一记忆条目结构）+ `MemoryGraphView.java`（词云式可视化，词频越大字号越大，按分类着色）。MemoryManageActivity 加"AI 提取"按钮和词云头部展示。AgentBrain/AICore 的 system prompt 接入 MemoryRetriever，让 LLM 看到"我记起来…"的相关记忆。借鉴 Operit AI 的 hybrid retrieval + auto-extraction 设计。
+- **计划模式 PlanExecutor**（核心）：新建 `brain/PlanExecutor.java`，解析 LLM 回复中的 `{"plan":[...]}` JSON 段，顺序执行多步工具调用（每步结果反馈 LLM 继续决策）。AICore 的 onDone 接入检测；system prompt 提示 LLM 可用 plan。借鉴 Operit AI multi-step plan 设计。
+- **主动行为 ProactiveEngine**（核心）：新建 `brain/ProactiveEngine.java`，每 30 分钟 tick 一次，根据时间/情绪/未读时长触发主动气泡（"主人～晚上好"）+ 系统通知（锁屏可见）。内置静默时段（23-8）、每日上限（6 次）、用户活跃标记。PetService 的 1Hz tick 循环每 30 分钟调用一次；ProactiveEngine 在 onCreate 时注入；onUserSays 时 markUserActive 重置空闲计时。新建 `notify/AgentNotifier.java`（NotificationCompat + BigTextStyle 通知，Android 8+ 渠道管理）。
+- **控制台脑日志**：AICore 在 startChat/onDone/finishReply 时输出 `onBrainLog(tag, message)`，供控制台实时展示智能体内部想法（"thinking"/"reply"/"plan"）。
 
 ### 智能体升级
 - **工具市场**（核心）：内置工具从 5 个扩展到 20+（新增 15 个），覆盖表达/记忆/系统/实用/信息 5 大类。ToolMarketActivity 可视化开关、查看今日调用统计。借鉴 Operit AI 工具市场设计。
