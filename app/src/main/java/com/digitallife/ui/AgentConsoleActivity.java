@@ -154,7 +154,7 @@ public class AgentConsoleActivity extends Activity {
         });
         Button btnClear = mkBtn("清空日志");
         btnClear.setOnClickListener(v -> {
-            com.digitallife.tools.ToolUsageLog.getInstance().clear();
+            com.digitallife.tools.ToolUsageLog.getInstance(this).clear();
             Toast("已清空工具日志");
         });
         Button btnExport = mkBtn("导出日志");
@@ -225,8 +225,10 @@ public class AgentConsoleActivity extends Activity {
 
             // 2) 工具日志
             StringBuilder tl = new StringBuilder();
-            java.util.List<ToolUsageLog.Entry> log =
-                    com.digitallife.tools.ToolUsageLog.getInstance().recent(200);
+            java.util.List<ToolUsageLog.Entry> all =
+                    com.digitallife.tools.ToolUsageLog.getInstance(this).all();
+            int show = Math.min(all.size(), 200);
+            java.util.List<ToolUsageLog.Entry> log = all.subList(0, show);
             if (log.isEmpty()) {
                 tl.append("(暂无工具调用记录)");
             } else {

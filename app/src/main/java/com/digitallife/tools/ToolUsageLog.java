@@ -52,9 +52,22 @@ public class ToolUsageLog {
     }
 
     private final Context ctx;
+    private static ToolUsageLog INSTANCE; // v1.24.0：单例
+
+    public static synchronized ToolUsageLog getInstance() {
+        return INSTANCE;
+    }
+
+    public static synchronized ToolUsageLog getInstance(Context ctx) {
+        if (INSTANCE == null) {
+            INSTANCE = new ToolUsageLog(ctx.getApplicationContext());
+        }
+        return INSTANCE;
+    }
 
     public ToolUsageLog(Context ctx) {
         this.ctx = ctx;
+        INSTANCE = this;
     }
 
     public void add(Entry e) {
