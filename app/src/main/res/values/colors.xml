@@ -41,4 +41,17 @@
 
     <!-- ===== Markdown 代码块 ===== -->
     <color name="code_bg">#F0EEF9</color>
+
+    <!-- ===== Operit 主题色（v1.23.0 全量重构，仿 Operit AI 深色紫色体系） ===== -->
+    <color name="brand_operit">#6D5BBA</color>
+    <color name="brand_operit_light">#8A7DD8</color>
+    <color name="brand_operit_dark">#5746A0</color>
+    <color name="operit_bg">#1A1A1A</color>
+    <color name="operit_surface">#2A2A2A</color>
+    <color name="operit_surface_variant">#3A3A3A</color>
+    <color name="operit_text_primary">#F0F0F7</color>
+    <color name="operit_text_secondary">#B0B0B8</color>
+    <color name="operit_text_hint">#7A7A82</color>
+    <color name="operit_divider">#3A3A3A</color>
+    <color name="operit_accent">#C4B5FD</color>
 </resources>
