@@ -39,7 +39,7 @@ public class ContactsTabView extends LinearLayout {
         this.activity = activity;
         this.listener = listener;
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.page_bg));
+        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
     }
 
@@ -47,7 +47,7 @@ public class ContactsTabView extends LinearLayout {
         TextView header = new TextView(activity);
         header.setText("模型联系人 — 点一个模型，和 TA 单独聊聊");
         header.setTextSize(13f);
-        header.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        header.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         header.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 12), UiKit.dp(activity, 2));
         addView(header, UiKit.lp(activity, 0));
@@ -78,7 +78,7 @@ public class ContactsTabView extends LinearLayout {
             TextView empty = new TextView(activity);
             empty.setText("暂无可用模型。\n可在对话页打开「护理大脑」，发送模型 zip 压缩包完成安装。");
             empty.setTextSize(13f);
-            empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, UiKit.dp(activity, 40), 0, 0);
             listContainer.addView(empty);
@@ -137,7 +137,7 @@ public class ContactsTabView extends LinearLayout {
         tvName.setText(name);
         tvName.setTextSize(15f);
         tvName.setTypeface(Typeface.DEFAULT_BOLD);
-        tvName.setTextColor(UiKit.color(activity, R.color.text_primary));
+        tvName.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
         nameRow.addView(tvName, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         TextView tag = new TextView(activity);
         tag.setText(isImported ? "已导入" : "内置");
@@ -153,7 +153,7 @@ public class ContactsTabView extends LinearLayout {
         TextView status = new TextView(activity);
         status.setText(hasMotions ? "动作齐全，可以自由活动" : "暂无动作文件（可通过护理大脑补全）");
         status.setTextSize(13f);
-        status.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        status.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         info.addView(status, UiKit.lp(activity, 2));
 
         ChatStore.StoredMsg last = new ChatStore(activity).getLastMessage("model_" + name);
@@ -164,7 +164,7 @@ public class ContactsTabView extends LinearLayout {
             lastTv.setText("还没聊过，点进去打声招呼吧");
         }
         lastTv.setTextSize(12f);
-        lastTv.setTextColor(UiKit.color(activity, R.color.text_hint));
+        lastTv.setTextColor(UiKit.color(activity, R.color.operit_text_hint));
         lastTv.setMaxLines(1);
         info.addView(lastTv, UiKit.lp(activity, 1));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));

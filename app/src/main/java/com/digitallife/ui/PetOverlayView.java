@@ -88,7 +88,7 @@ public class PetOverlayView extends FrameLayout {
         bubbleContainer = new LinearLayout(context);
         bubbleContainer.setOrientation(LinearLayout.VERTICAL);
         bubbleView = new TextView(context);
-        bubbleView.setTextColor(colorRes(R.color.text_primary));
+        bubbleView.setTextColor(colorRes(R.color.operit_text_primary));
         bubbleView.setTextSize(14f);
         bubbleView.setLineSpacing(2f, 1f);
         bubbleView.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -115,8 +115,8 @@ public class PetOverlayView extends FrameLayout {
         chatInput = new EditText(context);
         chatInput.setHint("跟她说句话...");
         chatInput.setTextSize(13f);
-        chatInput.setTextColor(colorRes(R.color.text_primary));
-        chatInput.setHintTextColor(colorRes(R.color.text_hint));
+        chatInput.setTextColor(colorRes(R.color.operit_text_primary));
+        chatInput.setHintTextColor(colorRes(R.color.operit_text_hint));
         chatInput.setSingleLine(true);
         chatInput.setBackground(getInputBackground());
         chatInput.setPadding(10, 6, 10, 6);

@@ -55,7 +55,7 @@ public class MemoryManageActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.page_bg));
+        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -108,7 +108,7 @@ public class MemoryManageActivity extends Activity {
         tvEmpty = new TextView(this);
         tvEmpty.setText("暂无记忆");
         tvEmpty.setTextSize(14f);
-        tvEmpty.setTextColor(getColorCompat(R.color.text_hint));
+        tvEmpty.setTextColor(getColorCompat(R.color.operit_text_hint));
         tvEmpty.setGravity(Gravity.CENTER);
         tvEmpty.setPadding(0, dp(30), 0, 0);
 
@@ -192,13 +192,13 @@ public class MemoryManageActivity extends Activity {
         TextView tvCat = new TextView(this);
         tvCat.setText("[" + f.category + "]  " + fmt(f.lastConfirmed));
         tvCat.setTextSize(11f);
-        tvCat.setTextColor(getColorCompat(R.color.text_secondary));
+        tvCat.setTextColor(getColorCompat(R.color.operit_text_secondary));
         box.addView(tvCat);
 
         TextView tvContent = new TextView(this);
         tvContent.setText(f.content);
         tvContent.setTextSize(14f);
-        tvContent.setTextColor(getColorCompat(R.color.text_primary));
+        tvContent.setTextColor(getColorCompat(R.color.operit_text_primary));
         tvContent.setPadding(0, dp(4), 0, 0);
         box.addView(tvContent);
 
@@ -224,13 +224,13 @@ public class MemoryManageActivity extends Activity {
         TextView tvDate = new TextView(this);
         tvDate.setText(s.date + "  " + fmt(s.createdAt));
         tvDate.setTextSize(11f);
-        tvDate.setTextColor(getColorCompat(R.color.text_secondary));
+        tvDate.setTextColor(getColorCompat(R.color.operit_text_secondary));
         box.addView(tvDate);
 
         TextView tvSummary = new TextView(this);
         tvSummary.setText(s.summary);
         tvSummary.setTextSize(14f);
-        tvSummary.setTextColor(getColorCompat(R.color.text_primary));
+        tvSummary.setTextColor(getColorCompat(R.color.operit_text_primary));
         tvSummary.setPadding(0, dp(4), 0, 0);
         box.addView(tvSummary);
 
@@ -238,7 +238,7 @@ public class MemoryManageActivity extends Activity {
             TextView tvMood = new TextView(this);
             tvMood.setText("心情：" + s.moodSummary);
             tvMood.setTextSize(12f);
-            tvMood.setTextColor(getColorCompat(R.color.text_secondary));
+            tvMood.setTextColor(getColorCompat(R.color.operit_text_secondary));
             tvMood.setPadding(0, dp(2), 0, 0);
             box.addView(tvMood);
         }

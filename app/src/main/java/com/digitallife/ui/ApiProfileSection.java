@@ -107,7 +107,7 @@ public class ApiProfileSection {
         // 当前配置选择器（整行可点，点击弹出列表快捷切换）
         tvCurrent = new TextView(ctx);
         tvCurrent.setTextSize(14f);
-        tvCurrent.setTextColor(UiKit.color(ctx, R.color.text_primary));
+        tvCurrent.setTextColor(UiKit.color(ctx, R.color.operit_text_primary));
         tvCurrent.setGravity(Gravity.CENTER_VERTICAL);
         tvCurrent.setPadding(UiKit.dp(ctx, 14), UiKit.dp(ctx, 12), UiKit.dp(ctx, 14), UiKit.dp(ctx, 12));
         tvCurrent.setBackgroundResource(R.drawable.bg_input);
@@ -157,7 +157,7 @@ public class ApiProfileSection {
         tvPoolStatus = new TextView(ctx);
         tvPoolStatus.setTextSize(12f);
         tvPoolStatus.setLineSpacing(2f, 1f);
-        tvPoolStatus.setTextColor(UiKit.color(ctx, R.color.text_secondary));
+        tvPoolStatus.setTextColor(UiKit.color(ctx, R.color.operit_text_secondary));
         keyPoolBox.addView(tvPoolStatus, UiKit.lp(ctx, 2));
 
         Button btnAddKey = UiKit.secondaryButton(ctx, keyPoolBox, "＋ 添加 Key");
@@ -170,7 +170,7 @@ public class ApiProfileSection {
         tvResult.setTextSize(13f);
         tvResult.setLineSpacing(2f, 1f);
         tvResult.setPadding(0, UiKit.dp(ctx, 6), 0, 0);
-        tvResult.setTextColor(UiKit.color(ctx, R.color.text_secondary));
+        tvResult.setTextColor(UiKit.color(ctx, R.color.operit_text_secondary));
         tvResult.setHint("填写后点「保存此配置」；点「＋ 新建」可另存一套而不覆盖现有。");
         cardApi.addView(tvResult, UiKit.lp(ctx, 0));
 
@@ -201,7 +201,7 @@ public class ApiProfileSection {
         TextView lab = new TextView(activity);
         lab.setText(label);
         lab.setTextSize(13f);
-        lab.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        lab.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         box.addView(lab, UiKit.lp(activity, 0));
         EditText et = UiKit.input(activity, box, placeholder, "");
         parent.addView(box, UiKit.lp(activity, 10));
@@ -417,7 +417,7 @@ public class ApiProfileSection {
         syncSettings();
         refreshList();
         if (!base.isEmpty() && !model.isEmpty()) {
-            tvResult.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            tvResult.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             tvResult.setText(isNew
                     ? "已保存「" + name + "」，正在自动测试连接…"
                     : "已更新「" + name + "」，正在自动测试连接…");
@@ -466,7 +466,7 @@ public class ApiProfileSection {
             tvResult.setText("请先填写 Base URL / API Key / 模型名");
             return;
         }
-        tvResult.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvResult.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvResult.setText("正在测试，请稍候…");
         LLMClient.testConnection(base, key, model, (text, err) -> handler.post(() -> {
             if (err == null) {
@@ -535,7 +535,7 @@ public class ApiProfileSection {
         TextView label = new TextView(activity);
         label.setText("Key …" + (key.length() > 4 ? key.substring(key.length() - 4) : key));
         label.setTextSize(13f);
-        label.setTextColor(UiKit.color(activity, R.color.text_primary));
+        label.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
         row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         Button btnEdit = smallKeyButton("编辑");
