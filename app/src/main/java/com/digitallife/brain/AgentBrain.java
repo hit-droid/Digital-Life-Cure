@@ -158,7 +158,18 @@ public class AgentBrain {
         // 首次对话时补充一条"开始互动"引导
         JSONObject extra = new JSONObject();
         try {
-            extra.put("system", buildSystemPrompt());
+            String system = buildSystemPrompt();
+            // v1.26.0：注入相关事实（从最近 user 消息召回）
+            String recQuery = "";
+            for (int i = memory.getContext().size() - 1; i >= 0; i--) {
+                MemoryStore.Message m = memory.getContext().get(i);
+                if ("user".equals(m.role)) { recQuery = m.content; break; }
+            }
+            String related = memory.getRelatedFactsPrompt(recQuery, 5);
+            if (!related.isEmpty()) {
+                system = system + "\n" + related;
+            }
+            extra.put("system", system);
             extra.put("tools_desc", tools.describe());
         } catch (Exception ignored) {
         }

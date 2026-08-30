@@ -111,6 +111,23 @@ public class MemoryStore {
         return getRecentMessages(CONTEXT_LIMIT);
     }
 
+    /**
+     * v1.26.0：根据用户当前消息召回 topK 相关事实，返回拼接好的提示文本。
+     * 用于 AICore/AgentBrain 注入 system prompt 的"相关记忆"段。
+     * 无命中返回空字符串。
+     */
+    public synchronized String getRelatedFactsPrompt(String userQuery, int topK) {
+        if (userQuery == null || userQuery.trim().isEmpty()) return "";
+        List<Fact> related = retrieveRelatedFacts(userQuery, topK);
+        if (related.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 你记得可能跟当前对话相关的事（按相关度排序）\n");
+        for (Fact f : related) {
+            sb.append("- [").append(f.category).append("] ").append(f.content).append("\n");
+        }
+        return sb.toString();
+    }
+
     /** 取最近 N 条对话消息（升序），供聊天界面渲染 */
     public synchronized List<Message> getRecentMessages(int limit) {
         ArrayList<Message> out = new ArrayList<>();
@@ -215,6 +232,101 @@ public class MemoryStore {
             c.close();
         }
         return out;
+    }
+
+    /**
+     * v1.26.0：基于关键词的轻量语义检索。
+     * 流程：query → 提取中文/英文关键词（去停用词） → 扫 facts 表，
+     *      按"命中关键词数 × confidence × 时间衰减"打分，取 topK。
+     * 无关键词命中时返回空（调用方回退到 getAllFacts）。
+     */
+    public synchronized List<Fact> retrieveRelatedFacts(String query, int topK) {
+        if (query == null || query.trim().isEmpty()) return new ArrayList<>();
+        List<String> keywords = extractKeywords(query);
+        if (keywords.isEmpty()) return new ArrayList<>();
+        List<Fact> all = getAllFacts();
+        if (all.isEmpty()) return new ArrayList<>();
+
+        long now = System.currentTimeMillis();
+        // 30 天前的 fact 衰减系数 0.3
+        final long DAY_MS = 24L * 3600 * 1000;
+        java.util.PriorityQueue<ScoredFact> heap = new java.util.PriorityQueue<>();
+        for (Fact f : all) {
+            int hits = 0;
+            String lower = f.content == null ? "" : f.content.toLowerCase();
+            for (String k : keywords) {
+                if (k.isEmpty()) continue;
+                if (lower.contains(k)) hits++;
+            }
+            if (hits == 0) continue;
+            long ageDays = (now - f.lastConfirmed) / DAY_MS;
+            double decay = ageDays > 30 ? 0.3 : Math.max(0.3, 1.0 - ageDays * 0.02);
+            double score = hits * f.confidence * decay;
+            heap.offer(new ScoredFact(f, score));
+            if (heap.size() > topK) heap.poll();
+        }
+        ArrayList<ScoredFact> sorted = new ArrayList<>(heap);
+        sorted.sort((a, b) -> Double.compare(b.score, a.score));
+        ArrayList<Fact> out = new ArrayList<>();
+        for (ScoredFact sf : sorted) out.add(sf.fact);
+        return out;
+    }
+
+    /**
+     * 轻量关键词提取：保留中文 2~6 字片段 + 英文单词（≥3 字符），去停用词。
+     * 避免引入 HanLP/Jieba 等分词库，保持零依赖。
+     */
+    private static List<String> extractKeywords(String text) {
+        ArrayList<String> kws = new ArrayList<>();
+        String lower = text.toLowerCase();
+        // 英文单词：连续 [a-z0-9] ≥3
+        java.util.regex.Matcher en = java.util.regex.Pattern.compile("[a-z0-9]{3,}").matcher(lower);
+        while (en.find()) {
+            String w = en.group();
+            if (!STOP_WORDS.contains(w)) kws.add(w);
+        }
+        // 中文 2~6 字片段
+        StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c >= 0x4E00 && c <= 0x9FFF) {
+                buf.append(c);
+            } else {
+                flushChinese(buf, kws);
+            }
+        }
+        flushChinese(buf, kws);
+        return kws;
+    }
+
+    private static void flushChinese(StringBuilder buf, List<String> out) {
+        if (buf.length() == 0) return;
+        String s = buf.toString();
+        // 滑窗生成 2~6 字片段
+        for (int len = 2; len <= Math.min(6, s.length()); len++) {
+            for (int i = 0; i + len <= s.length(); i++) {
+                String sub = s.substring(i, i + len);
+                if (!STOP_WORDS.contains(sub)) out.add(sub);
+            }
+        }
+        buf.setLength(0);
+    }
+
+    private static final java.util.Set<String> STOP_WORDS = new java.util.HashSet<>(java.util.Arrays.asList(
+            // 英文
+            "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one", "our", "out",
+            "this", "that", "with", "have", "from", "they", "been", "said", "what", "when", "make", "like", "him",
+            "into", "time", "very", "than", "only", "know", "just", "also", "your", "over", "such", "more",
+            // 中文常见停用词
+            "的", "了", "是", "在", "我", "你", "他", "她", "它", "们", "和", "与", "或", "也", "都", "就",
+            "把", "被", "从", "到", "给", "和", "很", "还", "可", "能", "让", "上", "下", "不", "没",
+            "啊", "吗", "呢", "吧", "哦", "呀", "嗯", "啊", "啦", "哈"
+    ));
+
+    private static class ScoredFact {
+        final Fact fact;
+        final double score;
+        ScoredFact(Fact fact, double score) { this.fact = fact; this.score = score; }
     }
 
     public synchronized List<DailySummary> getAllSummaries() {
