@@ -140,7 +140,10 @@ public class ChatActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_top_bar);
+        // v1.26.0：护理大脑用专属深绿顶栏，区分普通对话
+        topBar.setBackgroundResource(isCare
+                ? R.drawable.bg_top_bar_care
+                : R.drawable.bg_top_bar);
         topBar.setElevation(dp(4));
         topBar.setPadding(dp(4), statusBarHeight() + dp(8), dp(4), dp(12));
 
@@ -158,6 +161,20 @@ public class ChatActivity extends Activity {
         tvTitle.setSingleLine(true);
         topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // v1.26.0：护理大脑模式徽章（pill 描边样式）
+        if (isCare) {
+            TextView careBadge = new TextView(this);
+            careBadge.setText("● 医疗");
+            careBadge.setTextSize(11f);
+            careBadge.setTextColor(0xFF6EE7B7);  // 薄荷绿
+            careBadge.setBackgroundResource(R.drawable.bg_pill_care);
+            careBadge.setPadding(dp(10), dp(3), dp(10), dp(3));
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            blp.setMargins(dp(4), 0, dp(6), 0);
+            topBar.addView(careBadge, blp);
+        }
 
         btnModel = new Button(this);
         btnModel.setTextSize(12f);
@@ -238,14 +255,28 @@ public class ChatActivity extends Activity {
         LinearLayout chipRow = new LinearLayout(this);
         chipRow.setOrientation(LinearLayout.HORIZONTAL);
         chipRow.setGravity(Gravity.CENTER_VERTICAL);
-        String[] chipLabels = {"✦ 语音", "✦ 拍照", "✦ 翻译", "✦ 总结", "✦ 联网"};
-        String[] chipInserts = {
-                "请用语音回复我：",
-                "请看图回答：",
-                "请帮我翻译成中文：",
-                "请帮我总结要点：",
-                "请联网搜索最新信息："
-        };
+        // v1.26.0：护理大脑用专属 chips（健康/医疗主题）
+        String[] chipLabels;
+        String[] chipInserts;
+        if (isCare) {
+            chipLabels = new String[]{"✦ 症状", "✦ 饮食", "✦ 用药", "✦ 运动", "✦ 复盘"};
+            chipInserts = new String[]{
+                    "我最近有以下症状，请帮我分析：",
+                    "请帮我设计一份适合我的饮食方案：",
+                    "请帮我看看这个用药方案：",
+                    "请帮我制定一个运动计划：",
+                    "请帮我复盘最近的健康数据："
+            };
+        } else {
+            chipLabels = new String[]{"✦ 语音", "✦ 拍照", "✦ 翻译", "✦ 总结", "✦ 联网"};
+            chipInserts = new String[]{
+                    "请用语音回复我：",
+                    "请看图回答：",
+                    "请帮我翻译成中文：",
+                    "请帮我总结要点：",
+                    "请联网搜索最新信息："
+            };
+        }
         for (int i = 0; i < chipLabels.length; i++) {
             final String insert = chipInserts[i];
             TextView chip = new TextView(this);
@@ -974,7 +1005,10 @@ public class ChatActivity extends Activity {
         b.setPadding(dp(12), dp(10), dp(12), dp(10));
         b.setMaxWidth(maxBubbleWidth);
         b.setElevation(dp(2));
-        b.setBackgroundResource(R.drawable.bg_bubble_ai);
+        // v1.26.0：护理大脑用专属绿色气泡背景
+        b.setBackgroundResource(isCare
+                ? R.drawable.bg_bubble_care
+                : R.drawable.bg_bubble_ai);
         b.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
         b.setLinksClickable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
