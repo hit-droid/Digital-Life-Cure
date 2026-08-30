@@ -8,4 +8,18 @@
     <string name="action_open">打开设置</string>
     <string name="action_stop">停止桌宠</string>
     <string name="accessibility_service_desc">用于辅助桌宠感知当前界面与通知，增强互动（可选授权）</string>
+    <!-- v1.23.0 Operit 路由标题 -->
+    <string name="route_chat">对话</string>
+    <string name="route_contacts">模型小房间</string>
+    <string name="route_discover">记忆与发现</string>
+    <string name="route_plugin">插件</string>
+    <string name="route_settings">设置</string>
+    <string name="route_memory">记忆管理</string>
+    <string name="route_care">护理大脑</string>
+    <string name="route_themes">主题</string>
+    <string name="route_developer">开发者</string>
+    <string name="route_about">关于</string>
+    <!-- v1.23.0 长按图标快捷方式 -->
+    <string name="action_start_overlay">打开悬浮窗</string>
+    <string name="action_stop_overlay">停止桌宠</string>
 </resources>
