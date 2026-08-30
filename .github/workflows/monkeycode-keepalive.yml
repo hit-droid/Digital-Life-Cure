@@ -1,0 +1,71 @@
+name: MonkeyCode Keepalive
+
+# 每日在北京时间多个时点向 main 打一个空 commit，
+# 触发 MonkeyCode 的 GitHub push webhook，为项目制造活动，
+# 避免任务/环境因长时间无活动被回收。
+#
+# 关键点：commit message 带 [skip ci]，
+# GitHub Actions 会跳过 push 触发的 Build APK（省 Actions 额度、不发 Release），
+# 但 push webhook 仍会正常投递给 MonkeyCode —— 这正是我们要的。
+
+on:
+  schedule:
+    # UTC = 北京时间 - 8。四个错峰时点，任一成功即当日完成。
+    - cron: "10 1 * * *"    # 北京 09:10
+    - cron: "40 5 * * *"    # 北京 13:40
+    - cron: "10 10 * * *"   # 北京 18:10
+    - cron: "40 14 * * *"   # 北京 22:40
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monkeycode-keepalive
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Shanghai
+      MARKER: "chore(keepalive)"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: 判断是否已打过今日心跳
+        id: check
+        run: |
+          TODAY=$(date +%F)
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          # 取最近一条心跳 commit 的本地日期
+          LAST=$(git log -1 --format=%cd --date=format-local:%F --grep="$MARKER" || true)
+          echo "today=$TODAY last_heartbeat=${LAST:-none}"
+          if [ "$LAST" = "$TODAY" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::今日($TODAY)心跳已存在，跳过"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 打空 commit 并推送
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git config user.name  "monkeycode-keepalive[bot]"
+          git config user.email "keepalive@users.noreply.github.com"
+          TODAY=$(date +%F)
+          git commit --allow-empty \
+            -m "$MARKER: heartbeat $TODAY [skip ci]"
+          git push origin HEAD:main
+          echo "::notice::已推送心跳 $TODAY"
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "当天(北京时间) $(date '+%F %T')"
+          echo "本次是否跳过: ${{ steps.check.outputs.skip }}"
