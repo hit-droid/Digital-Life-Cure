@@ -71,6 +71,28 @@ public class EmotionState {
     public void setEnergy(float v) { energy = Math.max(0f, Math.min(1f, v)); }
     public void addEnergy(float v) { energy = Math.max(0f, Math.min(1f, energy + v)); }
 
+    /** v1.26.0：序列化为 SharedPreferences 键值（保持前缀） */
+    public java.util.Map<String, Float> snapshot() {
+        java.util.Map<String, Float> map = new java.util.HashMap<>();
+        for (String d : DIMS) map.put("emo_" + d, emotion.get(d));
+        map.put("intimacy", intimacy);
+        map.put("energy", energy);
+        return map;
+    }
+
+    /** v1.26.0：从 SharedPreferences 恢复（缺失字段保持当前值） */
+    public void restore(java.util.Map<String, Float> map) {
+        if (map == null) return;
+        for (String d : DIMS) {
+            Float v = map.get("emo_" + d);
+            if (v != null) emotion.put(d, Math.max(0f, Math.min(1f, v)));
+        }
+        Float in = map.get("intimacy");
+        if (in != null) intimacy = Math.max(0f, Math.min(1f, in));
+        Float en = map.get("energy");
+        if (en != null) energy = Math.max(0f, Math.min(1f, en));
+    }
+
     /** 序列化为可读文本，注入 System Prompt */
     public String describe() {
         StringBuilder sb = new StringBuilder();

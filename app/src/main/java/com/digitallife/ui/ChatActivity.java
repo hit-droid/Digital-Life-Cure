@@ -675,6 +675,8 @@ public class ChatActivity extends Activity {
         if (p != null && p.baseUrl != null && !p.baseUrl.isEmpty()
                 && !p.effectiveKeys().isEmpty()) {
             llm = new LLMClient(p.baseUrl, am.nextKey(ApiManager.SCOPE_CHAT, p.id), p.model);
+            // v1.26.0：注入完整密钥池，401/429 时 LLMClient 自动轮换
+            llm.setApiKeys(p.effectiveKeys());
         } else {
             Settings s = new Settings(this);
             llm = new LLMClient(s.getApiBase(), s.getApiKey(), s.getModel());

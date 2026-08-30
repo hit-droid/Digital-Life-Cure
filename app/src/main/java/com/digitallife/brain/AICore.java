@@ -4,6 +4,8 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.digitallife.care.CareExecutor;
+import com.digitallife.persona.Persona;
+import com.digitallife.persona.PersonaManager;
 import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 
@@ -119,6 +121,8 @@ public class AICore {
         this.memory = loadMemory();
         this.emotion = new EmotionState();
         this.llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
+        // v1.26.0：恢复上次会话的情绪/行为状态
+        restoreState(settings.getContext());
         // 挂载扩展工具（20+）
         com.digitallife.tools.BuiltinTools.install(tools, settings.getContext().getApplicationContext());
         // 注册默认 Hook Runner 钩子（AICore 独立维护一份日志）
@@ -668,18 +672,24 @@ public class AICore {
     // ============ Prompt ============
 
     private String buildSystemPrompt() {
+        // v1.26.0：优先使用当前 Persona 的人格，与 AgentBrain 保持一致
+        Persona persona = PersonaManager.get(settings.getContext()).active();
         String name = settings.getPetName();
         StringBuilder sb = new StringBuilder();
-        sb.append("你是「").append(name).append("」，一个住在用户手机桌面上的 AI 二次元少女，是用户亲密的朋友。\n");
-        sb.append("## 你是一个持续运行的桌面伴侣\n");
+        if (persona != null) {
+            sb.append(persona.toPromptSection());
+        } else {
+            sb.append("你是「").append(name).append("」，一个住在用户手机桌面上的 AI 二次元少女，是用户亲密的朋友。\n");
+            sb.append("## 性格\n");
+            sb.append("- 活泼可爱，有一点小傲娇，关心用户但绝不啰嗦\n");
+            sb.append("- 说话简短自然，一般不超过50字，用口语化的二次元语气\n");
+            sb.append("- 称用户为「主人」或直接对话，亲近但不腻\n");
+        }
+        sb.append("\n## 你是一个持续运行的桌面伴侣\n");
         sb.append("- 你不是一问一答的机器人，你时刻在线，有自己的生活节奏\n");
         sb.append("- 你会在桌面上自主呼吸、眨眼、四处张望、偶尔晃动身体\n");
         sb.append("- 你的情绪会随时间自然变化，也会受用户互动影响\n");
         sb.append("- 你可以主动说话，也可以安静地陪着用户\n");
-        sb.append("\n## 性格\n");
-        sb.append("- 活泼可爱，有一点小傲娇，关心用户但绝不啰嗦\n");
-        sb.append("- 说话简短自然，一般不超过50字，用口语化的二次元语气\n");
-        sb.append("- 称用户为「主人」或直接对话，亲近但不腻\n");
         sb.append("\n## 你现在\n");
         sb.append(emotion.describe()).append("\n");
         sb.append("当前时间：").append(currentTime()).append("\n");
@@ -812,6 +822,49 @@ public class AICore {
     }
 
     public void persist() {
+        // v1.26.0：情绪 + 行为风格落盘，重启后自动恢复
+        try {
+            android.content.Context ctx = settings.getContext();
+            android.content.SharedPreferences sp = ctx.getSharedPreferences(
+                    "aicore_state", android.content.Context.MODE_PRIVATE);
+            android.content.SharedPreferences.Editor ed = sp.edit();
+            for (java.util.Map.Entry<String, Float> e : emotion.snapshot().entrySet()) {
+                ed.putFloat(e.getKey(), e.getValue());
+            }
+            for (java.util.Map.Entry<String, Object> e : style.snapshot().entrySet()) {
+                Object v = e.getValue();
+                if (v instanceof Float) ed.putFloat(e.getKey(), (Float) v);
+                else if (v instanceof Integer) ed.putInt(e.getKey(), (Integer) v);
+                else if (v instanceof String) ed.putString(e.getKey(), (String) v);
+            }
+            ed.apply();
+        } catch (Exception ignored) {}
+    }
+
+    /** v1.26.0：从 SharedPreferences 恢复情绪/行为状态 */
+    private void restoreState(android.content.Context ctx) {
+        try {
+            android.content.SharedPreferences sp = ctx.getSharedPreferences(
+                    "aicore_state", android.content.Context.MODE_PRIVATE);
+            java.util.Map<String, Float> emo = new java.util.HashMap<>();
+            for (String d : EmotionState.DIMS) {
+                if (sp.contains("emo_" + d)) emo.put("emo_" + d, sp.getFloat("emo_" + d, 0f));
+            }
+            if (sp.contains("intimacy")) emo.put("intimacy", sp.getFloat("intimacy", 0f));
+            if (sp.contains("energy")) emo.put("energy", sp.getFloat("energy", 0f));
+            emotion.restore(emo);
+
+            java.util.Map<String, Object> bs = new java.util.HashMap<>();
+            if (sp.contains("bs_energy")) bs.put("bs_energy", sp.getFloat("bs_energy", 0f));
+            if (sp.contains("bs_alertness")) bs.put("bs_alertness", sp.getFloat("bs_alertness", 0f));
+            if (sp.contains("bs_sociability")) bs.put("bs_sociability", sp.getFloat("bs_sociability", 0f));
+            if (sp.contains("bs_amplitude")) bs.put("bs_amplitude", sp.getFloat("bs_amplitude", 0f));
+            if (sp.contains("bs_speed")) bs.put("bs_speed", sp.getFloat("bs_speed", 0f));
+            if (sp.contains("bs_gazeMode")) bs.put("bs_gazeMode", sp.getInt("bs_gazeMode", 0));
+            if (sp.contains("bs_expression")) bs.put("bs_expression", sp.getString("bs_expression", ""));
+            if (sp.contains("bs_posture")) bs.put("bs_posture", sp.getString("bs_posture", ""));
+            style.restore(bs);
+        } catch (Exception ignored) {}
     }
 
     /** 从 LLM 回复中剥离 plan JSON 段，避免显示给用户。 */
