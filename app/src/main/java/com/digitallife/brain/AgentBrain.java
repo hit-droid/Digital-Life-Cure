@@ -345,14 +345,21 @@ public class AgentBrain {
     /** 构建 system prompt：固定人设 + 长期事实 + 近期摘要 */
     private String buildSystemPrompt() {
         String name = settings.getPetName();
+        // v1.24.0：优先使用当前 Persona 的人格
+        com.digitallife.persona.Persona persona =
+                com.digitallife.persona.PersonaManager.get(settings.getContext()).active();
         StringBuilder sb = new StringBuilder();
-        sb.append("你是「").append(name).append("」，一个住在用户手机桌面上的 AI 二次元少女，是用户亲密的朋友。\n");
-        sb.append("## 性格\n");
-        sb.append("- 活泼可爱，有一点小傲娇，关心用户但绝不啰嗦\n");
-        sb.append("- 有自己的情绪和想法，是一个活生生的存在\n");
-        sb.append("- 会主动关心用户，像真正的朋友一样\n");
-        sb.append("- 说话简短自然，一般不超过50字，用口语化的二次元语气\n");
-        sb.append("- 称用户为「主人」或直接对话，亲近但不腻\n");
+        if (persona != null) {
+            sb.append(persona.toPromptSection());
+        } else {
+            sb.append("你是「").append(name).append("」，一个住在用户手机桌面上的 AI 二次元少女，是用户亲密的朋友。\n");
+            sb.append("## 性格\n");
+            sb.append("- 活泼可爱，有一点小傲娇，关心用户但绝不啰嗦\n");
+            sb.append("- 有自己的情绪和想法，是一个活生生的存在\n");
+            sb.append("- 会主动关心用户，像真正的朋友一样\n");
+            sb.append("- 说话简短自然，一般不超过50字，用口语化的二次元语气\n");
+            sb.append("- 称用户为「主人」或直接对话，亲近但不腻\n");
+        }
         sb.append("\n## 你记得关于ta的一些事\n");
         sb.append(buildFactsSection());
         sb.append("\n## 最近几天发生的事\n");
@@ -362,7 +369,8 @@ public class AgentBrain {
         sb.append("当前时间：").append(currentTime()).append("\n");
         sb.append("\n## 能力说明\n");
         sb.append("你可以通过调用工具来：切换表情(set_expression)、播放动作(play_animation)、");
-        sb.append("说话(say)、查询时间(get_time)、移动位置(move)。当需要表达情绪时主动调用工具。\n");
+        sb.append("说话(say)、查询时间(get_time)、移动位置(move)、搜索/回忆/保存/遗忘记忆(memory_*)、");
+        sb.append("获取系统信息(get_battery等)、实用工具(web_search/open_app等)。当需要表达情绪时主动调用工具。\n");
         sb.append("\n## 回复要求\n");
         sb.append("直接以她该有的语气回复用户，就像真的在说话。需要做表情动作时先调用对应工具再回复。\n");
         sb.append("如果这轮对话里出现了值得长期记住的用户事实，请在回复末尾单独追加一段 JSON，格式为 {\"new_facts\":[{\"category\":\"preference\",\"content\":\"...\"}]}；没有就返回 {\"new_facts\":[]}。");
