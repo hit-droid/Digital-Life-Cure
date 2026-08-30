@@ -203,36 +203,39 @@ public class AgentConsoleActivity extends Activity {
             // 1) 活动
             StringBuilder act = new StringBuilder();
             PetService svc = PetService.getInstance();
+            int activityScore = 0;
+            boolean isBusy = false;
             if (svc != null) {
                 act.append("● 服务运行中\n");
                 if (svc.aiCore != null) {
-                    act.append("  AICore: ").append(svc.aiCore.isBusy() ? "思考中…" : "待机").append("\n");
+                    isBusy = svc.aiCore.isBusy();
+                    act.append("  AICore: ").append(isBusy ? "思考中…" : "待机").append("\n");
                     if (svc.aiCore.getPlanExecutor() != null
                             && svc.aiCore.getPlanExecutor().isRunning()) {
                         act.append("  计划: 执行中\n");
+                        activityScore++;
                     }
                 }
+                activityScore++;
             } else {
                 act.append("○ 服务未启动\n");
             }
             // Hook 状态
             act.append("\n● Hook Runner\n");
-            act.append("  预钩子: ")
-                    .append(HookRunner.getInstance().preCount())
-                    .append(" 个\n");
-            act.append("  后钩子: ")
-                    .append(HookRunner.getInstance().postCount())
-                    .append(" 个\n");
-            act.append("  错误钩子: ")
-                    .append(HookRunner.getInstance().errCount())
-                    .append(" 个\n");
+            int preCnt = HookRunner.getInstance().preCount();
+            int postCnt = HookRunner.getInstance().postCount();
+            int errCnt = HookRunner.getInstance().errCount();
+            act.append("  预钩子: ").append(preCnt).append(" 个\n");
+            act.append("  后钩子: ").append(postCnt).append(" 个\n");
+            act.append("  错误钩子: ").append(errCnt).append(" 个\n");
             txtActivity.setText(act.toString());
 
             // 2) 工具日志
             StringBuilder tl = new StringBuilder();
             java.util.List<ToolUsageLog.Entry> all =
                     com.digitallife.tools.ToolUsageLog.getInstance(this).all();
-            int show = Math.min(all.size(), 200);
+            int toolTotal = all.size();
+            int show = Math.min(toolTotal, 200);
             java.util.List<ToolUsageLog.Entry> log = all.subList(0, show);
             if (log.isEmpty()) {
                 tl.append("(暂无工具调用记录)");
@@ -255,10 +258,12 @@ public class AgentConsoleActivity extends Activity {
 
             // 3) 计划
             StringBuilder pl = new StringBuilder();
+            int planScore = 0;
             if (svc != null && svc.aiCore != null) {
                 PlanExecutor pe = svc.aiCore.getPlanExecutor();
                 if (pe != null) {
                     java.util.List<PlanExecutor.Step> hist = pe.history();
+                    planScore = hist.size();
                     if (hist.isEmpty()) {
                         pl.append("(暂无计划执行记录)\n\n");
                         pl.append("提示：让 LLM 执行多步操作，例如：\n");
@@ -286,6 +291,7 @@ public class AgentConsoleActivity extends Activity {
             StringBuilder bl = new StringBuilder();
             java.util.List<com.digitallife.brain.BrainLog.BrainEntry> blog =
                     com.digitallife.brain.BrainLog.getInstance().recent(150);
+            int brainCount = blog.size();
             if (blog.isEmpty()) {
                 bl.append("(暂无脑日志)\n\n");
                 bl.append("与角色对话后，这里会显示\n");
@@ -301,9 +307,29 @@ public class AgentConsoleActivity extends Activity {
                 }
             }
             txtBrain.setText(bl.toString());
+
+            // ===== 更新 tab 角标：数字后缀 =====
+            if (tabs != null && tabs.length == 4) {
+                tabs[0].setText(activityBadge(activityScore, isBusy));
+                tabs[1].setText(countBadge("工具日志", toolTotal));
+                tabs[2].setText(countBadge("计划", planScore));
+                tabs[3].setText(countBadge("脑日志", brainCount));
+            }
         } catch (Exception e) {
             // ignore
         }
+    }
+
+    private String activityBadge(int score, boolean busy) {
+        String base = "活动";
+        if (busy) return base + " ●";   // 活动运行中：实心圆点
+        if (score > 0) return base + " " + score;
+        return base;
+    }
+
+    private String countBadge(String base, int n) {
+        if (n <= 0) return base;
+        return base + " " + n;
     }
 
     private Button mkBtn(String text) {
