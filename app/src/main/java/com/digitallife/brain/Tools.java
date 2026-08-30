@@ -144,7 +144,7 @@ public class Tools {
     public java.util.List<String> allToolNames() {
         java.util.List<String> out = new java.util.ArrayList<>();
         for (int i = 0; i < schemas.size(); i++) {
-            JSONObject t = schemas.optJSONObject(i);
+            JSONObject t = schemas.get(i);
             if (t == null) continue;
             JSONObject fn = t.optJSONObject("function");
             if (fn == null) continue;
