@@ -3,6 +3,9 @@
 ## v1.24.0 (2026-08-30)
 
 ### 智能体升级
+- **记忆系统重构**（核心）：新建 `memory/MemoryRetriever.java`（混合检索：最近 20 条 + 关键词 10 条 + 高重要度 5 条，时间衰减 + 重要度加权排序）+ `MemoryExtractor.java`（每 6 小时 LLM 自动提取关键信息到 facts 表）+ `MemoryEntry.java`（统一记忆条目结构）+ `MemoryGraphView.java`（词云式可视化，词频越大字号越大，按分类着色）。MemoryManageActivity 加"AI 提取"按钮和词云头部展示。AgentBrain/AICore 的 system prompt 接入 MemoryRetriever，让 LLM 看到"我记起来…"的相关记忆。借鉴 Operit AI 的 hybrid retrieval + auto-extraction 设计。
+
+### 智能体升级
 - **工具市场**（核心）：内置工具从 5 个扩展到 20+（新增 15 个），覆盖表达/记忆/系统/实用/信息 5 大类。ToolMarketActivity 可视化开关、查看今日调用统计。借鉴 Operit AI 工具市场设计。
 - **Hook Runner**：工具调用拦截器链（pre/post/error），用于权限检查（用户禁用工具直接拒绝）、使用统计（ToolUsageLog 持久化 500 条）、上下文注入。参考 Operit AI Hook Runner 架构。
 - **MemoryTools**：新建 brain/MemoryTools.java 把记忆操作（search/recall/save/forget）作为 LLM 工具暴露，让 Agent 能主动搜索、回忆、保存、遗忘记忆。
