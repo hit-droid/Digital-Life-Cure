@@ -115,6 +115,11 @@ public class AICore {
 
     private boolean refreshMode = false;  // 当前 LLM 请求是否为自主刷新
     private static final long SUMMARY_INTERVAL_MS = 6L * 60L * 60L * 1000L;
+    // v1.26.0：事实摘要压缩阈值。facts 超过此值就触发摘要：取最老 10 条压成 1 条 summary fact
+    private static final int FACT_SUMMARY_THRESHOLD = 30;
+    private static final int FACT_SUMMARY_BATCH = 10;
+    private long lastFactSummaryAt = 0;
+    private static final long FACT_SUMMARY_COOLDOWN_MS = 5L * 60L * 1000L; // 5 分钟冷却，避免高频触发
 
     public AICore(Settings settings) {
         this.settings = settings;
@@ -615,6 +620,69 @@ public class AICore {
             if (content.isEmpty()) continue;
             memory.saveFact(category.isEmpty() ? "profile" : category, content, 1.0, now + i);
         }
+        // v1.26.0：保存后检查总量，超阈值就触发事实摘要压缩
+        maybeSummarizeFacts();
+    }
+
+    /**
+     * v1.26.0：事实摘要压缩。
+     * 当 facts 总数超过阈值时，取最老的 N 条让 LLM 压缩成 1 条 summary fact，原文逐条删除。
+     * 这样长期信息不丢，且不会让 prompt 中的事实段无限膨胀。
+     * 冷却 5 分钟避免高频触发；失败/无 API 静默回退。
+     */
+    private void maybeSummarizeFacts() {
+        long now = System.currentTimeMillis();
+        if (now - lastFactSummaryAt < FACT_SUMMARY_COOLDOWN_MS) return;
+        int total = memory.countFacts();
+        if (total < FACT_SUMMARY_THRESHOLD) return;
+        lastFactSummaryAt = now;
+        List<MemoryStore.Fact> oldest = memory.getOldestFacts(FACT_SUMMARY_BATCH);
+        if (oldest.size() < 3) return; // 太少不压缩
+        requestFactSummary(oldest);
+    }
+
+    private void requestFactSummary(List<MemoryStore.Fact> facts) {
+        if (facts == null || facts.isEmpty()) return;
+        List<LLMClient.ChatMessage> msgs = new ArrayList<>();
+        StringBuilder userContent = new StringBuilder();
+        userContent.append("请把下面这些零散的记忆压缩成 1 段简洁的事实摘要。\n");
+        userContent.append("要求：保留重要信息（人物/事件/偏好/事实），合并重复，去除琐碎。\n");
+        userContent.append("输出格式：{\"summary\":\"...\"}，summary 用 1 到 3 句话，中文。\n");
+        userContent.append("只输出 JSON，不要其他文字。\n\n");
+        for (MemoryStore.Fact f : facts) {
+            userContent.append("- [").append(f.category).append("] ").append(f.content).append("\n");
+        }
+        msgs.add(new LLMClient.ChatMessage("user", userContent.toString()));
+
+        JSONObject extra = new JSONObject();
+        try {
+            extra.put("system", buildFactSummaryPrompt());
+        } catch (Exception ignored) {
+        }
+
+        llm.chatOnce(msgs, extra, (text, err) -> {
+            if (err != null || text == null || text.trim().isEmpty()) return;
+            JSONObject pkg = tryParseJson(text.trim());
+            if (pkg == null) return;
+            String summary = pkg.optString("summary", "").trim();
+            if (summary.isEmpty()) return;
+            // 写新 summary fact
+            memory.saveFact("summary", summary, 0.8, System.currentTimeMillis());
+            // 删原文
+            for (MemoryStore.Fact f : facts) {
+                try { memory.deleteFact(f.id); } catch (Exception ignored) {}
+            }
+        });
+    }
+
+    private String buildFactSummaryPrompt() {
+        String name = settings.getPetName();
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是「").append(name).append("」的记忆整理器。\n");
+        sb.append("你的任务是把多条零散记忆压缩成 1 段简洁摘要。\n");
+        sb.append("只输出 JSON，格式 {\"summary\":\"...\"}。\n");
+        sb.append("summary 用 1 到 3 句话中文，保留关键信息。\n");
+        return sb.toString();
     }
 
     private void finishReply(String fullText) {
