@@ -123,7 +123,7 @@ public class BuiltinTools {
         registerIfAbsent(tools, "take_screenshot_hint",
                 "截图提示（需要系统截图权限，普通 App 无法直接执行）",
                 new String[]{},
-                args -> "Android 普通 App 无法直接截图，请使用系统快捷键（电源+音量下）";
+                args -> "Android 普通 App 无法直接截图，请使用系统快捷键（电源+音量下）");
 
         // ===== 实用类（4 个） =====
         registerIfAbsent(tools, "web_search",
@@ -193,7 +193,7 @@ public class BuiltinTools {
         registerIfAbsent(tools, "get_contacts_hint",
                 "获取联系人提示（需要 READ_CONTACTS 权限）",
                 new String[]{},
-                args -> "联系人功能需要在系统设置中授予通讯录权限";
+                args -> "联系人功能需要在系统设置中授予通讯录权限");
 
         registerIfAbsent(tools, "get_files_recent",
                 "获取最近文件列表（占位）",
