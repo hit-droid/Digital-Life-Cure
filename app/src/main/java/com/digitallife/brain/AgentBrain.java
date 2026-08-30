@@ -54,6 +54,39 @@ public class AgentBrain {
         this.settings = settings;
         this.llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
         this.memory = loadMemory();
+        // 挂载扩展工具（20+）
+        com.digitallife.tools.BuiltinTools.install(tools, settings.getContext().getApplicationContext());
+        // 注册默认 Hook Runner 钩子
+        com.digitallife.tools.HookRunner.getInstance().addPreHook(
+                new com.digitallife.tools.HookRunner.PreHook() {
+                    @Override
+                    public String preCall(String toolName, org.json.JSONObject args) {
+                        if (com.digitallife.ui.ToolMarketActivity.isDisabled(
+                                settings.getContext(), toolName)) {
+                            return "工具已被用户禁用：" + toolName;
+                        }
+                        return null;
+                    }
+                });
+        com.digitallife.tools.HookRunner.getInstance().addPostHook(
+                new com.digitallife.tools.HookRunner.PostHook() {
+                    @Override
+                    public String postCall(String toolName, org.json.JSONObject args,
+                                           String result, String error) {
+                        com.digitallife.tools.ToolUsageLog log =
+                                new com.digitallife.tools.ToolUsageLog(settings.getContext());
+                        com.digitallife.tools.ToolUsageLog.Entry e =
+                                new com.digitallife.tools.ToolUsageLog.Entry();
+                        e.timestamp = System.currentTimeMillis();
+                        e.toolName = toolName;
+                        e.args = args != null ? args.toString() : "";
+                        e.result = result;
+                        e.error = error;
+                        e.durationMs = 0;
+                        log.add(e);
+                        return null;
+                    }
+                });
         this.llm.setTools(tools.toJsonArray());
     }
 

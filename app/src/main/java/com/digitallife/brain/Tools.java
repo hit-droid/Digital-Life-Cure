@@ -144,12 +144,32 @@ public class Tools {
     public void execute(String name, JSONObject args, Callback cb) {
         for (int i = 0; i < schemas.size(); i++) {
             if (schemas.get(i).optJSONObject("function").optString("name").equals(name)) {
+                // Hook Runner: pre
+                String preReject = com.digitallife.tools.HookRunner.getInstance().runPre(name, args);
+                if (preReject != null) {
+                    cb.onResult(name, args, null, preReject);
+                    com.digitallife.tools.HookRunner.getInstance().runError(name, args, preReject);
+                    return;
+                }
                 Executor ex = executors.get(i);
+                String res = null;
+                String err = null;
+                long t0 = System.currentTimeMillis();
                 try {
-                    String res = ex.execute(args != null ? args : new JSONObject());
-                    cb.onResult(name, args, res, null);
+                    res = ex.execute(args != null ? args : new JSONObject());
                 } catch (Exception e) {
-                    cb.onResult(name, args, null, com.digitallife.ui.UiKit.safeMsg(e));
+                    err = com.digitallife.ui.UiKit.safeMsg(e);
+                }
+                long dt = System.currentTimeMillis() - t0;
+                cb.onResult(name, args, res, err);
+                // Hook Runner: post
+                String post = com.digitallife.tools.HookRunner.getInstance()
+                        .runPost(name, args, res, err);
+                if (post != null && !post.isEmpty() && onToolSideEffect != null) {
+                    onToolSideEffect.onToolSideEffect(name, post, dt);
+                }
+                if (err != null) {
+                    com.digitallife.tools.HookRunner.getInstance().runError(name, args, err);
                 }
                 return;
             }
@@ -166,6 +186,13 @@ public class Tools {
         }
         cb.onResult(name, args, "未知工具: " + name, null);
     }
+
+    /** 工具副作用回调（Hook Runner post 钩子注入到 LLM） */
+    public interface ToolSideEffectListener {
+        void onToolSideEffect(String toolName, String sideEffect, long durationMs);
+    }
+    private ToolSideEffectListener onToolSideEffect;
+    public void setToolSideEffectListener(ToolSideEffectListener l) { this.onToolSideEffect = l; }
 
     // ============= 工具行为回调（由 AgentBrain/表现层注入） =============
     public interface ExpressionListener { void onExpression(String emotion, float intensity); }

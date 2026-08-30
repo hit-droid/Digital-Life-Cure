@@ -15,6 +15,7 @@ public enum OperitRoute {
 
     MEMORY     (R.string.route_memory,     R.drawable.ic_tab_discover, "memory",     false, "记忆图谱化管理"),
     CARE       (R.string.route_care,       R.drawable.ic_tab_discover, "care",       false, "护理大脑，管理模型"),
+    TOOLMARKET (R.string.route_tool_market, R.drawable.ic_tab_tool,    "tool",       false, "启用/禁用工具，查看调用统计"),
     THEMES     (R.string.route_themes,     R.drawable.ic_tab_settings, "themes",     false, "自定义主题风格"),
     DEVELOPER  (R.string.route_developer,  R.drawable.ic_tab_settings, "developer",  false, "开发者调试工具"),
     ABOUT      (R.string.route_about,      R.drawable.ic_tab_settings, "about",      false, "版本与开源许可");
