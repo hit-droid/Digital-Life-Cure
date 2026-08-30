@@ -57,6 +57,7 @@ public class OperitDrawer extends LinearLayout {
         addView(buildDivider());
         addView(buildSectionTitle("高级"));
         addRouteItem(OperitRoute.MEMORY);
+        addRouteItem(OperitRoute.PERSONA);
         addRouteItem(OperitRoute.CARE);
         addRouteItem(OperitRoute.TOOLMARKET);
         addRouteItem(OperitRoute.THEMES);
