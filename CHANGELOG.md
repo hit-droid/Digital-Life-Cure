@@ -6,6 +6,7 @@
 - **计划模式 PlanExecutor**（核心）：新建 `brain/PlanExecutor.java`，解析 LLM 回复中的 `{"plan":[...]}` JSON 段，顺序执行多步工具调用（每步结果反馈 LLM 继续决策）。AICore 的 onDone 接入检测；system prompt 提示 LLM 可用 plan。借鉴 Operit AI multi-step plan 设计。
 - **主动行为 ProactiveEngine**（核心）：新建 `brain/ProactiveEngine.java`，每 30 分钟 tick 一次，根据时间/情绪/未读时长触发主动气泡（"主人～晚上好"）+ 系统通知（锁屏可见）。内置静默时段（23-8）、每日上限（6 次）、用户活跃标记。PetService 的 1Hz tick 循环每 30 分钟调用一次；ProactiveEngine 在 onCreate 时注入；onUserSays 时 markUserActive 重置空闲计时。新建 `notify/AgentNotifier.java`（NotificationCompat + BigTextStyle 通知，Android 8+ 渠道管理）。
 - **控制台脑日志**：AICore 在 startChat/onDone/finishReply 时输出 `onBrainLog(tag, message)`，供控制台实时展示智能体内部想法（"thinking"/"reply"/"plan"）。
+- **智能体控制台 AgentConsoleActivity**：4 个 Tab（活动状态 / 工具调用日志 / 计划执行 / 脑日志），实时 1s 刷新，显示 AICore 忙碌状态、Hook Runner 钩子数、最近 200 条工具调用、最近 150 条脑日志、最近 50 个计划步骤。底部操作栏：主动互动 / 清空日志 / 导出日志。新建 `brain/BrainLog.java`（500 条 ring buffer），AICore 关键节点打日志，PlanExecutor 步骤打日志，PetService 初始化时打日志。HookRunner 加 `preCount/postCount/errCount()` 方法。侧栏高级分组加「智能体控制台」入口。借鉴 Operit AI agent log console 设计。
 
 ### 智能体升级
 - **工具市场**（核心）：内置工具从 5 个扩展到 20+（新增 15 个），覆盖表达/记忆/系统/实用/信息 5 大类。ToolMarketActivity 可视化开关、查看今日调用统计。借鉴 Operit AI 工具市场设计。

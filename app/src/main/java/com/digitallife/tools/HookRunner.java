@@ -95,4 +95,9 @@ public class HookRunner {
             }
         }
     }
+
+    // v1.24.0：控制台展示用
+    public int preCount() { return preHooks.size(); }
+    public int postCount() { return postHooks.size(); }
+    public int errCount() { return errorHooks.size(); }
 }
