@@ -347,6 +347,7 @@ public class AICore {
         refreshMode = true;
         final int gen = ++requestGen;
         if (out != null) out.onThinking(true);
+        com.digitallife.brain.BrainLog.getInstance().log("refresh", "30s 自主刷新：调整行为风格");
 
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         msgs.add(new LLMClient.ChatMessage("system", buildRefreshPrompt()));
@@ -436,6 +437,8 @@ public class AICore {
         refreshMode = false;
         final int gen = ++requestGen;
         if (out != null) out.onThinking(true);
+        com.digitallife.brain.BrainLog.getInstance().log("thinking",
+                proactiveHint != null ? "主动：" + proactiveHint : "响应用户…");
 
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         for (MemoryStore.Message m : memory.getContext()) {

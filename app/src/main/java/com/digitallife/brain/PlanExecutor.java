@@ -105,6 +105,8 @@ public class PlanExecutor {
                              PlanListener listener, boolean allOk) {
         if (idx >= plan.length()) {
             running.set(false);
+            com.digitallife.brain.BrainLog.getInstance().log("plan",
+                    "计划完成 allOk=" + allOk);
             if (listener != null) listener.onPlanEnd(allOk);
             return;
         }
@@ -116,6 +118,8 @@ public class PlanExecutor {
         String tool = step.optString("tool", "");
         JSONObject args = step.optJSONObject("args");
         if (args == null) args = new JSONObject();
+        com.digitallife.brain.BrainLog.getInstance().log("plan",
+                "步骤 " + (idx + 1) + "/" + plan.length() + ": " + tool);
         if (listener != null) listener.onStepStart(idx, tool, args);
         if (tool.isEmpty()) {
             Step s = new Step(idx, tool, args, null, "missing tool name", 0);
