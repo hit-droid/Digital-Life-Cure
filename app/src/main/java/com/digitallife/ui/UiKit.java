@@ -147,9 +147,6 @@ public final class UiKit {
                         v.animate().scaleX(1f).scaleY(1f).setDuration(180).start())
                 .start();
     }
-            return false;
-        });
-    }
 
     /** 给可点击容器套品牌色涟漪反馈（content 背景 + 圆角 mask） */
     public static void ripple(Context c, View v, Drawable content, float radiusDp) {
