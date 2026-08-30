@@ -714,13 +714,17 @@ public class AICore {
     }
 
     private String buildFactsSection() {
+        // v1.24.0：使用 MemoryRetriever 混合检索
+        com.digitallife.memory.MemoryRetriever retriever =
+                new com.digitallife.memory.MemoryRetriever(settings.getContext());
+        java.util.List<com.digitallife.memory.MemoryEntry> entries = retriever.retrieve("");
+        if (entries.isEmpty()) return "- 暂时还没有稳定的长期事实\n";
         StringBuilder sb = new StringBuilder();
-        List<String> profile = memory.getProfile();
-        if (profile.isEmpty()) {
-            sb.append("- 暂时还没有稳定的长期事实\n");
-            return sb.toString();
+        for (com.digitallife.memory.MemoryEntry e : entries) {
+            sb.append("- [").append(e.category).append("] ").append(e.content);
+            if (e.weight >= 0.7) sb.append(" ⭐");
+            sb.append("\n");
         }
-        for (String p : profile) sb.append("- ").append(p).append("\n");
         return sb.toString();
     }
 
