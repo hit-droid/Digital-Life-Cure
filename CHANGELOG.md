@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.23.1 (2026-08-30)
+
+### 改进
+- **深度还原 Operit AI 视觉质感**：逐像素对照 Operit AI `CompactNavigationDrawerItem` / `NavigationDrawerAppearance` / `CustomScaffold` 源码，消除"硬编码纯色"廉价感。
+- 顶栏：纯色 `#6D5BBA` → 紫→深紫渐变 drawable（`bg_operit_topbar.xml`），90° 角度。
+- 侧栏：纯色 `#2A2A2A` → liquidGlass 背景（`bg_operit_drawer.xml`：半透明 `#B32A2A2A` + 高光 `#0DFFFFFF`，左上左下 16dp 圆角，8dp elevation）。
+- 侧栏分组：加 accent 色 divider（`operit_divider`，alpha 0.42），header 与 primary/advanced 之间各一条。
+- 菜单项：纯背景色切换 → `operit_drawer_item_background` selector + `operit_drawer_item_ripple` RippleDrawable（水波纹 touch feedback）+ `operit_drawer_item_elevation` StateListAnimator（默认 4dp / 选中 6dp shadow）。
+- 选中态：纯紫底 → `primaryContainer (#2A2545)` 半透明叠加（`#402A2545`，alpha 25%）+ accent 前景色（图标/标题/chevron 全紫），更接近 Material You `selectedContainerColor`。
+- 图标尺寸 22dp → 20dp（Operit `Modifier.size(20.dp)`），垂直间距 12dp → 4dp（Material compact 8dp / 2 = 4dp）。
+- 侧栏开合动画：线性 220ms/180ms → `DecelerateInterpolator(1.8f)` 缓出曲线，打开 280ms / 关闭 220ms；主内容区加 20dp 视差平移（侧栏滑入时内容右移，模拟 Operit ModalNavigationDrawer 主内容偏移）。
+- statusBar：深色顶栏适配浅色图标（API 30+ 清除 `APPEARANCE_LIGHT_STATUS_BARS`；低版本走 `SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN`）。
+- colors.xml：新增 `operit_primary_container`（`#2A2545`，深浅模式同色），对齐 Material You `primaryContainer` 角色。
+
 ## v1.23.0 (2026-08-29)
 
 ### 重构
