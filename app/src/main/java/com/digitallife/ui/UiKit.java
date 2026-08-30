@@ -129,10 +129,24 @@ public final class UiKit {
                     view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90).start();
                     break;
                 case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
+                case MotionEvent.CANCEL:
                     view.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
                     break;
             }
+            return false;
+        });
+    }
+
+    /**
+     * 触发一次"点击闪光"反馈（短促缩放回弹）。
+     * 必须在 View.setOnClickListener 之后调用，作为一次性动画。
+     */
+    public static void flash(View v) {
+        v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70)
+                .withEndAction(() ->
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(180).start())
+                .start();
+    }
             return false;
         });
     }

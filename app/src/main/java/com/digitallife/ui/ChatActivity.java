@@ -18,6 +18,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -229,6 +230,45 @@ public class ChatActivity extends Activity {
         root.addView(inputDivider, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
 
+        // ===== 快捷操作 chips（输入栏上方） =====
+        HorizontalScrollView chipScroll = new HorizontalScrollView(this);
+        chipScroll.setHorizontalScrollBarEnabled(false);
+        chipScroll.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        chipScroll.setPadding(dp(10), dp(6), dp(10), dp(6));
+        LinearLayout chipRow = new LinearLayout(this);
+        chipRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipRow.setGravity(Gravity.CENTER_VERTICAL);
+        String[] chipLabels = {"✦ 语音", "✦ 拍照", "✦ 翻译", "✦ 总结", "✦ 联网"};
+        String[] chipInserts = {
+                "请用语音回复我：",
+                "请看图回答：",
+                "请帮我翻译成中文：",
+                "请帮我总结要点：",
+                "请联网搜索最新信息："
+        };
+        for (int i = 0; i < chipLabels.length; i++) {
+            final String insert = chipInserts[i];
+            TextView chip = new TextView(this);
+            chip.setText(chipLabels[i]);
+            chip.setTextSize(12f);
+            chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            chip.setBackgroundResource(R.drawable.bg_chip_outline);
+            chip.setPadding(dp(12), dp(6), dp(12), dp(6));
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            clp.rightMargin = dp(8);
+            chip.setLayoutParams(clp);
+            chip.setOnClickListener(v -> {
+                UiKit.flash(v);
+                etInput.setText(insert);
+                etInput.setSelection(insert.length());
+            });
+            chipRow.addView(chip);
+        }
+        chipScroll.addView(chipRow);
+        root.addView(chipScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         // ===== 底部输入栏（玻璃感容器） =====
         LinearLayout inputBar = new LinearLayout(this);
         inputBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -294,6 +334,21 @@ public class ChatActivity extends Activity {
         etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
                 has ? R.drawable.bg_input_focused : R.drawable.bg_input));
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
+
+        // 语音按钮（占位：v1.25.0 短按弹提示，v1.26.0 起接入 SpeechRecognizer）
+        ImageButton btnVoice = new ImageButton(this);
+        btnVoice.setImageResource(R.drawable.ic_mic);
+        btnVoice.setColorFilter(getColorCompat(R.color.operit_text_secondary));
+        btnVoice.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnVoice.setScaleType(ImageView.ScaleType.CENTER);
+        btnVoice.setPadding(dp(10), dp(10), dp(10), dp(10));
+        UiKit.pressScale(btnVoice);
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(dp(40), dp(40));
+        vlp.leftMargin = dp(6);
+        btnVoice.setOnClickListener(v ->
+                Toast.makeText(this, "语音输入功能正在准备中（v1.26.0 上线）",
+                        Toast.LENGTH_SHORT).show());
+        inputBar.addView(btnVoice, vlp);
 
         ImageButton btnSendView = new ImageButton(this);
         btnSend = btnSendView;
