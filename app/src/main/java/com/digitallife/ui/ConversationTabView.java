@@ -46,7 +46,7 @@ public class ConversationTabView extends LinearLayout {
         this.listener = listener;
         this.chatStore = new ChatStore(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.page_bg));
+        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
     }
 
@@ -61,7 +61,7 @@ public class ConversationTabView extends LinearLayout {
         TextView tip = new TextView(activity);
         tip.setText("会话列表");
         tip.setTextSize(13f);
-        tip.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         bar.addView(tip, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         Button btnNew = new Button(activity);
@@ -111,7 +111,7 @@ public class ConversationTabView extends LinearLayout {
             TextView empty = new TextView(activity);
             empty.setText("还没有对话\n点右上角「＋ 新建对话」开始\n或打开通讯录，与某个模型单独聊聊");
             empty.setTextSize(13f);
-            empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             empty.setGravity(Gravity.CENTER);
             empty.setLineSpacing(4f, 1f);
             empty.setPadding(0, UiKit.dp(activity, 14), 0, 0);
@@ -166,7 +166,7 @@ public class ConversationTabView extends LinearLayout {
         title.setText(s.title == null || s.title.isEmpty() ? "未命名对话" : s.title);
         title.setTextSize(15f);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(UiKit.color(activity, R.color.text_primary));
+        title.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         TextView tag = new TextView(activity);
         tag.setText(typeLabel(s.type));
@@ -186,7 +186,7 @@ public class ConversationTabView extends LinearLayout {
             lastTv.setText("开始一段对话吧…");
         }
         lastTv.setTextSize(13f);
-        lastTv.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        lastTv.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         lastTv.setMaxLines(1);
         info.addView(lastTv, UiKit.lp(activity, 2));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -199,7 +199,7 @@ public class ConversationTabView extends LinearLayout {
         TextView time = new TextView(activity);
         time.setText(formatTime(s.updatedAt));
         time.setTextSize(10f);
-        time.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        time.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         time.setGravity(Gravity.END);
         right.addView(time);
 

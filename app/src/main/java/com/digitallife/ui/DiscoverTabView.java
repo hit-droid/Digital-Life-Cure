@@ -40,7 +40,7 @@ public class DiscoverTabView extends LinearLayout {
         this.thoughtStore = new ThoughtStore(activity);
         this.memory = new MemoryStore(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.page_bg));
+        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
     }
 
@@ -73,7 +73,7 @@ public class DiscoverTabView extends LinearLayout {
             TextView tip = new TextView(activity);
             tip.setText("桌宠未运行，无法读取实时情绪。\n启动桌宠后，这里会显示她的心情、亲密度与精力值。");
             tip.setTextSize(13f);
-            tip.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             tip.setLineSpacing(3f, 1f);
             card.addView(tip, UiKit.lp(activity, 0));
             return;
@@ -91,7 +91,7 @@ public class DiscoverTabView extends LinearLayout {
             tvMeta.setText("亲密度 " + pct(emotion.getIntimacy())
                     + "  ·  精力 " + pct(emotion.getEnergy()));
             tvMeta.setTextSize(13f);
-            tvMeta.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            tvMeta.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             card.addView(tvMeta, UiKit.lp(activity, 4));
 
             for (String dim : EmotionState.DIMS) {
@@ -102,7 +102,7 @@ public class DiscoverTabView extends LinearLayout {
                 TextView label = new TextView(activity);
                 label.setText(dimName(dim));
                 label.setTextSize(13f);
-                label.setTextColor(UiKit.color(activity, R.color.text_secondary));
+                label.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
                 row.addView(label, new LinearLayout.LayoutParams(
                         UiKit.dp(activity, 56), ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -127,7 +127,7 @@ public class DiscoverTabView extends LinearLayout {
                 TextView pv = new TextView(activity);
                 pv.setText(pct(val));
                 pv.setTextSize(11f);
-                pv.setTextColor(UiKit.color(activity, R.color.text_secondary));
+                pv.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
                 row.addView(pv);
                 card.addView(row, UiKit.lp(activity, 3));
             }
@@ -141,7 +141,7 @@ public class DiscoverTabView extends LinearLayout {
             TextView tip = new TextView(activity);
             tip.setText("还没有内心独白。\n桌宠运行后，她会在安静时默默思考，把这些想法记录在这里。");
             tip.setTextSize(13f);
-            tip.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             tip.setLineSpacing(3f, 1f);
             card.addView(tip, UiKit.lp(activity, 0));
             return;
@@ -152,13 +152,13 @@ public class DiscoverTabView extends LinearLayout {
             TextView time = new TextView(activity);
             time.setText(new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(new Date(t.timestamp)));
             time.setTextSize(10f);
-            time.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            time.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             card.addView(time, UiKit.lp(activity, 6));
 
             TextView text = new TextView(activity);
             text.setText(t.text);
             text.setTextSize(14f);
-            text.setTextColor(UiKit.color(activity, R.color.text_primary));
+            text.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
             text.setLineSpacing(3f, 1f);
             text.setBackgroundResource(R.drawable.bg_bubble_ai);
             text.setPadding(UiKit.dp(activity, 10), UiKit.dp(activity, 8),
@@ -182,7 +182,7 @@ public class DiscoverTabView extends LinearLayout {
                 TextView st = new TextView(activity);
                 st.setText(s.date + "：" + s.summary);
                 st.setTextSize(13f);
-                st.setTextColor(UiKit.color(activity, R.color.text_secondary));
+                st.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
                 st.setLineSpacing(2f, 1f);
                 card.addView(st, UiKit.lp(activity, 2));
             }
@@ -200,7 +200,7 @@ public class DiscoverTabView extends LinearLayout {
                 TextView ft = new TextView(activity);
                 ft.setText("· " + f.content);
                 ft.setTextSize(13f);
-                ft.setTextColor(UiKit.color(activity, R.color.text_primary));
+                ft.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
                 ft.setLineSpacing(2f, 1f);
                 card.addView(ft, UiKit.lp(activity, 2));
             }
@@ -209,7 +209,7 @@ public class DiscoverTabView extends LinearLayout {
             TextView tip = new TextView(activity);
             tip.setText("还没有记忆。和她说的话会被记录成长期记忆，在这里沉淀。");
             tip.setTextSize(13f);
-            tip.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             tip.setLineSpacing(3f, 1f);
             card.addView(tip, UiKit.lp(activity, 0));
         }

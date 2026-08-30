@@ -147,7 +147,7 @@ public class SettingsTabView extends LinearLayout {
         btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
         TextView tvAccessibility = new TextView(activity);
         tvAccessibility.setTextSize(13f);
-        tvAccessibility.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvAccessibility.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvAccessibility.setText("授权后她也能感知你正在用什么 App、来了什么通知，从而主动搭话。不授权也不影响主功能。");
         cSwitch.addView(tvAccessibility, UiKit.lp(activity, 4));
 
@@ -160,7 +160,7 @@ public class SettingsTabView extends LinearLayout {
         tvModelListTmp.setTextSize(11f);
         tvModelListTmp.setLineSpacing(2f, 1f);
         tvModelListTmp.setPadding(0, UiKit.dp(activity, 2), 0, 0);
-        tvModelListTmp.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvModelListTmp.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvModelList = tvModelListTmp;
         cAppearance.addView(tvModelListTmp, UiKit.lp(activity, 0));
 
@@ -208,9 +208,9 @@ public class SettingsTabView extends LinearLayout {
         etChat = new EditText(activity);
         etChat.setHint("输入一句话和她聊天…");
         etChat.setSingleLine(true);
-        etChat.setHintTextColor(UiKit.color(activity, R.color.text_hint));
+        etChat.setHintTextColor(UiKit.color(activity, R.color.operit_text_hint));
         etChat.setTextSize(14f);
-        etChat.setTextColor(UiKit.color(activity, R.color.text_primary));
+        etChat.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
         etChat.setBackgroundResource(R.drawable.bg_input);
         etChat.setPadding(UiKit.dp(activity, 12), 0, UiKit.dp(activity, 12), 0);
         chatRow.addView(etChat, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
@@ -245,7 +245,7 @@ public class SettingsTabView extends LinearLayout {
         TextView devHint = new TextView(activity);
         devHint.setText("面向调试的高级功能，日常使用无需打开。");
         devHint.setTextSize(13f);
-        devHint.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        devHint.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         devHint.setLineSpacing(2f, 1f);
         cDev.addView(devHint, UiKit.lp(activity, 0));
 
@@ -255,7 +255,7 @@ public class SettingsTabView extends LinearLayout {
 
         tvCrashPath = new TextView(activity);
         tvCrashPath.setTextSize(10f);
-        tvCrashPath.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvCrashPath.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvCrashPath.setPadding(0, UiKit.dp(activity, 4), 0, 0);
         tvCrashPath.setText("崩溃日志：" + CrashHandler.getCrashPath());
         devBody.addView(tvCrashPath, UiKit.lp(activity, 0));
@@ -264,7 +264,7 @@ public class SettingsTabView extends LinearLayout {
         tvVoiceDiag.setTextSize(13f);
         tvVoiceDiag.setLineSpacing(2f, 1f);
         tvVoiceDiag.setPadding(0, UiKit.dp(activity, 6), 0, 0);
-        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvVoiceDiag.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvVoiceDiag.setText("桌宠运行中才能检测。如提示 TTS 失败，可点下方按钮到系统设置安装/启用语音合成数据。");
         devBody.addView(tvVoiceDiag, UiKit.lp(activity, 0));
         Button btnVoiceDiag = UiKit.button(activity, devBody, "检查语音引擎");
@@ -276,7 +276,7 @@ public class SettingsTabView extends LinearLayout {
         tvMemoryDebug.setTextSize(13f);
         tvMemoryDebug.setLineSpacing(2f, 1f);
         tvMemoryDebug.setPadding(0, UiKit.dp(activity, 6), 0, 0);
-        tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        tvMemoryDebug.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         tvMemoryDebug.setText("点击下方按钮查看当前记忆快照或执行本地自检。\n自检会写入一条测试 fact 和一条测试 summary。");
         devBody.addView(tvMemoryDebug, UiKit.lp(activity, 0));
         Button btnMemoryDebug = UiKit.button(activity, devBody, "查看记忆快照");

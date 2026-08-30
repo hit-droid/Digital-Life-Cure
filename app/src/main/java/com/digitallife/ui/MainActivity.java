@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.page_bg));
+        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
         // ===== 顶部标题栏（大标题 + 副标题） =====
         // v1.23.0: 仿 Operit AI 深色紫色顶栏 56dp
@@ -167,6 +167,7 @@ public class MainActivity extends Activity {
         tvSubtitle.setTextSize(11f);
         tvSubtitle.setTextColor(Color.WHITE);
         tvSubtitle.setAlpha(0.82f);
+        tvSubtitle.setLetterSpacing(0.04f);
         tvSubtitle.setIncludeFontPadding(false);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -179,10 +180,10 @@ public class MainActivity extends Activity {
 
         // ===== 内容 + 侧栏容器（FrameLayout 让侧栏浮在内容上） =====
         FrameLayout shell = new FrameLayout(this);
-        shell.setBackgroundColor(getColorCompat(R.color.page_bg));
+        shell.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
         content = new FrameLayout(this);
-        content.setBackgroundColor(getColorCompat(R.color.page_bg));
+        content.setBackgroundColor(getColorCompat(R.color.operit_bg));
         shell.addView(content, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 

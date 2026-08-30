@@ -42,7 +42,7 @@ public class PluginTabView extends LinearLayout {
         this.pluginManager = new PluginManager(activity);
         this.mcpManager = new McpServerManager(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.page_bg));
+        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
     }
 
@@ -73,7 +73,7 @@ public class PluginTabView extends LinearLayout {
         TextView hint = new TextView(activity);
         hint.setText("安装声明式插件 zip 包，自动注册工具到 AI 可用工具列表。插件包内需包含 plugin.json 描述工具集。");
         hint.setTextSize(13f);
-        hint.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        hint.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         hint.setLineSpacing(3f, 1f);
         card.addView(hint, UiKit.lp(activity, 0));
 
@@ -85,7 +85,7 @@ public class PluginTabView extends LinearLayout {
             TextView empty = new TextView(activity);
             empty.setText("尚未安装插件。");
             empty.setTextSize(13f);
-            empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             card.addView(empty, UiKit.lp(activity, 6));
         } else {
             for (PluginManager.InstalledPlugin p : list) {
@@ -95,7 +95,7 @@ public class PluginTabView extends LinearLayout {
                 TextView name = new TextView(activity);
                 name.setText(p.name + " v" + p.version + "（" + p.toolCount + " 工具）");
                 name.setTextSize(13f);
-                name.setTextColor(UiKit.color(activity, R.color.text_primary));
+                name.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
                 row.addView(name, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1));
                 Button btnUninstall = new Button(activity);
@@ -166,7 +166,7 @@ public class PluginTabView extends LinearLayout {
                 + "连接后其工具自动加入 AI 可用工具列表。\n"
                 + "Smithery 端点格式：https://server.smithery.ai/<namespace>/mcp");
         hint.setTextSize(13f);
-        hint.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        hint.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         hint.setLineSpacing(3f, 1f);
         card.addView(hint, UiKit.lp(activity, 0));
 
@@ -205,7 +205,7 @@ public class PluginTabView extends LinearLayout {
             TextView empty = new TextView(activity);
             empty.setText("尚未添加 MCP 服务器。");
             empty.setTextSize(13f);
-            empty.setTextColor(UiKit.color(activity, R.color.text_secondary));
+            empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             card.addView(empty, UiKit.lp(activity, 6));
         } else {
             for (McpServerManager.McpServerConfig c : servers) {
@@ -215,7 +215,7 @@ public class PluginTabView extends LinearLayout {
                 TextView name = new TextView(activity);
                 name.setText(c.name + "\n   " + c.endpoint);
                 name.setTextSize(13f);
-                name.setTextColor(UiKit.color(activity, R.color.text_primary));
+                name.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
                 name.setLineSpacing(2f, 1f);
                 row.addView(name, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -248,7 +248,7 @@ public class PluginTabView extends LinearLayout {
         TextView foot = new TextView(activity);
         foot.setText("当前远程工具：" + toolCount + " 个");
         foot.setTextSize(11f);
-        foot.setTextColor(UiKit.color(activity, R.color.text_secondary));
+        foot.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         card.addView(foot, UiKit.lp(activity, 6));
     }
 }
