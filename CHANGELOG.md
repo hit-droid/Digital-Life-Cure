@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.23.2 (2026-08-30)
+
+### 改进
+- **路由占位升级**：THEMES / DEVELOPER / ABOUT 三个高级路由从 toast 占位升级为独立 Activity（ThemesActivity / DeveloperActivity / AboutActivity），含 Operit 风格顶栏（渐变 + 返回按钮）+ 深色内容区骨架。
+- **侧栏 Header 精致化**：纯文字 Header → 左侧 48dp 圆形头像（ic_launcher）+ 右下角绿色在线状态点 + 右侧"数字生命"品牌名 + "v1.23.2 · 小汐 · 在线"状态行，对齐 Operit AI DrawerContent Header 结构。
+- **顶栏副标题 letterSpacing**：加 0.04em 字间距，提升精致感。
+- **OperitDrawerItem subtitle 启用**：每个菜单项显示简短描述（如"和她说说话，聊聊今天"），不再只有标题。
+- **全链路深色适配**：批量替换所有页面的 page_bg/text_primary/text_secondary/text_hint → operit_bg/operit_text_*，消除浅色残留。覆盖 ConversationTabView / ContactsTabView / DiscoverTabView / PluginTabView / ChatActivity / MemoryManageActivity / ApiProfileSection / SettingsTabView / PetOverlayView / CareModelsActivity / UiKit 工具类。
+
 ## v1.23.1 (2026-08-30)
 
 ### 改进

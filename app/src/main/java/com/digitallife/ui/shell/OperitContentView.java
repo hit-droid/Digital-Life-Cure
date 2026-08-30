@@ -5,12 +5,15 @@ import android.content.Intent;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.digitallife.ui.AboutActivity;
 import com.digitallife.ui.ConversationTabView;
 import com.digitallife.ui.ContactsTabView;
+import com.digitallife.ui.DeveloperActivity;
 import com.digitallife.ui.DiscoverTabView;
 import com.digitallife.ui.MemoryManageActivity;
 import com.digitallife.ui.PluginTabView;
 import com.digitallife.ui.SettingsTabView;
+import com.digitallife.ui.ThemesActivity;
 import com.digitallife.ui.UiKit;
 
 import java.util.EnumMap;
@@ -75,15 +78,13 @@ public class OperitContentView {
                 openActivity(ctx, com.digitallife.care.CareModelsActivity.class);
                 return null;
             case THEMES:
-                android.widget.Toast.makeText(ctx, "主题设置开发中，下版本支持",
-                        android.widget.Toast.LENGTH_SHORT).show();
+                openActivity(ctx, ThemesActivity.class);
                 return null;
             case DEVELOPER:
-                android.widget.Toast.makeText(ctx, "开发者选项开发中，下版本支持",
-                        android.widget.Toast.LENGTH_SHORT).show();
+                openActivity(ctx, DeveloperActivity.class);
                 return null;
             case ABOUT:
-                UiKit.aboutDialog(host.getActivity());
+                openActivity(ctx, AboutActivity.class);
                 return null;
             default:
                 return null;

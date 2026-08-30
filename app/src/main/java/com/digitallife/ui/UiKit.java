@@ -78,10 +78,10 @@ public final class UiKit {
     public static EditText input(Context c, LinearLayout root, String hint, String value) {
         EditText et = new EditText(c);
         et.setHint(hint);
-        et.setHintTextColor(color(c, R.color.text_hint));
+        et.setHintTextColor(color(c, R.color.operit_text_hint));
         if (value != null) et.setText(value);
         et.setTextSize(14f);
-        et.setTextColor(color(c, R.color.text_primary));
+        et.setTextColor(color(c, R.color.operit_text_primary));
         et.setBackgroundResource(R.drawable.bg_input);
         et.setPadding(dp(c, 12), 0, dp(c, 12), 0);
         root.addView(et, lp(c, 8));
@@ -155,7 +155,7 @@ public final class UiKit {
         TextView t = new TextView(c);
         t.setText(label);
         t.setTextSize(14f);
-        t.setTextColor(color(c, R.color.text_primary));
+        t.setTextColor(color(c, R.color.operit_text_primary));
         row.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Switch sw = new Switch(c);
         sw.setChecked(checked);
@@ -211,7 +211,7 @@ public final class UiKit {
         TextView arrow = new TextView(c);
         arrow.setText(defaultExpanded ? "▾" : "▸");
         arrow.setTextSize(14f);
-        arrow.setTextColor(color(c, R.color.text_secondary));
+        arrow.setTextColor(color(c, R.color.operit_text_secondary));
         header.addView(arrow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         group.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 

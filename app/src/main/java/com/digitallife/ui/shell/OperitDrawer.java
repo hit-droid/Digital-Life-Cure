@@ -6,6 +6,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -72,25 +73,54 @@ public class OperitDrawer extends LinearLayout {
 
     private View buildHeader() {
         LinearLayout header = new LinearLayout(getContext());
-        header.setOrientation(VERTICAL);
+        header.setOrientation(HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(UiKit.dp(getContext(), 20), UiKit.dp(getContext(), 56),
-                UiKit.dp(getContext(), 20), UiKit.dp(getContext(), 16));
+                UiKit.dp(getContext(), 20), UiKit.dp(getContext(), 20));
+
+        FrameLayout avatarWrap = new FrameLayout(getContext());
+        LinearLayout.LayoutParams avatarLp = new LayoutParams(UiKit.dp(getContext(), 48), UiKit.dp(getContext(), 48));
+        header.addView(avatarWrap, avatarLp);
+
+        ImageView avatar = new ImageView(getContext());
+        avatar.setImageResource(R.mipmap.ic_launcher);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        FrameLayout.LayoutParams avatarFp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        avatar.setLayoutParams(avatarFp);
+        avatarWrap.addView(avatar);
+
+        View onlineDot = new View(getContext());
+        onlineDot.setBackgroundColor(0xFF4ADE80);
+        FrameLayout.LayoutParams dotFp = new FrameLayout.LayoutParams(UiKit.dp(getContext(), 12), UiKit.dp(getContext(), 12));
+        dotFp.gravity = Gravity.BOTTOM | Gravity.END;
+        dotFp.leftMargin = UiKit.dp(getContext(), 36);
+        dotFp.topMargin = UiKit.dp(getContext(), 36);
+        onlineDot.setLayoutParams(dotFp);
+        avatarWrap.addView(onlineDot);
+
+        LinearLayout textCol = new LinearLayout(getContext());
+        textCol.setOrientation(VERTICAL);
+        LinearLayout.LayoutParams textLp = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+        textLp.leftMargin = UiKit.dp(getContext(), 14);
+        textCol.setLayoutParams(textLp);
 
         TextView brand = new TextView(getContext());
         brand.setText("数字生命");
-        brand.setTextSize(20f);
+        brand.setTextSize(18f);
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         brand.setTextColor(UiKit.color(getContext(), R.color.operit_text_primary));
-        header.addView(brand);
+        textCol.addView(brand);
 
         TextView version = new TextView(getContext());
-        version.setText("v1.23.0 · 小汐");
+        version.setText("v1.23.1 · 小汐 · 在线");
         version.setTextSize(11f);
         version.setTextColor(UiKit.color(getContext(), R.color.operit_text_hint));
         LinearLayout.LayoutParams vlp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
         vlp.topMargin = UiKit.dp(getContext(), 4);
-        header.addView(version, vlp);
+        textCol.addView(version, vlp);
 
+        header.addView(textCol);
         return header;
     }
 

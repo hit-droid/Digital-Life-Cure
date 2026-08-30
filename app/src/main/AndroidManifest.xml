@@ -79,6 +79,30 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 主题设置 -->
+        <activity
+            android:name="com.digitallife.ui.ThemesActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
+        <!-- 开发者选项 -->
+        <activity
+            android:name="com.digitallife.ui.DeveloperActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
+        <!-- 关于 -->
+        <activity
+            android:name="com.digitallife.ui.AboutActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
         <activity
             android:name="com.digitallife.ui.ChatActivity"
