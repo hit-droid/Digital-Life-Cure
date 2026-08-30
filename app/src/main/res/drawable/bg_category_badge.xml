@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.24.0：工具市场分类徽章背景（紫色 pill） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="135"
+        android:startColor="#6366F1"
+        android:endColor="#8B5CF6" />
+    <corners android:radius="12dp" />
+</shape>

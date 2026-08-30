@@ -120,7 +120,8 @@ public class PersonaActivity extends Activity {
     private View buildPersonaRow(Persona p, boolean isActive) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card);
+        card.setBackgroundResource(isActive
+                ? R.drawable.bg_card_active : R.drawable.bg_card);
         card.setPadding(UiKit.dp(this, 14), UiKit.dp(this, 12),
                 UiKit.dp(this, 14), UiKit.dp(this, 12));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
