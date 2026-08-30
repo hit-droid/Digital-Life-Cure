@@ -3,6 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -46,6 +48,7 @@ jobs:
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Create GitHub Release and upload APK
+        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

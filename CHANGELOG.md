@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.23.0 (2026-08-29)
+
+### 重构
+- **全量重构仿 Operit AI 视觉骨架**：将原生 Bottom-Tab 导航换成 Operit 风格的深色紫色 Material 化壳。
+- **Operit 侧栏 (ModalNavigationDrawer)**：顶栏左侧汉堡按钮 (☰) 唤出 280dp 宽抽屉，分"数字生命"和"高级"两组共 10 个菜单项（对话 / 模型小房间 / 记忆与发现 / 插件 / 设置 / 记忆管理 / 护理大脑 / 主题 / 开发者 / 关于），选中态紫底高亮 + 紫色 accent 图标。点击遮罩或菜单项关闭侧栏。
+- **Operit 路由控制器 (NavController)**：新增 `com.digitallife.ui.shell` 包 (`OperitRoute` / `OperitContentView` / `OperitNavController` / `OperitDrawer` / `OperitDrawerItem`)，5 个主壳 Tab 通过路由工厂 `obtain` 缓存 View 复用（切走再切回保留滚动 / 输入状态），高级路由走 Intent 跳子 Activity。移除 70+ 行 Bottom-Tab 切换冗余代码，初次启动读 `last_route` 恢复上次路由。
+- **设置页 Operit 化**：根背景换 `#1A1A1A`，顶部加紫色 Operit 风格角色卡 (OverviewCard) 展示"数字生命·小汐" + StatChip 行 (版本/配置状态)，4 个分组 (启动与权限/桌宠与功能/互动/开发者与调试) 改用 `operit_surface` 卡片背景。
+- **Operit 工具组件 (UiKit)**：新增 `sectionTitle` / `listTile` / `switchTile` / `roleCard` / `statChip` 5 个深色紫色风格工具，供后续子页 (主题/开发者) 复用。
+- **Operit 主题色 (colors.xml)**：新增 12 个 `brand_operit` / `operit_bg` / `operit_surface` / `operit_surface_variant` / `operit_text_*` / `operit_accent` 颜色，深浅模式同色，定位为强制深色 App 主题基础。
+
+### 新增
+- **长按桌面图标快捷菜单**：Android 7.1+ ShortcutManager 动态注册 2 个动态快捷方式：
+  - 「打开悬浮窗」一键启动 PetService 显示桌宠悬浮窗（无需打开 App）
+  - 「停止桌宠」一键关闭悬浮窗
+  点桌面图标仍走 MainActivity，长按弹系统菜单，两条入口独立。
+
 ## v1.22.0 (2026-08-29)
 
 ### 改进
