@@ -85,7 +85,11 @@ public class PlanExecutor {
         }
     }
 
-    /** 顺序执行计划中的每一步工具。 */
+    /**
+     * 顺序执行计划中的每一步工具。
+     * v1.26.0：识别连续标了 "parallel":true 的相邻步骤，改为并行执行；
+     * 并行组的边界由不含 parallel 标记的步骤分隔。
+     */
     public void executePlan(JSONArray plan, Tools tools, PlanListener listener) {
         if (plan == null || plan.length() == 0) {
             if (listener != null) listener.onPlanEnd(true);
@@ -98,21 +102,69 @@ public class PlanExecutor {
         }
         int total = plan.length();
         if (listener != null) listener.onPlanStart(total);
-        executeStep(plan, 0, tools, listener, true);
+        executeGroup(plan, 0, tools, listener, true);
     }
 
-    private void executeStep(JSONArray plan, int idx, Tools tools,
-                             PlanListener listener, boolean allOk) {
-        if (idx >= plan.length()) {
+    /**
+     * 从 startIdx 开始扫描：连续 parallel=true 的步骤作为一组并行执行，
+     * 第一个 parallel=false（或缺省）作为单步串行执行后再递归。
+     * allOk 标志保留以便将来扩展，当前实现下步骤错误不影响后续步骤继续执行。
+     */
+    private void executeGroup(JSONArray plan, int startIdx, Tools tools,
+                              PlanListener listener, boolean allOk) {
+        if (startIdx >= plan.length()) {
             running.set(false);
             com.digitallife.brain.BrainLog.getInstance().log("plan",
                     "计划完成 allOk=" + allOk);
             if (listener != null) listener.onPlanEnd(allOk);
             return;
         }
+        // 扫描连续 parallel=true 的步骤
+        int endIdx = startIdx;
+        while (endIdx < plan.length()
+                && plan.optJSONObject(endIdx) != null
+                && plan.optJSONObject(endIdx).optBoolean("parallel", false)) {
+            endIdx++;
+        }
+        if (endIdx == startIdx) {
+            // 单步串行
+            executeStep(plan, startIdx, tools, listener, () ->
+                    executeGroup(plan, startIdx + 1, tools, listener, allOk));
+        } else {
+            // [startIdx, endIdx) 并行
+            executeParallelGroup(plan, startIdx, endIdx, tools, listener, () ->
+                    executeGroup(plan, endIdx, tools, listener, allOk));
+        }
+    }
+
+    /**
+     * 并行执行 plan[startIdx..endIdx) 区间内的步骤。
+     * 所有 step 都执行完后（不论成败）回调 onGroupDone。
+     */
+    private void executeParallelGroup(JSONArray plan, int startIdx, int endIdx,
+                                      Tools tools, PlanListener listener,
+                                      Runnable onGroupDone) {
+        final int groupSize = endIdx - startIdx;
+        final java.util.concurrent.atomic.AtomicInteger remaining =
+                new java.util.concurrent.atomic.AtomicInteger(groupSize);
+        for (int i = startIdx; i < endIdx; i++) {
+            final int idx = i;
+            executeStep(plan, idx, tools, listener, () -> {
+                if (remaining.decrementAndGet() == 0) {
+                    onGroupDone.run();
+                }
+            });
+        }
+    }
+
+    /**
+     * 执行 plan 中第 idx 步；执行完毕后通过 next 回调（不再自递归）。
+     */
+    private void executeStep(JSONArray plan, int idx, Tools tools,
+                             PlanListener listener, Runnable next) {
         JSONObject step = plan.optJSONObject(idx);
         if (step == null) {
-            executeStep(plan, idx + 1, tools, listener, allOk);
+            next.run();
             return;
         }
         String tool = step.optString("tool", "");
@@ -125,7 +177,7 @@ public class PlanExecutor {
             Step s = new Step(idx, tool, args, null, "missing tool name", 0);
             history.add(s);
             if (listener != null) listener.onStepEnd(idx, tool, null, "missing tool name");
-            executeStep(plan, idx + 1, tools, listener, false);
+            next.run();
             return;
         }
         long t0 = System.currentTimeMillis();
@@ -139,8 +191,7 @@ public class PlanExecutor {
                 if (listener != null) {
                     listener.onStepEnd(idx, toolName, resultText, error);
                 }
-                // 错误也继续，LLM 会基于错误信息调整
-                executeStep(plan, idx + 1, tools, listener, allOk && error == null);
+                next.run();
             }
         });
     }

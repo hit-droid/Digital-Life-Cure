@@ -222,9 +222,9 @@ public class LLMClient {
             }
 
                 StringBuilder full = new StringBuilder();
+                // 跟踪最后一个 toolCall（与 LLMClient 原有行为一致：每次流式请求只携带一个 tool_call 上下文）
                 String toolName = null;
                 StringBuilder toolArgsBuf = new StringBuilder();
-                JSONObject toolArgs = null;
                 String toolCallId = null;
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
                 String line;
@@ -251,17 +251,17 @@ public class LLMClient {
                             JSONArray tcs = delta.getJSONArray("tool_calls");
                             for (int i = 0; i < tcs.length(); i++) {
                                 JSONObject tc = tcs.getJSONObject(i);
-                                // 捕获 tool_call_id
-                                if (tc.has("id") && !tc.isNull("id")) {
+                                int idx = tc.optInt("index", i);
+                                if (idx == 0 && tc.has("id") && !tc.isNull("id")) {
                                     toolCallId = tc.optString("id");
                                 }
                                 JSONObject fn = tc.optJSONObject("function");
                                 if (fn == null) continue;
-                                if (fn.has("name") && !fn.isNull("name")) {
+                                if (idx == 0 && fn.has("name") && !fn.isNull("name")) {
                                     toolName = fn.optString("name");
                                     toolArgsBuf = new StringBuilder();
                                 }
-                                if (fn.has("arguments") && !fn.isNull("arguments")) {
+                                if (idx == 0 && fn.has("arguments") && !fn.isNull("arguments")) {
                                     toolArgsBuf.append(fn.optString("arguments"));
                                 }
                             }
@@ -273,6 +273,7 @@ public class LLMClient {
                 // 收尾：无论是否发生工具调用，都回调 onDone（含空内容），
                 // 否则 AICore 的 busy 状态可能因缺少收尾回调而永久卡死
                 if (toolName != null) {
+                    JSONObject toolArgs;
                     try {
                         toolArgs = new JSONObject(toolArgsBuf.toString().isEmpty() ? "{}" : toolArgsBuf.toString());
                     } catch (Exception ignored) {

@@ -703,6 +703,8 @@ public class AICore {
         sb.append("当用户请求需要多步操作（例如「查天气后发提醒」「先查时间再播报」），");
         sb.append("请在 JSON 中加一个 \"plan\" 字段，格式为 [{\"tool\":\"get_time\",\"args\":{}},{\"tool\":\"set_reminder\",\"args\":{...}}]，");
         sb.append("系统会自动顺序执行并把每步结果反馈给你。\n");
+        sb.append("v1.26.0：如果相邻多步之间没有依赖关系（例如同时查天气和查时间），");
+        sb.append("可在每步加 \"parallel\": true；系统会把连续 parallel 步骤并行执行，节省等待时间。\n");
         return sb.toString();
     }
 
