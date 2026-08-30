@@ -1,7 +1,9 @@
 package com.digitallife.ui.shell;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -9,10 +11,6 @@ import android.widget.TextView;
 import com.digitallife.R;
 import com.digitallife.ui.UiKit;
 
-/**
- * Operit 侧栏菜单项（v1.23.0 仿 Operit AI CompactNavigationDrawerItem）。
- * 一行：图标 + 标题 + 副标题，右侧 chevron，选中态高亮紫底。
- */
 public class OperitDrawerItem extends LinearLayout {
 
     public interface OnClickListener {
@@ -23,7 +21,6 @@ public class OperitDrawerItem extends LinearLayout {
     private final TextView title;
     private final TextView subtitle;
     private final TextView chevron;
-    private final View selectedBar;
 
     private OperitRoute route;
     private boolean selected = false;
@@ -34,11 +31,11 @@ public class OperitDrawerItem extends LinearLayout {
         setOrientation(HORIZONTAL);
         setGravity(android.view.Gravity.CENTER_VERTICAL);
         int padH = UiKit.dp(ctx, 16);
-        int padV = UiKit.dp(ctx, 12);
+        int padV = UiKit.dp(ctx, 4);
         setPadding(padH, padV, padH, padV);
 
         icon = new ImageView(ctx);
-        icon.setLayoutParams(new LayoutParams(UiKit.dp(ctx, 22), UiKit.dp(ctx, 22)));
+        icon.setLayoutParams(new LayoutParams(UiKit.dp(ctx, 20), UiKit.dp(ctx, 20)));
         addView(icon);
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -71,11 +68,13 @@ public class OperitDrawerItem extends LinearLayout {
         chevron.setIncludeFontPadding(false);
         addView(chevron);
 
-        selectedBar = new View(ctx);
-        selectedBar.setBackgroundColor(UiKit.color(ctx, R.color.brand_operit_light));
-        selectedBar.setVisibility(GONE);
-        selectedBar.setLayoutParams(new LayoutParams(UiKit.dp(ctx, 3), LayoutParams.MATCH_PARENT));
-
+        setBackgroundResource(R.drawable.operit_drawer_item_background);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            Drawable ripple = getResources().getDrawable(R.drawable.operit_drawer_item_ripple, getContext().getTheme());
+            setForeground(ripple);
+        }
+        setStateListAnimator(android.animation.AnimatorInflater.loadStateListAnimator(
+                getContext(), R.animator.operit_drawer_item_elevation));
         setClickable(true);
         setFocusable(true);
         applyStyle();
@@ -95,6 +94,7 @@ public class OperitDrawerItem extends LinearLayout {
     }
 
     public void setSelected(boolean sel) {
+        if (this.selected == sel) return;
         this.selected = sel;
         applyStyle();
     }
@@ -103,12 +103,10 @@ public class OperitDrawerItem extends LinearLayout {
 
     private void applyStyle() {
         if (selected) {
-            setBackgroundColor(UiKit.color(getContext(), R.color.brand_operit_dark));
-            title.setTextColor(UiKit.color(getContext(), R.color.operit_text_primary));
+            title.setTextColor(UiKit.color(getContext(), R.color.operit_accent));
             icon.setColorFilter(UiKit.color(getContext(), R.color.operit_accent));
             chevron.setTextColor(UiKit.color(getContext(), R.color.operit_accent));
         } else {
-            setBackgroundColor(0);
             title.setTextColor(UiKit.color(getContext(), R.color.operit_text_primary));
             icon.setColorFilter(UiKit.color(getContext(), R.color.operit_text_secondary));
             chevron.setTextColor(UiKit.color(getContext(), R.color.operit_text_hint));

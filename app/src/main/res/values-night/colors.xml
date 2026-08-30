@@ -54,4 +54,5 @@
     <color name="operit_text_hint">#7A7A82</color>
     <color name="operit_divider">#3A3A3A</color>
     <color name="operit_accent">#C4B5FD</color>
+    <color name="operit_primary_container">#2A2545</color>
 </resources>
