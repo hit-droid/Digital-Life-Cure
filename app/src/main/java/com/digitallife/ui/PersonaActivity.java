@@ -74,9 +74,9 @@ public class PersonaActivity extends Activity {
         Button btnNew = new Button(this);
         btnNew.setText("＋ 新建");
         btnNew.setTextSize(13f);
-        btnNew.setTextColor(Color.WHITE);
+        btnNew.setTextColor(UiKit.color(this, R.color.brand_end));
         btnNew.setAllCaps(false);
-        btnNew.setBackgroundResource(R.drawable.bg_btn_primary);
+        btnNew.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnNew.setPadding(UiKit.dp(this, 10), 0,
                 UiKit.dp(this, 10), 0);
         btnNew.setOnClickListener(v -> showEditDialog(null));
@@ -144,8 +144,8 @@ public class PersonaActivity extends Activity {
             TextView badge = new TextView(this);
             badge.setText("当前");
             badge.setTextSize(11f);
-            badge.setTextColor(Color.WHITE);
-            badge.setBackgroundResource(R.drawable.bg_btn_primary);
+            badge.setTextColor(UiKit.color(this, R.color.operit_accent));
+            badge.setBackgroundResource(R.drawable.bg_pill_accent);
             badge.setPadding(UiKit.dp(this, 8), UiKit.dp(this, 2),
                     UiKit.dp(this, 8), UiKit.dp(this, 2));
             headRow.addView(badge);

@@ -42,6 +42,8 @@ public class MemoryManageActivity extends Activity {
     private volatile boolean destroyed = false;
     private int currentTab = 0;
     private static final int REQ_IMPORT = 1001;
+    private Button segBtnFacts;
+    private Button segBtnSummary;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +62,7 @@ public class MemoryManageActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundColor(getColorCompat(R.color.brand));
+        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
         topBar.setPadding(dp(6), dp(12), dp(6), dp(12));
 
         ImageButton btnBack = iconButton(R.drawable.ic_back);
@@ -104,11 +106,14 @@ public class MemoryManageActivity extends Activity {
 
         LinearLayout seg = new LinearLayout(this);
         seg.setOrientation(LinearLayout.HORIZONTAL);
-        Button btnFacts = makeSegButton("事实 / 画像 / 事件", 0);
-        Button btnSum = makeSegButton("每日摘要", 1);
-        seg.addView(btnFacts, segLp());
-        seg.addView(btnSum, segLp());
-        root.addView(seg);
+        seg.setBackgroundColor(getColorCompat(R.color.operit_surface));
+        seg.setPadding(dp(4), dp(4), dp(4), dp(4));
+        segBtnFacts = makeSegButton("事实 / 画像 / 事件", 0);
+        segBtnSummary = makeSegButton("每日摘要", 1);
+        seg.addView(segBtnFacts, segLp());
+        seg.addView(segBtnSummary, segLp());
+        root.addView(seg, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -142,7 +147,7 @@ public class MemoryManageActivity extends Activity {
         Button btnImport = new Button(this);
         btnImport.setText("导入备份");
         btnImport.setTextSize(14f);
-        btnImport.setTextColor(getColorCompat(R.color.brand));
+        btnImport.setTextColor(getColorCompat(R.color.operit_accent));
         btnImport.setAllCaps(false);
         btnImport.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnImport.setOnClickListener(v -> doImport());
@@ -151,6 +156,7 @@ public class MemoryManageActivity extends Activity {
         bottom.addView(btnImport, ilp);
         root.addView(bottom);
 
+        refreshSegState();
         setContentView(root);
     }
 
@@ -161,9 +167,25 @@ public class MemoryManageActivity extends Activity {
         b.setAllCaps(false);
         b.setOnClickListener(v -> {
             currentTab = tab;
+            refreshSegState();
             refreshList();
         });
         return b;
+    }
+
+    private void refreshSegState() {
+        if (segBtnFacts == null || segBtnSummary == null) return;
+        applySegStyle(segBtnFacts, currentTab == 0);
+        applySegStyle(segBtnSummary, currentTab == 1);
+    }
+
+    private void applySegStyle(Button b, boolean isActive) {
+        b.setBackgroundColor(getColorCompat(isActive
+                ? R.color.operit_primary_container
+                : android.R.color.transparent));
+        b.setTextColor(getColorCompat(isActive
+                ? R.color.operit_accent
+                : R.color.operit_text_secondary));
     }
 
     private LinearLayout.LayoutParams segLp() {

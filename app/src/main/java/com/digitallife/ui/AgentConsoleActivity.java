@@ -91,7 +91,7 @@ public class AgentConsoleActivity extends Activity {
         // Tab 栏
         LinearLayout tabBar = new LinearLayout(this);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setBackgroundColor(0xFFFFFFFF);
+        tabBar.setBackgroundColor(UiKit.color(this, R.color.operit_surface));
         tabBar.setPadding(dp(12), dp(12), dp(12), dp(12));
         String[] names = {"活动", "工具日志", "计划", "脑日志"};
         tabs = new TextView[names.length];
@@ -100,7 +100,7 @@ public class AgentConsoleActivity extends Activity {
             tab.setText(names[i]);
             tab.setTextSize(13);
             tab.setPadding(dp(14), dp(8), dp(14), dp(8));
-            tab.setTextColor(0xFF6B7280);
+            tab.setTextColor(UiKit.color(this, R.color.operit_text_secondary));
             tab.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -128,7 +128,7 @@ public class AgentConsoleActivity extends Activity {
             TextView tv = new TextView(this);
             tv.setTextSize(13);
             tv.setTypeface(Typeface.MONOSPACE);
-            tv.setTextColor(0xFF1F2937);
+            tv.setTextColor(UiKit.color(this, R.color.operit_text_primary));
             tv.setLineSpacing(dp(4), 1f);
             inner.addView(tv);
             sv.addView(inner);
@@ -141,7 +141,7 @@ public class AgentConsoleActivity extends Activity {
         // 底部操作栏
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setBackgroundColor(0xFFFFFFFF);
+        footer.setBackgroundColor(UiKit.color(this, R.color.operit_surface));
         footer.setPadding(dp(12), dp(12), dp(12), dp(12));
         Button btnProactive = mkBtn("主动互动");
         btnProactive.setOnClickListener(v -> {
@@ -187,8 +187,12 @@ public class AgentConsoleActivity extends Activity {
 
     private void showTab(int idx) {
         for (int i = 0; i < tabs.length; i++) {
-            tabs[i].setBackgroundColor(i == idx ? 0xFFEEF2FF : 0x00000000);
-            tabs[i].setTextColor(i == idx ? 0xFF4338CA : 0xFF6B7280);
+            tabs[i].setBackgroundColor(i == idx
+                    ? UiKit.color(this, R.color.operit_primary_container)
+                    : 0x00000000);
+            tabs[i].setTextColor(i == idx
+                    ? UiKit.color(this, R.color.operit_accent)
+                    : UiKit.color(this, R.color.operit_text_secondary));
             tabScrolls[i].setVisibility(i == idx ? View.VISIBLE : View.GONE);
         }
         refreshAll();
@@ -307,10 +311,10 @@ public class AgentConsoleActivity extends Activity {
         b.setText(text);
         b.setTextSize(13);
         b.setAllCaps(false);
-        b.setBackgroundColor(0xFFEEF2FF);
-        b.setTextColor(0xFF4338CA);
+        b.setBackgroundResource(R.drawable.bg_btn_secondary);
+        b.setTextColor(UiKit.color(this, R.color.operit_accent));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                0, dp(36), 1f);
         lp.setMargins(dp(4), 0, dp(4), 0);
         b.setLayoutParams(lp);
         return b;
