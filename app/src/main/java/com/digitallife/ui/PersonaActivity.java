@@ -198,6 +198,7 @@ public class PersonaActivity extends Activity {
 
         if (!isActive) {
             Button btnSwitch = new Button(this);
+            btnSwitch.setHapticFeedbackEnabled(true);   // 自动生成：haptic
             btnSwitch.setContentDescription("btnSwitch");   // 自动生成：a11y
             btnSwitch.setText("切换");
             btnSwitch.setTextSize(12f);
