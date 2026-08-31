@@ -396,6 +396,7 @@ public class ChatActivity extends Activity {
             btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
             btnAttach.setScaleType(ImageView.ScaleType.CENTER);
             btnAttach.setPadding(dp(10), dp(10), dp(10), dp(10));
+            btnAttach.setContentDescription("附加文件");   // v1.37.0 无障碍
             UiKit.pressScale(btnAttach);
             LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
             alp.rightMargin = dp(6);
@@ -470,6 +471,7 @@ public class ChatActivity extends Activity {
         btnSend.setScaleType(ImageView.ScaleType.CENTER);
         btnSend.setPadding(dp(10), dp(10), dp(10), dp(10));
         btnSend.setElevation(dp(2));
+        btnSend.setContentDescription("发送");   // v1.37.0 无障碍
         UiKit.pressScale(btnSend);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(dp(44), dp(44));
         slp.leftMargin = dp(8);
@@ -2094,6 +2096,8 @@ public class ChatActivity extends Activity {
         b.setBackgroundColor(Color.TRANSPARENT);
         b.setScaleType(ImageView.ScaleType.CENTER);
         b.setPadding(dp(8), dp(8), dp(8), dp(8));
+        // v1.37.0：无障碍描述（当前工厂仅用于返回键）
+        if (res == R.drawable.ic_back) b.setContentDescription("返回");
         return b;
     }
 
