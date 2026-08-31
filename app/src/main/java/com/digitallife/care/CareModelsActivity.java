@@ -328,6 +328,8 @@ public class CareModelsActivity extends Activity {
         b.setBackgroundColor(Color.TRANSPARENT);
         b.setScaleType(ImageView.ScaleType.CENTER);
         b.setPadding(dp(8), dp(8), dp(8), dp(8));
+        // v1.37.0：无障碍描述（当前工厂仅用于返回键）
+        if (res == R.drawable.ic_back) b.setContentDescription("返回");
         return b;
     }
 
