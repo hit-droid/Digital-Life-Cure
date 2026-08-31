@@ -189,3 +189,19 @@ Entries discovered by the Agent during task execution should follow this format:
   - v1.36.0 会话内搜索：顶栏已有 模型/清空/导出 三按钮（bg_btn_glass + dp(34) 高 + margins dp(4)），新增「搜索」沿用同样式；搜索扫 listContainer 里的 TextView 子视图统计命中，gotoHit 用 scroll.smoothScrollTo(0, child.getTop()) 定位 + UiKit.flash；高亮用 BackgroundColorSpan 0x446C5CE7；searchQuery 非空时再点按钮即跳下一处（循环）
   - 工具卡片体系（bg_tool / appendToolBubble / toggleToolCard / markLastToolResult）与对话气泡体系独立，用户要求 bg_tool 配色不可动，但行为逻辑（折叠/展开）可以优化
   - 今日累计发版 v1.28.0~v1.36.0 共 9 版，全部 CI 一次通过且均已发行 release
+
+[Project Knowledge Summary]
+- Date: 2026-08-31
+- Context: Discovered by Agent while performing 搭建 9/7 前不间断自治流水线
+- Category: Operations & Deployment
+- Instructions:
+  - 自治体系三件套（全部位于 /tmp/opencode/auto，仓库外，不入库）：
+    - autoloop.sh：消费队列任务 → git apply --3way 应用补丁 → 提交（meta 第1行标题+其余正文，自动追加 Co-authored-by）→ 自动 bump 次版本号与 versionCode → 推送 → 按 head_sha 轮询 CI → 校验 release assets → 成功归档 state/done，失败自动 reset --hard HEAD~2 并 force push 回滚后继续
+    - genpatch.py：自动任务生成器，扫描 app/src/main/java 找 ImageButton/Button 声明，按生成器在其后插入一行安全调用（a11y=setContentDescription / allcaps=setAllCaps(false) / haptic=setHapticFeedbackEnabled(true)），改完 git diff 产出补丁再 git checkout 还原工作区；已处理目标记在 state/processed.txt 避免重复，计数器 state/counter
+    - taskgen.sh：维持队列 ≥3 个待办，三个生成器轮转，全部耗尽休眠 10 分钟
+    - watchdog.sh：每 40 秒巡检，autoloop/taskgen 任一掉线即 setsid 重新拉起（已实测 pkill 后 40 秒内复活）
+  - 关键运维经验：nohup 启动的进程会随终端退出被杀，**必须用 setsid nohup ... < /dev/null & 才能真正常驻**；watchdog 自身也要 setsid 启动
+  - 三个脚本均以时间戳 1788739200（2026-09-07 00:00:00）为终止条件，到点自动退出
+  - 手工产出版本时用显式编号（如 042-error-retry.patch）避免与自动生成的编号冲突
+  - 补丁入队工作流：本地改代码 → `git diff > queue/NNN-name.patch` → 写同名 .meta（首行标题、其余正文）→ `git checkout -- .` 回滚 → 脚本接管后续全流程
+  - 流水线节奏约 3~4 分钟/版本（含 CI 等待），一天理论可发数百版，实际瓶颈是功能代码的人工作者
