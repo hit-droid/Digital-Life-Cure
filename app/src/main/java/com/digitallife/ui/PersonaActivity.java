@@ -234,6 +234,7 @@ public class PersonaActivity extends Activity {
 
         if (!p.isDefault) {
             Button btnDel = new Button(this);
+            btnDel.setHapticFeedbackEnabled(true);   // 自动生成：haptic
             btnDel.setContentDescription("btnDel");   // 自动生成：a11y
             btnDel.setText("删除");
             btnDel.setTextSize(12f);
