@@ -74,6 +74,7 @@ public class PersonaActivity extends Activity {
         topBar.addView(title, tlp);
 
         Button btnNew = new Button(this);
+        btnNew.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnNew.setContentDescription("新建");   // 自动生成：a11y
         btnNew.setText("＋ 新建");
         btnNew.setTextSize(13f);
