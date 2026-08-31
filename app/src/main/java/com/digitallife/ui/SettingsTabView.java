@@ -219,6 +219,7 @@ public class SettingsTabView extends LinearLayout {
         etChat.setPadding(UiKit.dp(activity, 12), 0, UiKit.dp(activity, 12), 0);
         chatRow.addView(etChat, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         Button btnChat = new Button(activity);
+        btnChat.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnChat.setContentDescription("btnChat");   // 自动生成：a11y
         btnChat.setText("发送");
         btnChat.setAllCaps(false);
