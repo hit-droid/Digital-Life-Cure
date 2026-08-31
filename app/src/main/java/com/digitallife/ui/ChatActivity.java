@@ -76,6 +76,9 @@ public class ChatActivity extends Activity {
     /** v1.33.0：固定 chips 栏引用，与动态建议互斥显示避免挤占输入区 */
     private android.widget.HorizontalScrollView chipScrollRef;
     private long lastSuggestionAt = 0;
+    /** v1.34.0：建议缓存——历史指纹未变则复用，省 API 调用与延迟 */
+    private String cachedSuggestionKey = null;
+    private String[] cachedSuggestions = null;
     private static final long SUGGESTION_COOLDOWN_MS = 30_000L;
     private static final long SUGGESTION_DEBOUNCE_MS = 1_000L;
     private final Runnable suggestionDebounce = new Runnable() {
@@ -780,14 +783,26 @@ public class ChatActivity extends Activity {
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) return;
 
         List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 10);
+
+        // v1.34.0：历史指纹（条数 + 末条时间戳），未变则复用缓存建议
+        String fingerprint = hist.size() + "_"
+                + (hist.isEmpty() ? 0 : hist.get(hist.size() - 1).timestamp);
+        if (fingerprint.equals(cachedSuggestionKey) && cachedSuggestions != null) {
+            renderSuggestions(cachedSuggestions);
+            return;
+        }
+
         if (hist.isEmpty()) {
             // 冷启动：用 settings 里的 petName 生成首次建议
             String petName = new Settings(this).getPetName();
-            renderSuggestions(new String[]{
+            String[] cold = new String[]{
                     "和" + petName + "聊聊天",
                     "问问" + petName + "今天心情",
                     "让" + petName + "讲个笑话"
-            });
+            };
+            cachedSuggestionKey = fingerprint;
+            cachedSuggestions = cold;
+            renderSuggestions(cold);
             return;
         }
 
@@ -820,6 +835,9 @@ public class ChatActivity extends Activity {
                 if (suggestions == null) {
                     hideSuggestions();   // v1.33.0
                 } else {
+                    // v1.34.0：写入缓存，下次历史未变时直接复用
+                    cachedSuggestionKey = fingerprint;
+                    cachedSuggestions = suggestions;
                     renderSuggestions(suggestions);
                 }
             });
@@ -1909,6 +1927,10 @@ public class ChatActivity extends Activity {
                 .setPositiveButton("清空", (d, w) -> {
                     chatStore.clearSession(sessionKey);
                     listContainer.removeAllViews();
+                    // v1.34.0：清空会话后失效建议缓存，避免复用旧建议
+                    cachedSuggestionKey = null;
+                    cachedSuggestions = null;
+                    hideSuggestions();
                     curAssistantBubble = null;
                     curToolBubble = null;
                     curToolName = "";
