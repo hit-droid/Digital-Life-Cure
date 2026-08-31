@@ -196,6 +196,7 @@ public class PersonaActivity extends Activity {
 
         if (!isActive) {
             Button btnSwitch = new Button(this);
+            btnSwitch.setContentDescription("btnSwitch");   // 自动生成：a11y
             btnSwitch.setText("切换");
             btnSwitch.setTextSize(12f);
             btnSwitch.setTextColor(Color.WHITE);
