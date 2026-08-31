@@ -2216,6 +2216,7 @@ public class ChatActivity extends Activity {
 
     private ImageButton iconButton(int res) {
         ImageButton b = new ImageButton(this);
+        b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         b.setImageResource(res);
         b.setBackgroundColor(Color.TRANSPARENT);
         b.setScaleType(ImageView.ScaleType.CENTER);
