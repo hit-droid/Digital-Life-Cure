@@ -223,6 +223,7 @@ public class ChatActivity extends Activity {
         // v1.44.0：溢出菜单（搜索/导出/清空 收进「⋯」，给标题腾出横向空间，
         // 同时把「清空」这类破坏性操作藏进菜单，避免误触）
         Button btnMore = new Button(this);
+        btnMore.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnMore.setText("⋯");
         btnMore.setContentDescription("更多操作");
         btnMore.setTextSize(18f);
