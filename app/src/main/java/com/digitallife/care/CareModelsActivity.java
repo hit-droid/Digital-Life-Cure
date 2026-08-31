@@ -300,6 +300,7 @@ public class CareModelsActivity extends Activity {
 
     private Button actionButton(String text, View.OnClickListener l) {
         Button b = new Button(this);
+        b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setTextSize(12f);
