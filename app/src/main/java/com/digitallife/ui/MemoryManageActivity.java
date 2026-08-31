@@ -151,6 +151,7 @@ public class MemoryManageActivity extends Activity {
         bottom.addView(btnExport, btnLp);
 
         Button btnImport = new Button(this);
+        btnImport.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnImport.setContentDescription("导入");   // 自动生成：a11y
         btnImport.setText("导入备份");
         btnImport.setTextSize(14f);
