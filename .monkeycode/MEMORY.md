@@ -149,3 +149,21 @@ Entries discovered by the Agent during task execution should follow this format:
   - 护理气泡病根：bg_bubble_care 原本是纯 `<solid>` 扁平色块且颜色（#0F2A22）比顶栏最暗端还闷，缺液态玻璃质感；修复为渐变并对齐顶栏色系 #1B5E45 → #16493A → #0F3D2E，竖线由荧光 #6EE7B7 柔化为 #5BD9A8
   - 改色而不是改结构：渐变须 `android:angle` 为 45 的倍数（270 为从上到下，与 bg_top_bar_care 一致）；圆角 16dp、竖线 size 3dp、inset 参数保持不变
   - 本环境模型不支持读图：read 图片文件返回 "Image read successfully" 但模型侧报 "this model does not support image input"；image_analysis MCP 工具报 `insufficient balance`（-32603）。截图类问题只能请用户文字描述，不要反复尝试读图
+
+[User Instruction Summary]
+- Date: 2026-08-31
+- Context: 用户在连续推进后要求后续不要反复确认
+- Instructions:
+  - 以后直接继续推进，不要每一步都回头问用户；自主选择完善项并执行（涵盖完善 AI、发版、更新记忆等全部动作）
+  - 仍须保持的纪律：每个版本 bump + 推送发行；记忆/文档用 `[skip ci]` 单独推送不发行
+
+[Project Knowledge Summary]
+- Date: 2026-08-31
+- Context: Discovered by Agent while performing v1.31.0 语音输入 与 v1.32.0 会话自动标题
+- Category: Operations & Deployment
+- Instructions:
+  - 版本号继续递增：v1.31.0=34（语音输入）、v1.32.0=35（会话自动标题）
+  - v1.31.0 语音输入：RECORD_AUDIO 权限 Manifest 早已声明，Android 6+ 运行时申请（REQ_AUDIO_PERMISSION=4001）；用 SpeechRecognizer + RecognitionListener，EXTRA_PARTIAL_RESULTS 实时上屏，onResults 用最终结果覆盖（避免 partial 重复拼接）；onError 9 类中文降级提示；onDestroy 里 stopListening+cancel+destroy 防泄漏；录音中麦克风染 brand 色
+  - v1.32.0 会话自动标题：默认标题常量为「新对话」/「护理会话」（见 ConversationTabView 新建逻辑）；ChatStore.renameSession 已存在，此前未被使用；首轮（assistant≥1 条）后触发一次，titleAutoTried 防重复，用户自定义标题不覆盖；需 tvTitleRef 字段（tvTitle 是 buildUi 局部变量）供刷新顶栏
+  - 两个 onDone 代码完全相同的老问题依旧：普通对话前置锚点是空实现 onToolCall，护理前置锚点是 onToolResult，插入时务必带上前置行
+  - 导出功能（exportChat / buildMarkdownExport / buildTextExport）已相当完善（Markdown+纯文本、元信息、工具调用格式化），无需重做
