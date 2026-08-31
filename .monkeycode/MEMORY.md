@@ -119,3 +119,33 @@ Entries discovered by the Agent during task execution should follow this format:
   - Edit 工具的 oldString 匹配陷阱：用 Edit 工具"插入新代码"时，如果 oldString 是从文件复制某一行整段（包括上下的同前缀行），且要插入的新内容跟原内容只在末尾不同（如 pressScale 的 `}` 闭合），必须确保 oldString 中**不包含与要保留代码完全相同**的子串；否则 replace 会被匹配成"中间一段"，导致多出一段残留（phase 3 fc966a5 第一次 push 编译失败就是 pressScale 闭合 `return false; }); }` 三行被残留）
   - 同名变量陷阱：Java 局部变量名不能在同一作用域重复声明；ChatActivity buildUi 内已存在 `clp`（line 186），第二次使用 chips 时不能再命名 `clp`，要换名（chipLp / lp2 等）
   - Edit 工具不会自动补前缀：手动 `case MotionEvent.CANCEL:` 会被当成 `case MotionEvent.ACTION_CANCEL:` 的"匹配子串"被无意中替换/未替换，编译时 `cannot find symbol CANCEL`；保留 ACTION_ 前缀是 Android SDK 的硬要求
+
+[User Instruction Summary]
+- Date: 2026-08-30
+- Context: 用户要求今天自主更新、全部完善，并明确版本与推送纪律
+- Instructions:
+  - 用户授权自主推进：当天可自行选择完善项，"你看着做"，不必逐项事先确认（此授权仅限当日自主更新场景，与 2026-08-05「改码前必须征得同意」的通用要求并存）
+  - 版本纪律：**每完成一个版本就必须 bump versionName/versionCode 并推送发行**（push main 会自动触发 build.yml 构建并发 release，tag 取 versionName）
+  - 记忆/文档（.monkeycode/MEMORY.md 等）用 `[skip ci]` 标记的 commit **单独推送，不发行**，避免为文档改动触发 release
+  - .monkeycode/ 已被 git 跟踪且未被 .gitignore 忽略，可直接更新推送
+
+[Project Knowledge Summary]
+- Date: 2026-08-30
+- Context: Discovered by Agent while performing v1.28.0~v1.30.0 连续三版发布
+- Category: Workflow & Collaboration
+- Instructions:
+  - 连续发版节奏（每个版本一次 CI，约 3 分钟）：功能 commit → bump version commit → `git pull --no-rebase` → push；仓库有 monkeycode-keepalive 自动心跳 commit，push 被拒时先 pull 再推
+  - 版本号递增对照：v1.27.0=30、v1.28.0=31、v1.29.0=32、v1.30.0=33
+  - 三版内容：v1.28.0 长消息展开/收起（COLLAPSE_MAX_LINES=10，仅完成时折叠，流式不限制）；v1.29.0 消息菜单加「重新生成/删除」（ChatStore.deleteLastAssistantMessage）；v1.30.0 对话上下文预算裁剪（CTX_BUDGET_CHARS=6000，CTX_KEEP_RECENT=6）
+  - UI 侧新增习惯：气泡完成后再 applyCollapse，避免流式过程被截断；折叠提示「▸ 展开全文/▾ 收起」需用 stripCollapseHint 在复制/朗读/分享前剔除
+  - ChatActivity 两个 onDone（普通对话 / 护理 care）代码完全相同，Edit 时 oldString 会命中多处，必须用各自**前置行**做锚点（普通对话前置是空实现 onToolCall，护理前置是 onToolResult）
+
+[Project Knowledge Summary]
+- Date: 2026-08-30
+- Context: Discovered by Agent while performing 护理气泡配色修复
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - 气泡体系分工（改色前务必分清，避免误改）：ChatActivity 有三类气泡——AI 对话气泡用 newTextViewBubble（isCare 切 bg_bubble_care / bg_bubble_ai）、用户气泡 appendUserBubble（bg_bubble_user）、工具调用气泡 appendToolBubble（bg_tool，用 card_bg + brand_stroke 独立体系）。用户明确要求「工具调用的气泡不要动」
+  - 护理气泡病根：bg_bubble_care 原本是纯 `<solid>` 扁平色块且颜色（#0F2A22）比顶栏最暗端还闷，缺液态玻璃质感；修复为渐变并对齐顶栏色系 #1B5E45 → #16493A → #0F3D2E，竖线由荧光 #6EE7B7 柔化为 #5BD9A8
+  - 改色而不是改结构：渐变须 `android:angle` 为 45 的倍数（270 为从上到下，与 bg_top_bar_care 一致）；圆角 16dp、竖线 size 3dp、inset 参数保持不变
+  - 本环境模型不支持读图：read 图片文件返回 "Image read successfully" 但模型侧报 "this model does not support image input"；image_analysis MCP 工具报 `insufficient balance`（-32603）。截图类问题只能请用户文字描述，不要反复尝试读图
