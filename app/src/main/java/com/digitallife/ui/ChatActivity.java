@@ -107,6 +107,12 @@ public class ChatActivity extends Activity {
     private String curToolFull = "";       // 工具卡片完整结果（点击展开/收起）
     private long lastTsLabel = 0;
 
+    // ==================== v1.31.0：语音输入 ====================
+    private android.speech.SpeechRecognizer speechRecognizer;
+    private boolean listening = false;
+    private static final int REQ_AUDIO_PERMISSION = 4001;
+    private ImageButton btnVoiceRef;
+
     private boolean thinking = false;
     private TextView thinkingBubble;
     private Runnable thinkingUpdater;
@@ -409,19 +415,19 @@ public class ChatActivity extends Activity {
         });
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
-        // 语音按钮（占位：v1.25.0 短按弹提示，v1.26.0 起接入 SpeechRecognizer）
+        // v1.31.0：语音按钮接入真实 SpeechRecognizer
         ImageButton btnVoice = new ImageButton(this);
+        btnVoiceRef = btnVoice;
         btnVoice.setImageResource(R.drawable.ic_mic);
         btnVoice.setColorFilter(getColorCompat(R.color.operit_text_secondary));
         btnVoice.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnVoice.setScaleType(ImageView.ScaleType.CENTER);
         btnVoice.setPadding(dp(10), dp(10), dp(10), dp(10));
         UiKit.pressScale(btnVoice);
+        btnVoice.setContentDescription("语音输入");
         LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(dp(40), dp(40));
         vlp.leftMargin = dp(6);
-        btnVoice.setOnClickListener(v ->
-                Toast.makeText(this, "语音输入功能正在准备中（v1.26.0 上线）",
-                        Toast.LENGTH_SHORT).show());
+        btnVoice.setOnClickListener(v -> toggleVoiceInput());
         inputBar.addView(btnVoice, vlp);
 
         ImageButton btnSendView = new ImageButton(this);
@@ -1371,6 +1377,168 @@ public class ChatActivity extends Activity {
         });
     }
 
+    /**
+     * v1.31.0：切换语音输入。未授权则先申请；正在听则停止。
+     */
+    private void toggleVoiceInput() {
+        if (listening) {
+            stopVoiceInput();
+            return;
+        }
+        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "当前设备不支持语音识别", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Android 6+ 需运行时申请录音权限
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+                && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},
+                    REQ_AUDIO_PERMISSION);
+            return;
+        }
+        startVoiceInput();
+    }
+
+    /** v1.31.0：启动语音识别，结果实时填入输入框 */
+    private void startVoiceInput() {
+        if (listening) return;
+        try {
+            if (speechRecognizer == null) {
+                speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(this);
+                speechRecognizer.setRecognitionListener(new VoiceRecognitionListener());
+            }
+            Intent intent = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE,
+                    java.util.Locale.getDefault());
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+            intent.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            speechRecognizer.startListening(intent);
+            listening = true;
+            // 录音中：麦克风染成品牌色作为状态提示
+            if (btnVoiceRef != null) {
+                btnVoiceRef.setColorFilter(getColorCompat(R.color.brand));
+                UiKit.flash(btnVoiceRef);
+            }
+            Toast.makeText(this, "请说话…", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            listening = false;
+            Toast.makeText(this, "无法启动语音识别：" + com.digitallife.ui.UiKit.safeMsg(e),
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** v1.31.0：停止语音识别 */
+    private void stopVoiceInput() {
+        listening = false;
+        if (btnVoiceRef != null) {
+            btnVoiceRef.setColorFilter(getColorCompat(R.color.operit_text_secondary));
+        }
+        try {
+            if (speechRecognizer != null) speechRecognizer.stopListening();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** v1.31.0：权限申请结果 */
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_AUDIO_PERMISSION) {
+            if (grantResults != null && grantResults.length > 0
+                    && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                startVoiceInput();
+            } else {
+                Toast.makeText(this, "需要麦克风权限才能使用语音输入", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    /** v1.31.0：语音识别回调——结果追加到输入框 */
+    private class VoiceRecognitionListener
+            implements android.speech.RecognitionListener {
+        @Override public void onReadyForSpeech(android.os.Bundle params) {}
+        @Override public void onBeginningOfSpeech() {}
+        @Override public void onRmsChanged(float rmsdB) {}
+        @Override public void onBufferReceived(byte[] buffer) {}
+        @Override public void onEndOfSpeech() { stopVoiceInput(); }
+        @Override public void onEvent(int eventType, android.os.Bundle params) {}
+
+        @Override
+        public void onPartialResults(android.os.Bundle partialResults) {
+            String text = pickBest(partialResults);
+            if (text != null && etInput != null) {
+                etInput.setText(text);
+                etInput.setSelection(text.length());
+            }
+        }
+
+        @Override
+        public void onResults(android.os.Bundle results) {
+            listening = false;
+            if (btnVoiceRef != null) {
+                btnVoiceRef.setColorFilter(getColorCompat(R.color.operit_text_secondary));
+            }
+            String text = pickBest(results);
+            if (text != null && !text.trim().isEmpty() && etInput != null) {
+                String merged = etInput.getText() == null
+                        ? text : etInput.getText().toString();
+                // 最终结果覆盖掉 partial 内容，避免重复拼接
+                if (merged.trim().isEmpty() || merged.equals(text)) {
+                    merged = text;
+                } else {
+                    merged = text;
+                }
+                etInput.setText(merged);
+                etInput.setSelection(merged.length());
+                updateSendButton();
+            }
+        }
+
+        @Override
+        public void onError(int error) {
+            listening = false;
+            if (btnVoiceRef != null) {
+                btnVoiceRef.setColorFilter(getColorCompat(R.color.operit_text_secondary));
+            }
+            String msg;
+            switch (error) {
+                case android.speech.SpeechRecognizer.ERROR_AUDIO:
+                    msg = "录音失败"; break;
+                case android.speech.SpeechRecognizer.ERROR_CLIENT:
+                    msg = "客户端错误"; break;
+                case android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS:
+                    msg = "缺少麦克风权限"; break;
+                case android.speech.SpeechRecognizer.ERROR_NETWORK:
+                case android.speech.SpeechRecognizer.ERROR_NETWORK_TIMEOUT:
+                    msg = "网络错误，语音识别需要联网"; break;
+                case android.speech.SpeechRecognizer.ERROR_NO_MATCH:
+                    msg = "没听清，请再说一次"; break;
+                case android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY:
+                    msg = "识别服务忙，请稍后"; break;
+                case android.speech.SpeechRecognizer.ERROR_SERVER:
+                    msg = "识别服务出错"; break;
+                case android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT:
+                    msg = "没听到声音"; break;
+                default:
+                    msg = "识别失败（" + error + "）"; break;
+            }
+            Toast.makeText(ChatActivity.this, msg, Toast.LENGTH_SHORT).show();
+        }
+
+        /** 从识别结果里取置信度最高的一条 */
+        private String pickBest(android.os.Bundle bundle) {
+            if (bundle == null) return null;
+            java.util.ArrayList<String> list = bundle.getStringArrayList(
+                    android.speech.SpeechRecognizer.RESULTS_RECOGNITION);
+            if (list == null || list.isEmpty()) return null;
+            return list.get(0);
+        }
+    }
+
     /** v1.28.0：移除折叠提示后缀（▸ 展开全文 / ▾ 收起） */
     private String stripCollapseHint(String text) {
         if (text == null) return "";
@@ -1825,6 +1993,17 @@ public class ChatActivity extends Activity {
         super.onDestroy();
         if (careAI != null && careListener != null) careAI.removeListener(careListener);
         if (llm != null) llm.cancel();
+        // v1.31.0：释放语音识别资源，避免泄漏
+        if (speechRecognizer != null) {
+            try {
+                speechRecognizer.stopListening();
+                speechRecognizer.cancel();
+                speechRecognizer.destroy();
+            } catch (Exception ignored) {
+            }
+            speechRecognizer = null;
+            listening = false;
+        }
         if (tts != null) {
             tts.stop();
             tts.shutdown();
