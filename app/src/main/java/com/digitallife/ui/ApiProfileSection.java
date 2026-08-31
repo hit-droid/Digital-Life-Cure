@@ -81,6 +81,7 @@ public class ApiProfileSection {
         title.setTextColor(UiKit.color(ctx, R.color.brand));
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Button btnNew = new Button(ctx);
+        btnNew.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnNew.setContentDescription("新建");   // 自动生成：a11y
         btnNew.setText("＋ 新建");
         btnNew.setTextSize(13f);
