@@ -112,6 +112,8 @@ public class ChatActivity extends Activity {
     private boolean listening = false;
     private static final int REQ_AUDIO_PERMISSION = 4001;
     private ImageButton btnVoiceRef;
+    /** v1.32.0：顶栏标题引用，供自动标题更新 */
+    private TextView tvTitleRef;
 
     private boolean thinking = false;
     private TextView thinkingBubble;
@@ -168,6 +170,7 @@ public class ChatActivity extends Activity {
         topBar.addView(btnBack, btnLp(40, 40));
 
         TextView tvTitle = new TextView(this);
+        tvTitleRef = tvTitle;   // v1.32.0：供自动标题更新
         tvTitle.setText(title == null || title.isEmpty() ? "对话" : title);
         tvTitle.setTextSize(18f);
         tvTitle.setTextColor(Color.WHITE);
@@ -998,6 +1001,8 @@ public class ChatActivity extends Activity {
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
                     if (consumeAbort()) return;
+                    // v1.32.0：首轮完成后自动命名会话
+                    maybeAutoTitle();
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
@@ -1091,6 +1096,8 @@ public class ChatActivity extends Activity {
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
                     if (consumeAbort()) return;
+                    // v1.32.0：首轮完成后自动命名会话
+                    maybeAutoTitle();
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
@@ -1537,6 +1544,79 @@ public class ChatActivity extends Activity {
             if (list == null || list.isEmpty()) return null;
             return list.get(0);
         }
+    }
+
+    // ==================== v1.32.0：会话自动标题 ====================
+
+    /** 默认标题（与 ConversationTabView 新建时一致），命中才自动命名 */
+    private static final String DEFAULT_TITLE_CHAT = "新对话";
+    private static final String DEFAULT_TITLE_CARE = "护理会话";
+    private boolean titleAutoTried = false;
+
+    /**
+     * v1.32.0：首轮对话完成后，若标题仍是默认值则用 LLM 生成简短标题。
+     * 只尝试一次；失败/无 API 静默保留原标题。
+     */
+    private void maybeAutoTitle() {
+        if (titleAutoTried) return;
+        if (title != null && !title.isEmpty()
+                && !DEFAULT_TITLE_CHAT.equals(title)
+                && !DEFAULT_TITLE_CARE.equals(title)) {
+            titleAutoTried = true; // 用户已自定义，不再动
+            return;
+        }
+        List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 10);
+        // 统计 assistant 条数，仅首轮（第一条回复后）触发
+        int assistantCount = 0;
+        for (ChatStore.StoredMsg m : msgs) {
+            if (m != null && "assistant".equals(m.role)) assistantCount++;
+        }
+        if (assistantCount < 1) return;
+        titleAutoTried = true;
+
+        List<LLMClient.ChatMessage> req = new ArrayList<>();
+        StringBuilder ctx = new StringBuilder();
+        ctx.append("根据下面这段对话，生成一个简短的会话标题。\n");
+        ctx.append("要求：不超过 12 个字，中文，概括主题，不要引号和标点。\n");
+        ctx.append("只输出标题文字，不要任何其他内容。\n\n");
+        for (ChatStore.StoredMsg m : msgs) {
+            String content = m.content == null ? "" : m.content;
+            if (content.length() > 100) content = content.substring(0, 100) + "…";
+            ctx.append("user".equals(m.role) ? "用户：" : "AI：").append(content).append("\n");
+        }
+        req.add(new LLMClient.ChatMessage("user", ctx.toString()));
+
+        JSONObject extra = new JSONObject();
+        try {
+            extra.put("system", "你只输出一个简短中文标题，不超过 12 字，不要解释。");
+        } catch (Exception ignored) {
+        }
+
+        // 用当前会话的 LLM（不干扰主对话）
+        try {
+            ensureChatLlm();
+        } catch (Exception ignored) {
+        }
+        if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) return;
+
+        llm.chatOnce(req, extra, (text, err) -> {
+            if (err != null || text == null) return;
+            String newTitle = text.trim();
+            // 清理：去引号、去首尾标点、限长
+            newTitle = newTitle.replace("\"", "").replace("'", "")
+                    .replace("“", "").replace("”", "").trim();
+            if (newTitle.isEmpty()) return;
+            if (newTitle.length() > 20) newTitle = newTitle.substring(0, 20);
+            final String finalTitle = newTitle;
+            runOnUiThread(() -> {
+                try {
+                    chatStore.renameSession(sessionKey, finalTitle);
+                    title = finalTitle;
+                    if (tvTitleRef != null) tvTitleRef.setText(finalTitle);
+                } catch (Exception ignored) {
+                }
+            });
+        });
     }
 
     /** v1.28.0：移除折叠提示后缀（▸ 展开全文 / ▾ 收起） */
