@@ -213,6 +213,7 @@ public class PersonaActivity extends Activity {
         }
 
         Button btnEdit = new Button(this);
+        btnEdit.setContentDescription("编辑");   // 自动生成：a11y
         btnEdit.setText("编辑");
         btnEdit.setTextSize(12f);
         btnEdit.setTextColor(Color.WHITE);
