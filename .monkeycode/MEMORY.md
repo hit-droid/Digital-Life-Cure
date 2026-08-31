@@ -167,3 +167,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - v1.32.0 会话自动标题：默认标题常量为「新对话」/「护理会话」（见 ConversationTabView 新建逻辑）；ChatStore.renameSession 已存在，此前未被使用；首轮（assistant≥1 条）后触发一次，titleAutoTried 防重复，用户自定义标题不覆盖；需 tvTitleRef 字段（tvTitle 是 buildUi 局部变量）供刷新顶栏
   - 两个 onDone 代码完全相同的老问题依旧：普通对话前置锚点是空实现 onToolCall，护理前置锚点是 onToolResult，插入时务必带上前置行
   - 导出功能（exportChat / buildMarkdownExport / buildTextExport）已相当完善（Markdown+纯文本、元信息、工具调用格式化），无需重做
+
+[Project Knowledge Summary]
+- Date: 2026-08-31
+- Context: Discovered by Agent while performing v1.33.0 建议/chips 互斥 与 v1.34.0 建议缓存
+- Category: Operations & Deployment
+- Instructions:
+  - 版本号继续递增：v1.33.0=36、v1.34.0=37
+  - v1.33.0 互斥显示：固定 chips 栏（chipScroll）与动态建议栏（suggestionBar）同时显示会挤占输入区，改为互斥；chipScroll 原是 buildUi 局部变量，需提字段 chipScrollRef 才能跨方法控制；新增 hideSuggestions() 作为唯一收起入口（内部同时隐藏 suggestionBar + 恢复 chips），8 处隐藏逻辑全部改走它，避免状态不一致
+  - v1.34.0 建议缓存：用历史指纹（条数 + 末条 timestamp）作 key 缓存 LLM 建议，指纹未变直接 renderSuggestions 跳过请求；冷启动默认建议也入缓存；清空会话时必须失效缓存（cachedSuggestionKey/Suggestions 置 null）
+  - lambda 捕获局部变量：指纹变量只赋值一次即 effectively final，可在 chatOnce 回调里直接引用，无需 final 副本（与此前 PlanExecutor 需 final 副本的场景不同——那个变量在循环里被重复赋值）
+  - 连续发版稳定节奏已验证：功能 commit → bump commit → pull → push，CI 约 3 分钟，六版（v1.28.0~v1.34.0）全部一次通过
