@@ -430,6 +430,7 @@ public class ChatActivity extends Activity {
 
         // v1.31.0：语音按钮接入真实 SpeechRecognizer
         ImageButton btnVoice = new ImageButton(this);
+        btnVoice.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnVoiceRef = btnVoice;
         btnVoice.setImageResource(R.drawable.ic_mic);
         btnVoice.setColorFilter(getColorCompat(R.color.operit_text_secondary));
