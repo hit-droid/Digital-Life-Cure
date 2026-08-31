@@ -168,6 +168,18 @@ error: local variables referenced from an inner class must be final or effective
 autoloop 每轮开头自己会 `git pull --no-rebase`（脚本 119 行），push 失败时还会再 pull 重试（164 行），**具备自愈能力**。我手动 pull 反而制造出 merge conflict 状态。
 **解法**：记忆类改动一律到隔离区提交，用 `git pull --rebase` 再 push。
 
+**这个坑的真实代价**（2026-08-31 亲历）：我在 `/workspace` 手贱 pull 了一次，仓库进入 `.git/MERGE_HEAD` 冲突态。紧接着 autoloop 开始下一个任务，它开头的 `git pull` 在这个状态下直接失败 → `git apply` 也失败 → 任务被误判成补丁问题，一路丢进 `failed/`。我精心写好并验证过的 `051-multiline-input.patch` 就这么被误杀，只能重新入队（`054-multiline-input.patch`）。
+
+**如果已经弄出了冲突态**，立刻修复（autoloop 不会自己修复，只会持续误杀队列任务）：
+```bash
+cd /workspace
+git merge --abort 2>/dev/null           # 先尝试中止合并
+git fetch origin
+git reset --hard origin/main            # 强行复位到远端
+git status --porcelain | wc -l          # 必须是 0
+```
+修完记得去 `state/failed/` 看看有没有被误杀的补丁，捞出来重新入队（先 `git apply --check` 复核一遍）。
+
 ### 4.4 取 CI 日志必须带 token
 `gh` 默认报 `gh auth login`。正确姿势：
 ```bash
