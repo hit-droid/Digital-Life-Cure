@@ -205,3 +205,15 @@ Entries discovered by the Agent during task execution should follow this format:
   - 手工产出版本时用显式编号（如 042-error-retry.patch）避免与自动生成的编号冲突
   - 补丁入队工作流：本地改代码 → `git diff > queue/NNN-name.patch` → 写同名 .meta（首行标题、其余正文）→ `git checkout -- .` 回滚 → 脚本接管后续全流程
   - 流水线节奏约 3~4 分钟/版本（含 CI 等待），一天理论可发数百版，实际瓶颈是功能代码的人工作者
+
+[Technical Learnings]
+- Date: 2026-08-31
+- Context: Discovered by Agent while performing 手工功能开发与流水线并行推进
+- Category: Technical
+- Instructions:
+  - **严禁与 autoloop 共用 /workspace 工作树**（已付出两次 CI 失败代价）：autoloop 回滚时会 git reset --hard，会把我未完成的编辑一起抹掉；反之我未完成的编辑会被 autoloop 的 git diff 一起提交，导致半成品代码混入发行版本（v1.43 就因此混入只有调用、没有定义的 appendEmptyGuide，报 cannot find symbol）
+  - 正确做法：单独克隆一份到 /tmp/opencode/work 作为隔离工作区（git clone /workspace 后 git remote set-url origin 改回 GitHub），所有手工编辑只在隔离区做；生成补丁后立刻 git checkout -- . 还原，补丁复制到 queue/ 交给 autoloop
+  - 隔离区使用前先 git pull 同步到最新 HEAD，避免补丁上下文漂移导致 apply 失败；生成后可用 git apply --check 验证
+  - 匿名内部类捕获局部变量的老坑再次复现：MarkdownRenderer 的 appendCodeBlock 里 block 被重新赋值过（去尾部换行），不是 effectively final，两个 ClickableSpan 捕获它直接编译失败。解法是取 final 副本 codeToCopy 再捕获，并抽出静态 copyCodeToClipboard 供两处共用
+  - 补丁应用失败不一定是漂移，先确认功能是否已随更早的 commit 落地（v1.42 重试功能其实已完整落地，042 补丁是重复应用才失败）。判断方法：git show HEAD:<文件> | grep 关键符号
+  - 同类手工改动与自动生成器的冲突要提前规避：把即将删除的变量名按 `文件:变量:生成器` 格式预先写进 state/processed.txt，生成器就不会再选中它们
