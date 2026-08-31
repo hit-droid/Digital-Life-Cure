@@ -1277,13 +1277,37 @@ public class ChatActivity extends Activity {
         if (lastTsLabel != 0 && now - lastTsLabel < 5 * 60 * 1000L) return;
         lastTsLabel = now;
         TextView t = new TextView(this);
-        t.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(now)));
+        // v1.38.0：智能时间分割线（今天 / 昨天 / 更早）
+        t.setText(formatDividerTime(now));
         t.setTextSize(10f);
         t.setTextColor(getColorCompat(R.color.operit_text_hint));
         t.setGravity(Gravity.CENTER);
         t.setPadding(0, dp(8), 0, dp(6));
         listContainer.addView(t, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /**
+     * v1.38.0：时间分割线文案。
+     * 今天 → HH:mm；昨天 → 昨天 HH:mm；今年更早 → M月d日 HH:mm；跨年 → yyyy/M/d HH:mm
+     */
+    private String formatDividerTime(long ts) {
+        java.util.Calendar target = java.util.Calendar.getInstance();
+        target.setTimeInMillis(ts);
+        java.util.Calendar now = java.util.Calendar.getInstance();
+
+        boolean sameYear = target.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR);
+        int dayDiff = sameYear
+                ? target.get(java.util.Calendar.DAY_OF_YEAR) - now.get(java.util.Calendar.DAY_OF_YEAR)
+                : 999;
+
+        String hm = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(ts));
+        if (dayDiff == 0) return hm;
+        if (dayDiff == -1) return "昨天 " + hm;
+        if (sameYear) {
+            return new SimpleDateFormat("M月d日 HH:mm", Locale.getDefault()).format(new Date(ts));
+        }
+        return new SimpleDateFormat("yyyy/M/d HH:mm", Locale.getDefault()).format(new Date(ts));
     }
 
     private TextView newTextViewBubble() {
