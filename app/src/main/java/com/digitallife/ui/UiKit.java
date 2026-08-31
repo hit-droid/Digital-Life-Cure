@@ -92,6 +92,7 @@ public final class UiKit {
 
     public static Button button(Context c, LinearLayout root, String text) {
         Button b = new Button(c);
+        b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setTextSize(14f);
         b.setTextColor(Color.WHITE);
