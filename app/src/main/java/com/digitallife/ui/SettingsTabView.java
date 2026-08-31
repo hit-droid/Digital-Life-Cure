@@ -112,6 +112,7 @@ public class SettingsTabView extends LinearLayout {
         LinearLayout rowBtn = new LinearLayout(activity);
         rowBtn.setOrientation(LinearLayout.HORIZONTAL);
         Button btnStart = new Button(activity);
+        btnStart.setContentDescription("启动");   // 自动生成：a11y
         btnStart.setText("启动桌宠");
         btnStart.setTextSize(14f);
         btnStart.setAllCaps(false);
