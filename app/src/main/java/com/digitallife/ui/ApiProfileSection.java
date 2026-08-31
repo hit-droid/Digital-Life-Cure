@@ -213,6 +213,7 @@ public class ApiProfileSection {
 
     private Button tabButton(String text, String s) {
         Button b = new Button(activity);
+        b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setTextSize(13f);
         b.setAllCaps(false);
