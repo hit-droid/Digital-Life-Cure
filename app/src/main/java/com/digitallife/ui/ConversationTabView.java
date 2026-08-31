@@ -206,6 +206,7 @@ public class ConversationTabView extends LinearLayout {
         right.addView(time);
 
         Button btnDel = new Button(activity);
+        btnDel.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnDel.setContentDescription("btnDel");   // 自动生成：a11y
         btnDel.setText("删除");
         btnDel.setTextSize(11f);
