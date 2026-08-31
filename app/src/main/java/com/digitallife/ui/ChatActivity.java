@@ -662,6 +662,8 @@ public class ChatActivity extends Activity {
         if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
             chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                     null, null, System.currentTimeMillis());
+            // v1.28.0：完成后对长消息应用折叠
+            applyCollapse(curAssistantBubble);
         }
         curAssistantBubble = null;
         curAssistantText = "";
@@ -948,6 +950,8 @@ public class ChatActivity extends Activity {
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
+                        // v1.28.0：完成后对长消息应用折叠
+                        applyCollapse(curAssistantBubble);
                         curAssistantBubble = null;
                         curAssistantText = "";
                     } else if (fullText != null && !fullText.isEmpty()) {
@@ -1039,6 +1043,8 @@ public class ChatActivity extends Activity {
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                         chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
+                        // v1.28.0：完成后对长消息应用折叠
+                        applyCollapse(curAssistantBubble);
                         curAssistantBubble = null;
                         curAssistantText = "";
                     } else if (fullText != null && !fullText.isEmpty()) {
@@ -1184,6 +1190,66 @@ public class ChatActivity extends Activity {
         return b;
     }
 
+    // ==================== v1.28.0：长消息展开/收起 ====================
+
+    /** 折叠阈值：AI 回复超过此行数时默认收起，点击展开 */
+    private static final int COLLAPSE_MAX_LINES = 10;
+
+    /**
+     * v1.28.0：对已完成的气泡应用长消息折叠。
+     * 超过 COLLAPSE_MAX_LINES 行则截断并加「展开」提示，点击气泡切换展开/收起。
+     * 仅对已完成气泡调用（流式过程中不限制，保证用户能看到流式全文）。
+     */
+    private void applyCollapse(TextView bubble) {
+        if (bubble == null) return;
+        // 用 post 确保布局完成后再读行数
+        bubble.post(() -> {
+            try {
+                int lineCount = bubble.getLineCount();
+                if (lineCount <= COLLAPSE_MAX_LINES) {
+                    // 短消息：保持原样，点击无副作用
+                    return;
+                }
+                // 保存完整文本
+                CharSequence full = bubble.getText();
+                // 收起态
+                bubble.setMaxLines(COLLAPSE_MAX_LINES);
+                bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                appendCollapseHint(bubble, full, false);
+                bubble.setOnClickListener(v -> {
+                    UiKit.flash(v);
+                    if (bubble.getMaxLines() == COLLAPSE_MAX_LINES) {
+                        // 展开
+                        bubble.setMaxLines(Integer.MAX_VALUE);
+                        bubble.setEllipsize(null);
+                        appendCollapseHint(bubble, full, true);
+                    } else {
+                        // 收起
+                        bubble.setMaxLines(COLLAPSE_MAX_LINES);
+                        bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                        appendCollapseHint(bubble, full, false);
+                    }
+                    scrollToBottom();
+                });
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    /** 在气泡文本末尾追加「展开 / 收起」提示（用次要色 + 小字） */
+    private void appendCollapseHint(TextView bubble, CharSequence fullText, boolean expanded) {
+        String hint = expanded ? "\n\n▾ 收起" : "\n\n▸ 展开全文";
+        SpannableString ss = new SpannableString(fullText.toString() + hint);
+        ss.setSpan(new android.text.style.ForegroundColorSpan(
+                        getColorCompat(R.color.operit_accent)),
+                fullText.length(), ss.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ss.setSpan(new android.text.style.RelativeSizeSpan(0.9f),
+                fullText.length(), ss.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        bubble.setText(ss);
+    }
+
     private void appendUserBubble(String text) {
         appendTimeDividerIfNeeded();
         LinearLayout row = new LinearLayout(this);
@@ -1231,6 +1297,8 @@ public class ChatActivity extends Activity {
         b.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         listContainer.addView(b);
+        // v1.28.0：长消息折叠（历史消息/非流式回复同样生效）
+        applyCollapse(b);
         b.setOnLongClickListener(v -> {
             String txt = b.getText() == null ? "" : b.getText().toString();
             new android.app.AlertDialog.Builder(this)
