@@ -65,6 +65,7 @@ public class ConversationTabView extends LinearLayout {
         bar.addView(tip, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         Button btnNew = new Button(activity);
+        btnNew.setContentDescription("新建");   // 自动生成：a11y
         btnNew.setText("＋ 新建会话");
         btnNew.setTextSize(13f);
         btnNew.setTextColor(Color.WHITE);
