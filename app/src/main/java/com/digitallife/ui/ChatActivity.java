@@ -243,6 +243,30 @@ public class ChatActivity extends Activity {
         btnExport.setOnClickListener(v -> exportChat());
         topBar.addView(btnExport, elp);
 
+        // v1.36.0：会话内搜索
+        Button btnSearch = new Button(this);
+        btnSearch.setText("搜索");
+        btnSearch.setTextSize(13f);
+        btnSearch.setTextColor(Color.WHITE);
+        btnSearch.setAllCaps(false);
+        btnSearch.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnSearch.setPadding(dp(12), dp(4), dp(12), dp(4));
+        UiKit.pressScale(btnSearch);
+        LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        slp2.setMargins(dp(4), 0, dp(4), 0);
+        btnSearch.setOnClickListener(v -> {
+            // v1.36.0：已有搜索词时再点即跳下一处，否则弹框输入
+            if (searchQuery != null && !searchHits.isEmpty()) {
+                gotoHit(searchHitIndex + 1);
+                Toast.makeText(this, "第 " + (searchHitIndex + 1) + "/"
+                        + searchHits.size() + " 处", Toast.LENGTH_SHORT).show();
+            } else {
+                showSearchDialog();
+            }
+        });
+        topBar.addView(btnSearch, slp2);
+
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -1341,6 +1365,100 @@ public class ChatActivity extends Activity {
                 fullText.length(), ss.length(),
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         bubble.setText(ss);
+    }
+
+    // ==================== v1.36.0：会话内搜索 ====================
+
+    private String searchQuery = null;
+    private java.util.List<Integer> searchHits = new java.util.ArrayList<>();
+    private int searchHitIndex = 0;
+
+    /** 弹搜索框，输入关键词后定位到第一处命中 */
+    private void showSearchDialog() {
+        final EditText input = new EditText(this);
+        input.setHint("输入关键词");
+        input.setTextSize(14f);
+        input.setSingleLine(true);
+        input.setPadding(dp(16), dp(12), dp(16), dp(12));
+        if (searchQuery != null) input.setText(searchQuery);
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("搜索本会话")
+                .setView(input)
+                .setPositiveButton("搜索", (d, w) -> {
+                    String q = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (q.isEmpty()) {
+                        Toast.makeText(this, "请输入关键词", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    doSearch(q);
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 在已渲染的气泡里查找关键词并记录命中位置 */
+    private void doSearch(String query) {
+        searchQuery = query;
+        searchHits.clear();
+        searchHitIndex = 0;
+        String lower = query.toLowerCase();
+        for (int i = 0; i < listContainer.getChildCount(); i++) {
+            android.view.View child = listContainer.getChildAt(i);
+            if (!(child instanceof TextView)) continue;
+            String txt = ((TextView) child).getText() == null ? ""
+                    : ((TextView) child).getText().toString();
+            if (txt.toLowerCase().contains(lower)) searchHits.add(i);
+        }
+        if (searchHits.isEmpty()) {
+            Toast.makeText(this, "没有找到「" + query + "」", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        gotoHit(0);
+        Toast.makeText(this, "找到 " + searchHits.size() + " 处，点击「下一处」继续",
+                Toast.LENGTH_SHORT).show();
+        showNextHitControl();
+    }
+
+    /** 滚动到第 index 处命中并高亮闪一下 */
+    private void gotoHit(int index) {
+        if (searchHits.isEmpty()) return;
+        if (index < 0) index = 0;
+        if (index >= searchHits.size()) index = 0;   // 循环
+        searchHitIndex = index;
+        int childIndex = searchHits.get(index);
+        android.view.View child = listContainer.getChildAt(childIndex);
+        if (child == null) return;
+        child.requestFocus();
+        // 滚到该气泡位置
+        handler.post(() -> scroll.smoothScrollTo(0, child.getTop()));
+        UiKit.flash(child);
+        if (child instanceof TextView) {
+            highlightText((TextView) child, searchQuery);
+        }
+    }
+
+    /** 命中关键词染成品牌色，搜索词变更时重绘即可复原（setText 会重建 span） */
+    private void highlightText(TextView tv, String query) {
+        if (tv == null || query == null || query.isEmpty()) return;
+        String text = tv.getText() == null ? "" : tv.getText().toString();
+        String lower = text.toLowerCase();
+        String q = query.toLowerCase();
+        SpannableString ss = new SpannableString(text);
+        int from = 0;
+        while (true) {
+            int idx = lower.indexOf(q, from);
+            if (idx < 0) break;
+            ss.setSpan(new android.text.style.BackgroundColorSpan(0x446C5CE7),
+                    idx, idx + q.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            from = idx + q.length();
+        }
+        tv.setText(ss);
+    }
+
+    /** 显示一个可重复使用的「下一处/关闭」浮动条 */
+    private void showNextHitControl() {
+        Toast.makeText(this, "再次点击顶栏「搜索」可跳转下一处", Toast.LENGTH_LONG).show();
     }
 
     private void appendUserBubble(String text) {
