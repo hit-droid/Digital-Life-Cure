@@ -14,7 +14,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 极简 Markdown 渲染：标题/加粗/斜体/行内代码/代码块/无序与有序列表。
+ * 极简 Markdown 渲染：标题/加粗/斜体/行内代码/代码块/无序与有序列表/表格。
  * 纯 Spannable 实现，无第三方依赖，输出可直接 setText。
  */
 public final class MarkdownRenderer {
@@ -117,13 +117,141 @@ public final class MarkdownRenderer {
         }
     }
 
+    /**
+     * v1.46.0：行内渲染入口。表格跨多行，必须在块级别识别，
+     * 不能塞进 appendLine（那里只逐行处理）。这里先按行扫出表格块，
+     * 其余文本仍走原有的逐行逻辑，非表格内容行为完全不变。
+     */
     private void appendInline(SpannableStringBuilder out, String text) {
         if (text == null || text.isEmpty()) return;
         String[] lines = text.split("\n", -1);
-        for (int i = 0; i < lines.length; i++) {
-            appendLine(out, lines[i]);
-            if (i < lines.length - 1) out.append('\n');
+        int i = 0;
+        boolean first = true;
+        while (i < lines.length) {
+            boolean isTable = isTableStart(lines, i);
+            int end;
+            if (isTable) {
+                end = i;
+                while (end < lines.length && isTableRow(lines[end])) end++;
+            } else {
+                end = i + 1;
+            }
+            if (!first) out.append('\n');
+            first = false;
+            if (isTable) {
+                appendTable(out, lines, i, end);
+            } else {
+                appendLine(out, lines[i]);
+            }
+            i = end;
         }
+    }
+
+    /** v1.46.0：表格首行判定——本行是表格行，且下一行是 |---| 分隔行 */
+    private static boolean isTableStart(String[] lines, int i) {
+        return isTableRow(lines[i]) && i + 1 < lines.length && isSeparatorRow(lines[i + 1]);
+    }
+
+    private static boolean isTableRow(String line) {
+        String t = line.trim();
+        return t.startsWith("|") && t.indexOf('|', 1) > 0;
+    }
+
+    /** 分隔行只由 - | : 空格 组成，且必须含 |，避免把 --- 水平线误判成表格 */
+    private static boolean isSeparatorRow(String line) {
+        String t = line.trim();
+        if (t.isEmpty() || t.indexOf('-') < 0 || t.indexOf('|') < 0) return false;
+        for (int k = 0; k < t.length(); k++) {
+            char c = t.charAt(k);
+            if (c != '-' && c != '|' && c != ':' && c != ' ') return false;
+        }
+        return true;
+    }
+
+    /** v1.46.0：把表格块渲染成等宽对齐文本，表头加粗 */
+    private void appendTable(SpannableStringBuilder out, String[] lines, int from, int to) {
+        java.util.List<String[]> rows = new java.util.ArrayList<>();
+        for (int r = from; r < to; r++) {
+            if (isSeparatorRow(lines[r])) continue;   // 分隔行不展示，靠对齐自然成表
+            rows.add(splitRow(lines[r]));
+        }
+        if (rows.isEmpty()) return;
+        int cols = 0;
+        for (String[] c : rows) cols = java.lang.Math.max(cols, c.length);
+        if (cols == 0) return;
+
+        int[] widths = new int[cols];
+        for (String[] c : rows) {
+            for (int i = 0; i < c.length; i++) {
+                widths[i] = java.lang.Math.max(widths[i], displayWidth(c[i]));
+            }
+        }
+        // 单列限宽，避免超宽表格横向撑爆气泡
+        for (int i = 0; i < cols; i++) widths[i] = java.lang.Math.min(widths[i], 24);
+
+        int start = out.length();
+        for (int r = 0; r < rows.size(); r++) {
+            String[] c = rows.get(r);
+            for (int i = 0; i < cols; i++) {
+                String cell = i < c.length ? c[i] : "";
+                if (displayWidth(cell) > widths[i]) cell = truncateCell(cell, widths[i]);
+                out.append(padCell(cell, widths[i]));
+                if (i < cols - 1) out.append("  ");
+            }
+            if (r < rows.size() - 1) out.append('\n');
+        }
+        int end = out.length();
+        if (start >= end) return;
+        out.setSpan(new TypefaceSpan("monospace"), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        // 表头加粗：首行长度 = 各列宽之和 + 列间距
+        int headEnd = start;
+        for (int i = 0; i < cols; i++) headEnd += widths[i] + (i < cols - 1 ? 2 : 0);
+        out.setSpan(new StyleSpan(Typeface.BOLD), start, java.lang.Math.min(headEnd, end),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    private static String[] splitRow(String line) {
+        String t = line.trim();
+        if (t.startsWith("|")) t = t.substring(1);
+        if (t.endsWith("|") && t.length() > 1) t = t.substring(0, t.length() - 1);
+        String[] parts = t.split("\\|", -1);
+        for (int i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
+        return parts;
+    }
+
+    /** 显示宽度：全角字符按 2 计，等宽字体下对齐才准 */
+    private static int displayWidth(String s) {
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) w += isWide(s.charAt(i)) ? 2 : 1;
+        return w;
+    }
+
+    private static boolean isWide(char c) {
+        return (c >= '\u2E80' && c <= '\u9FFF') || (c >= '\uFF00' && c <= '\uFFEF')
+                || (c >= '\uAC00' && c <= '\uD7AF');
+    }
+
+    private static String padCell(String s, int width) {
+        StringBuilder sb = new StringBuilder(s);
+        int w = displayWidth(s);
+        while (w < width) { sb.append(' '); w++; }
+        return sb.toString();
+    }
+
+    private static String truncateCell(String s, int width) {
+        if (displayWidth(s) <= width) return s;
+        if (width <= 1) return "\u2026";
+        StringBuilder sb = new StringBuilder();
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            int cw = isWide(c) ? 2 : 1;
+            if (w + cw > width - 1) break;
+            sb.append(c);
+            w += cw;
+        }
+        sb.append('\u2026');
+        return sb.toString();
     }
 
     private void appendLine(SpannableStringBuilder out, String line) {
