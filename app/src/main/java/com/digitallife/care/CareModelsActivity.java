@@ -80,6 +80,7 @@ public class CareModelsActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         Button btnRefresh = new Button(this);
+        btnRefresh.setContentDescription("刷新");   // 自动生成：a11y
         btnRefresh.setText("刷新");
         btnRefresh.setTextSize(13f);
         btnRefresh.setTextColor(Color.WHITE);
