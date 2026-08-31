@@ -1284,6 +1284,9 @@ public class ChatActivity extends Activity {
 
     /** 折叠阈值：AI 回复超过此行数时默认收起，点击展开 */
     private static final int COLLAPSE_MAX_LINES = 10;
+    /** v1.35.0：工具结果超过此长度默认折叠；折叠时摘要长度 */
+    private static final int TOOL_COLLAPSE_CHARS = 300;
+    private static final int TOOL_BRIEF_CHARS = 150;
 
     /**
      * v1.28.0：对已完成的气泡应用长消息折叠。
@@ -1809,8 +1812,13 @@ public class ChatActivity extends Activity {
             StringBuilder text = new StringBuilder("🔧 ")
                     .append(curToolName.isEmpty() ? "工具" : curToolName)
                     .append("\n\n").append(status);
+            // v1.35.0：长结果默认折叠，避免长工具输出占满屏
+            final boolean longResult = full.length() > TOOL_COLLAPSE_CHARS;
             if (full.isEmpty()) {
                 text.append("\n\n（无返回内容）");
+            } else if (longResult) {
+                String brief = full.substring(0, TOOL_BRIEF_CHARS) + "…";
+                text.append("\n\n（结果较长，已折叠，点击展开）\n\n📋 结果：\n").append(brief);
             } else {
                 text.append("\n\n📋 结果：\n").append(full);
             }
@@ -1821,7 +1829,8 @@ public class ChatActivity extends Activity {
             ss.setSpan(new ForegroundColorSpan(statusColor), start, start + status.length(),
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             curToolBubble.setText(ss);
-            curToolBubble.setTag(Boolean.TRUE);
+            // v1.35.0：长结果初始标记为「未展开」，短结果保持展开态
+            curToolBubble.setTag(!longResult);
         }
         curToolBubble = null;
     }
@@ -1832,8 +1841,8 @@ public class ChatActivity extends Activity {
         boolean showingFull = Boolean.TRUE.equals(b.getTag());
         String name = curToolName.isEmpty() ? "工具" : curToolName;
         if (showingFull) {
-            String brief = curToolFull.length() > 150
-                    ? curToolFull.substring(0, 150) + "…" : curToolFull;
+            String brief = curToolFull.length() > TOOL_BRIEF_CHARS
+                    ? curToolFull.substring(0, TOOL_BRIEF_CHARS) + "…" : curToolFull;
             b.setText("🔧 " + name + "（已折叠，点击展开完整结果）\n" + brief);
             b.setTag(Boolean.FALSE);
         } else {
