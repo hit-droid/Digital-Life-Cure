@@ -178,3 +178,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - v1.34.0 建议缓存：用历史指纹（条数 + 末条 timestamp）作 key 缓存 LLM 建议，指纹未变直接 renderSuggestions 跳过请求；冷启动默认建议也入缓存；清空会话时必须失效缓存（cachedSuggestionKey/Suggestions 置 null）
   - lambda 捕获局部变量：指纹变量只赋值一次即 effectively final，可在 chatOnce 回调里直接引用，无需 final 副本（与此前 PlanExecutor 需 final 副本的场景不同——那个变量在循环里被重复赋值）
   - 连续发版稳定节奏已验证：功能 commit → bump commit → pull → push，CI 约 3 分钟，六版（v1.28.0~v1.34.0）全部一次通过
+
+[Project Knowledge Summary]
+- Date: 2026-08-31
+- Context: Discovered by Agent while performing v1.35.0 工具结果折叠 与 v1.36.0 会话内搜索
+- Category: Operations & Deployment
+- Instructions:
+  - 版本号继续递增：v1.35.0=38、v1.36.0=39
+  - v1.35.0 工具结果折叠：markLastToolResult 里结果 >TOOL_COLLAPSE_CHARS(300) 时默认折叠并展示 TOOL_BRIEF_CHARS(150) 摘要，setTag(!longResult) 控制初始展开态；toggleToolCard 复用同一常量（原来硬编码 150）避免两处阈值不一致
+  - v1.36.0 会话内搜索：顶栏已有 模型/清空/导出 三按钮（bg_btn_glass + dp(34) 高 + margins dp(4)），新增「搜索」沿用同样式；搜索扫 listContainer 里的 TextView 子视图统计命中，gotoHit 用 scroll.smoothScrollTo(0, child.getTop()) 定位 + UiKit.flash；高亮用 BackgroundColorSpan 0x446C5CE7；searchQuery 非空时再点按钮即跳下一处（循环）
+  - 工具卡片体系（bg_tool / appendToolBubble / toggleToolCard / markLastToolResult）与对话气泡体系独立，用户要求 bg_tool 配色不可动，但行为逻辑（折叠/展开）可以优化
+  - 今日累计发版 v1.28.0~v1.36.0 共 9 版，全部 CI 一次通过且均已发行 release
