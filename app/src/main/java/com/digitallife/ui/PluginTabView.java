@@ -221,6 +221,7 @@ public class PluginTabView extends LinearLayout {
                 row.addView(name, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1));
                 Button btnDel = new Button(activity);
+                btnDel.setContentDescription("btnDel");   // 自动生成：a11y
                 btnDel.setText("删除");
                 btnDel.setTextSize(11f);
                 btnDel.setAllCaps(false);
