@@ -335,6 +335,7 @@ public class AgentConsoleActivity extends Activity {
 
     private Button mkBtn(String text) {
         Button b = new Button(this);
+        b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setTextSize(13);
         b.setAllCaps(false);

@@ -1493,6 +1493,40 @@ public class ChatActivity extends Activity {
         Toast.makeText(this, "再次点击顶栏「搜索」可跳转下一处", Toast.LENGTH_LONG).show();
     }
 
+    /**
+     * v1.42.0：错误气泡（可点击一键重试）。
+     * 展示错误原因，若记录了上一条用户消息则提供「点击重试」。
+     */
+    private void appendErrorBubble(String error) {
+        TextView b = newTextViewBubble();
+        String reason = (error == null || error.isEmpty()) ? "未知错误" : error;
+        boolean canRetry = lastUserText != null && !lastUserText.trim().isEmpty();
+        String tip = canRetry ? "\n\n▸ 点击这里重试" : "";
+        SpannableString ss = new SpannableString("⚠ 出错了：" + reason + tip);
+        // 错误原因用警示红
+        ss.setSpan(new ForegroundColorSpan(0xFFE57373),
+                "⚠ 出错了：".length(), "⚠ 出错了：".length() + reason.length(),
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (canRetry) {
+            int s = ss.length() - tip.length() + 3;   // 跳过 "\n\n▸ "
+            ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.operit_accent)),
+                    s, ss.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            b.setOnClickListener(v -> {
+                UiKit.flash(v);
+                String retry = lastUserText;
+                String ctx = lastAttachContext;
+                listContainer.removeView(b);
+                if (retry != null && !retry.trim().isEmpty()) {
+                    sendChatMessage(retry, ctx);
+                }
+            });
+        }
+        b.setText(ss);
+        listContainer.addView(b, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scrollToBottom();
+    }
+
     private void appendUserBubble(String text) {
         appendTimeDividerIfNeeded();
         LinearLayout row = new LinearLayout(this);
