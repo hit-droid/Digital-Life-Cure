@@ -62,6 +62,7 @@ public class AgentConsoleActivity extends Activity {
         topBar.setElevation(dp(4));
 
         Button btnBack = new Button(this);
+        btnBack.setContentDescription("返回");   // 自动生成：a11y
         btnBack.setText("←");
         btnBack.setTextSize(20f);
         btnBack.setTextColor(android.graphics.Color.WHITE);
