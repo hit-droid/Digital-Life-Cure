@@ -205,6 +205,7 @@ public class ConversationTabView extends LinearLayout {
         right.addView(time);
 
         Button btnDel = new Button(activity);
+        btnDel.setContentDescription("btnDel");   // 自动生成：a11y
         btnDel.setText("删除");
         btnDel.setTextSize(11f);
         btnDel.setAllCaps(false);
