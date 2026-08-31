@@ -178,6 +178,7 @@ public class DeveloperActivity extends Activity {
 
     private Button mkButton(String text) {
         Button b = new Button(this);
+        b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setAllCaps(false);
