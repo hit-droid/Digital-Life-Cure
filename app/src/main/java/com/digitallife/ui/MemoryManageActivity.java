@@ -170,6 +170,7 @@ public class MemoryManageActivity extends Activity {
 
     private Button makeSegButton(String text, int tab) {
         Button b = new Button(this);
+        b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         b.setContentDescription("b");   // 自动生成：a11y
         b.setText(text);
         b.setTextSize(13f);
