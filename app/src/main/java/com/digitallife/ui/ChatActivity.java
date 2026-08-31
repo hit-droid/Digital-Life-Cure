@@ -883,6 +883,47 @@ public class ChatActivity extends Activity {
         }
     }
 
+    // ==================== v1.30.0：对话上下文预算裁剪 ====================
+
+    /** 上下文字符预算（约 6k 字符 ≈ 2~3k token），超出则丢弃较早消息 */
+    private static final int CTX_BUDGET_CHARS = 6000;
+    /** 无论多长，至少保留最近这么多条原文 */
+    private static final int CTX_KEEP_RECENT = 6;
+
+    /**
+     * v1.30.0：按字符预算裁剪历史。
+     * 策略：从最新往回累加，超出预算就停；至少保留 CTX_KEEP_RECENT 条。
+     * 若发生丢弃，在最早保留的一条前插入一条说明，让模型知道上下文被截断。
+     */
+    private List<ChatStore.StoredMsg> trimHistoryForBudget(List<ChatStore.StoredMsg> full) {
+        if (full == null || full.isEmpty()) return full;
+        int total = 0;
+        for (ChatStore.StoredMsg m : full) {
+            total += m.content == null ? 0 : m.content.length();
+        }
+        if (total <= CTX_BUDGET_CHARS) return full; // 预算内，原样返回
+
+        // 从最新往回选
+        ArrayList<ChatStore.StoredMsg> kept = new ArrayList<>();
+        int used = 0;
+        for (int i = full.size() - 1; i >= 0; i--) {
+            ChatStore.StoredMsg m = full.get(i);
+            int len = m.content == null ? 0 : m.content.length();
+            if (kept.size() >= CTX_KEEP_RECENT && used + len > CTX_BUDGET_CHARS) break;
+            kept.add(0, m);
+            used += len;
+        }
+        int dropped = full.size() - kept.size();
+        if (dropped > 0) {
+            // 插入一条截断说明（role=system 由调用方按 user 兼容处理）
+            ChatStore.StoredMsg note = new ChatStore.StoredMsg("system",
+                    "（为控制长度，已省略更早的 " + dropped + " 条对话）",
+                    null, null, System.currentTimeMillis());
+            kept.add(0, note);
+        }
+        return kept;
+    }
+
     private void sendChatMessage(String text, String attachContext) {
         ensureChatLlm();
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
@@ -896,11 +937,15 @@ public class ChatActivity extends Activity {
             return;
         }
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
-        List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 40);
+        // v1.30.0：上下文预算裁剪，避免长对话撑爆 token
+        List<ChatStore.StoredMsg> hist = trimHistoryForBudget(
+                chatStore.getMessages(sessionKey, 40));
         boolean found = false;
         for (ChatStore.StoredMsg m : hist) {
             if (m.content == null || m.content.isEmpty()) continue;
-            String role = "user".equals(m.role) ? "user" : "assistant";
+            // v1.30.0：system 说明原样传（不归类成 assistant）
+            String role = "user".equals(m.role) ? "user"
+                    : ("system".equals(m.role) ? "system" : "assistant");
             if (!found && "user".equals(role) && text.equals(m.content)) {
                 msgs.add(new LLMClient.ChatMessage(role,
                         attachContext != null && !attachContext.isEmpty()
