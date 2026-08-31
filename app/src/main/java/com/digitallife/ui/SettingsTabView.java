@@ -121,6 +121,7 @@ public class SettingsTabView extends LinearLayout {
         btnStart.setOnClickListener(v -> startPet());
         rowBtn.addView(btnStart, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         Button btnStop = new Button(activity);
+        btnStop.setContentDescription("停止");   // 自动生成：a11y
         btnStop.setText("停止桌宠");
         btnStop.setTextSize(14f);
         btnStop.setAllCaps(false);
