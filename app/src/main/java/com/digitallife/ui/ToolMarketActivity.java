@@ -99,6 +99,7 @@ public class ToolMarketActivity extends Activity {
         topBar.setElevation(UiKit.dp(this, 4));
 
         Button btnBack = new Button(this);
+        btnBack.setContentDescription("返回");   // 自动生成：a11y
         btnBack.setText("←");
         btnBack.setTextSize(20f);
         btnBack.setTextColor(Color.WHITE);
