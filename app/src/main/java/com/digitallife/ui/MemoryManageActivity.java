@@ -138,6 +138,7 @@ public class MemoryManageActivity extends Activity {
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.setPadding(dp(12), dp(10), dp(12), dp(12));
         Button btnExport = new Button(this);
+        btnExport.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnExport.setContentDescription("导出");   // 自动生成：a11y
         btnExport.setText("导出备份");
         btnExport.setTextSize(14f);
