@@ -188,6 +188,30 @@ public class ChatStore {
         return null;
     }
 
+    /**
+     * v1.29.0：删除并返回最后一条 assistant 消息（用于「重新生成」）。
+     * 若最后一条不是 assistant 则返回 null 且不删除。
+     */
+    public synchronized StoredMsg deleteLastAssistantMessage(String sessionKey) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        Cursor c = db.rawQuery("SELECT id, role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
+                "WHERE session_key = ? ORDER BY timestamp DESC, id DESC LIMIT 1", new String[]{sessionKey});
+        StoredMsg last = null;
+        long id = -1;
+        try {
+            if (c.moveToFirst()) {
+                id = c.getLong(0);
+                last = new StoredMsg(c.getString(1), c.getString(2), c.getString(3),
+                        c.getString(4), c.getLong(5));
+            }
+        } finally {
+            c.close();
+        }
+        if (last == null || !"assistant".equals(last.role)) return null;
+        db.delete("chat_messages", "id = ?", new String[]{String.valueOf(id)});
+        return last;
+    }
+
     private void touchSession(SQLiteDatabase db, String sessionKey, long ts) {
         ContentValues v = new ContentValues();
         v.put("updated_at", ts);
