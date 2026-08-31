@@ -473,7 +473,10 @@ public class ChatActivity extends Activity {
             if (ChatStore.TYPE_MODEL.equals(type) && modelName != null) {
                 appendAiBubble("你好，我是「" + modelName + "」。\n我们单独开了一个小房间，跟我说说话吧。");
             } else {
+                // v1.45.0：普通会话空态追加引导卡片（快捷入口），
+                // 解决新用户打开后只有一句话、不知道能问什么的困惑
                 appendAiBubble("你好，开始我们的对话吧。");
+                appendEmptyGuide();
             }
             return;
         }
@@ -1526,6 +1529,50 @@ public class ChatActivity extends Activity {
             }
         });
         pm.show();
+    }
+
+    /**
+     * v1.45.0：新会话引导卡片，追加在欢迎气泡之后。
+     * 给出三枚快捷入口，点击后填入输入框（与建议 chip 行为一致，不直接发送，
+     * 方便用户先编辑再决定）。
+     */
+    private void appendEmptyGuide() {
+        if (listContainer == null) return;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(6), dp(10), dp(6), dp(4));
+
+        TextView tip = new TextView(this);
+        tip.setText("试试这样问我：");
+        tip.setTextSize(12f);
+        tip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        tip.setPadding(0, 0, 0, dp(8));
+        box.addView(tip);
+
+        String[] starters = new String[]{"帮我写一段自我介绍", "推荐几本好书", "今天有什么安排"};
+        for (final String s : starters) {
+            TextView chip = new TextView(this);
+            chip.setText("✦ " + s);
+            chip.setTextSize(13f);
+            chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            chip.setBackgroundResource(R.drawable.bg_chip_outline);
+            chip.setPadding(dp(12), dp(7), dp(12), dp(7));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = dp(8);
+            chip.setLayoutParams(lp);
+            chip.setOnClickListener(v -> {
+                UiKit.flash(v);
+                if (etInput != null) {
+                    etInput.setText(s);
+                    etInput.setSelection(s.length());
+                    etInput.requestFocus();
+                }
+            });
+            box.addView(chip);
+        }
+        listContainer.addView(box, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private void appendUserBubble(String text) {
