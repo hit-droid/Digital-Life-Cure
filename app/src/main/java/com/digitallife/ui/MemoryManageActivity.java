@@ -94,6 +94,7 @@ public class MemoryManageActivity extends Activity {
 
         // v1.24.0：自动提取按钮
         Button btnExtract = new Button(this);
+        btnExtract.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnExtract.setContentDescription("btnExtract");   // 自动生成：a11y
         btnExtract.setText("AI 提取");
         btnExtract.setTextSize(13f);
