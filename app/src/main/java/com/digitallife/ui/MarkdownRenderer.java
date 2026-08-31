@@ -65,6 +65,9 @@ public final class MarkdownRenderer {
         }
         String block = code == null ? "" : code;
         if (block.endsWith("\n")) block = block.substring(0, block.length() - 1);
+        // v1.43.0：block 上面被重新赋值过，不是 effectively final，
+        // 匿名内部类无法直接捕获，这里取一份 final 副本供复制使用。
+        final String codeToCopy = block;
         int start = out.length();
         out.append(block);
         int end = out.length();
@@ -75,8 +78,43 @@ public final class MarkdownRenderer {
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             out.setSpan(new TypefaceSpan("monospace"), start, end,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // v1.43.0：点击代码块即复制该块内容
+            out.setSpan(new android.text.style.ClickableSpan() {
+                @Override
+                public void onClick(android.view.View widget) {
+                    copyCodeToClipboard(widget, codeToCopy);
+                }
+            }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // v1.43.0：块尾追加复制提示（linkColor 小字，同样可点）
+            int tipStart = out.length();
+            out.append("  [复制代码]");
+            out.setSpan(new android.text.style.RelativeSizeSpan(0.8f),
+                    tipStart, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            out.setSpan(new ForegroundColorSpan(linkColor),
+                    tipStart, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            out.setSpan(new android.text.style.ClickableSpan() {
+                @Override
+                public void onClick(android.view.View widget) {
+                    copyCodeToClipboard(widget, codeToCopy);
+                }
+            }, tipStart, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         out.append('\n');
+    }
+
+    /** v1.43.0：把代码块内容写入剪贴板并提示，异常静默忽略 */
+    private static void copyCodeToClipboard(android.view.View anchor, String code) {
+        try {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) anchor.getContext()
+                            .getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("代码", code));
+                android.widget.Toast.makeText(anchor.getContext(),
+                        "代码已复制", android.widget.Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void appendInline(SpannableStringBuilder out, String text) {
