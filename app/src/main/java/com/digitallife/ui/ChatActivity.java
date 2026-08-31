@@ -218,57 +218,23 @@ public class ChatActivity extends Activity {
         btnModel.setOnClickListener(v -> switchModel());
         topBar.addView(btnModel, mlp);
 
-        Button btnClear = new Button(this);
-        btnClear.setText("清空");
-        btnClear.setTextSize(13f);
-        btnClear.setTextColor(Color.WHITE);
-        btnClear.setAllCaps(false);
-        btnClear.setBackgroundResource(R.drawable.bg_btn_glass);
-        btnClear.setPadding(dp(12), dp(4), dp(12), dp(4));
-        UiKit.pressScale(btnClear);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+        // v1.44.0：溢出菜单（搜索/导出/清空 收进「⋯」，给标题腾出横向空间，
+        // 同时把「清空」这类破坏性操作藏进菜单，避免误触）
+        Button btnMore = new Button(this);
+        btnMore.setText("⋯");
+        btnMore.setContentDescription("更多操作");
+        btnMore.setTextSize(18f);
+        btnMore.setTextColor(Color.WHITE);
+        btnMore.setAllCaps(false);
+        btnMore.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnMore.setPadding(dp(10), dp(2), dp(10), dp(2));
+        btnMore.setMinWidth(dp(40));
+        UiKit.pressScale(btnMore);
+        LinearLayout.LayoutParams mlp2 = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
-        clp.setMargins(dp(4), 0, dp(4), 0);
-        btnClear.setOnClickListener(v -> confirmClear());
-        topBar.addView(btnClear, clp);
-
-        Button btnExport = new Button(this);
-        btnExport.setText("导出");
-        btnExport.setTextSize(13f);
-        btnExport.setTextColor(Color.WHITE);
-        btnExport.setAllCaps(false);
-        btnExport.setBackgroundResource(R.drawable.bg_btn_glass);
-        btnExport.setPadding(dp(12), dp(4), dp(12), dp(4));
-        UiKit.pressScale(btnExport);
-        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
-        elp.setMargins(dp(4), 0, dp(4), 0);
-        btnExport.setOnClickListener(v -> exportChat());
-        topBar.addView(btnExport, elp);
-
-        // v1.36.0：会话内搜索
-        Button btnSearch = new Button(this);
-        btnSearch.setText("搜索");
-        btnSearch.setTextSize(13f);
-        btnSearch.setTextColor(Color.WHITE);
-        btnSearch.setAllCaps(false);
-        btnSearch.setBackgroundResource(R.drawable.bg_btn_glass);
-        btnSearch.setPadding(dp(12), dp(4), dp(12), dp(4));
-        UiKit.pressScale(btnSearch);
-        LinearLayout.LayoutParams slp2 = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
-        slp2.setMargins(dp(4), 0, dp(4), 0);
-        btnSearch.setOnClickListener(v -> {
-            // v1.36.0：已有搜索词时再点即跳下一处，否则弹框输入
-            if (searchQuery != null && !searchHits.isEmpty()) {
-                gotoHit(searchHitIndex + 1);
-                Toast.makeText(this, "第 " + (searchHitIndex + 1) + "/"
-                        + searchHits.size() + " 处", Toast.LENGTH_SHORT).show();
-            } else {
-                showSearchDialog();
-            }
-        });
-        topBar.addView(btnSearch, slp2);
+        mlp2.setMargins(dp(4), 0, dp(4), 0);
+        btnMore.setOnClickListener(v -> showOverflowMenu(btnMore));
+        topBar.addView(btnMore, mlp2);
 
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1525,6 +1491,41 @@ public class ChatActivity extends Activity {
         listContainer.addView(b, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scrollToBottom();
+    }
+
+    /**
+     * v1.44.0：顶栏溢出菜单。
+     * 把低频的「搜索 / 导出 / 清空」收进菜单，顶栏只保留高频的「模型」切换，
+     * 给会话标题留出横向空间；清空属破坏性操作，藏进菜单可减少误触。
+     */
+    private void showOverflowMenu(android.view.View anchor) {
+        android.widget.PopupMenu pm = new android.widget.PopupMenu(this, anchor);
+        pm.getMenu().add(0, 1, 0, "搜索消息");
+        pm.getMenu().add(0, 2, 0, "导出对话");
+        pm.getMenu().add(0, 3, 0, "清空对话");
+        pm.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case 1:
+                    // 已有搜索词时再点即跳下一处，否则弹框输入
+                    if (searchQuery != null && !searchHits.isEmpty()) {
+                        gotoHit(searchHitIndex + 1);
+                        Toast.makeText(this, "第 " + (searchHitIndex + 1) + "/"
+                                + searchHits.size() + " 处", Toast.LENGTH_SHORT).show();
+                    } else {
+                        showSearchDialog();
+                    }
+                    return true;
+                case 2:
+                    exportChat();
+                    return true;
+                case 3:
+                    confirmClear();
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        pm.show();
     }
 
     private void appendUserBubble(String text) {
