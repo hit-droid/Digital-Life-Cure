@@ -1301,20 +1301,91 @@ public class ChatActivity extends Activity {
         applyCollapse(b);
         b.setOnLongClickListener(v -> {
             String txt = b.getText() == null ? "" : b.getText().toString();
+            // v1.28.0：去掉折叠提示尾巴，避免复制/朗读带出「▸ 展开全文」
+            txt = stripCollapseHint(txt);
+            final String clean = txt;
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
-                    .setItems(new String[]{"朗读", "复制", "分享"}, (d, w) -> {
+                    // v1.29.0：新增「重新生成」「删除」
+                    .setItems(new String[]{"朗读", "复制", "分享", "重新生成", "删除"},
+                            (d, w) -> {
                         if (w == 0) {
-                            speakText(txt);
+                            speakText(clean);
                         } else if (w == 1) {
-                            copyToClipboard(txt);
+                            copyToClipboard(clean);
+                        } else if (w == 2) {
+                            shareText(clean);
+                        } else if (w == 3) {
+                            regenerateLast(b);
                         } else {
-                            shareText(txt);
+                            deleteBubble(b);
                         }
                     })
                     .show();
             return true;
         });
+    }
+
+    /** v1.28.0：移除折叠提示后缀（▸ 展开全文 / ▾ 收起） */
+    private String stripCollapseHint(String text) {
+        if (text == null) return "";
+        String t = text;
+        int i = t.lastIndexOf("\n\n▸ 展开全文");
+        if (i >= 0) t = t.substring(0, i);
+        i = t.lastIndexOf("\n\n▾ 收起");
+        if (i >= 0) t = t.substring(0, i);
+        return t;
+    }
+
+    /**
+     * v1.29.0：重新生成——删掉最后一条 assistant 消息并重发上一条用户提问。
+     * 仅在该气泡确实是最后一条 assistant 消息时可用。
+     */
+    private void regenerateLast(TextView bubble) {
+        if (thinking) {
+            Toast.makeText(this, "她还在回复中，稍等一下哦…", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ChatStore.StoredMsg removed = chatStore.deleteLastAssistantMessage(sessionKey);
+        if (removed == null) {
+            Toast.makeText(this, "只能重新生成最后一条回复", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 找到上一条用户消息作为重发内容
+        List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 40);
+        String lastUser = null;
+        for (int i = hist.size() - 1; i >= 0; i--) {
+            ChatStore.StoredMsg m = hist.get(i);
+            if (m != null && "user".equals(m.role) && m.content != null
+                    && !m.content.trim().isEmpty()) {
+                lastUser = m.content.trim();
+                break;
+            }
+        }
+        if (lastUser == null) {
+            Toast.makeText(this, "找不到要重新生成的提问", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 移除界面上的旧气泡
+        listContainer.removeView(bubble);
+        // 重新发送（走正常发送流程，会重新 append user bubble + 请求）
+        sendChatMessage(lastUser, null);
+        Toast.makeText(this, "已重新生成", Toast.LENGTH_SHORT).show();
+    }
+
+    /** v1.29.0：删除单条气泡（同时从数据库移除） */
+    private void deleteBubble(TextView bubble) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("删除这条消息？")
+                .setMessage("删除后无法恢复。")
+                .setPositiveButton("删除", (d, w) -> {
+                    ChatStore.StoredMsg removed = chatStore.deleteLastAssistantMessage(sessionKey);
+                    listContainer.removeView(bubble);
+                    Toast.makeText(this, removed != null ? "已删除" : "已从界面移除",
+                            Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private android.speech.tts.TextToSpeech tts;
