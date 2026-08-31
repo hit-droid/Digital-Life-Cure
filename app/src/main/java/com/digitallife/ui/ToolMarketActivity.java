@@ -264,6 +264,7 @@ public class ToolMarketActivity extends Activity {
         // 开关
         boolean enabled = !isDisabled(this, t.name);
         Button btnToggle = new Button(this);
+        btnToggle.setContentDescription("btnToggle");   // 自动生成：a11y
         btnToggle.setText(enabled ? "已启用" : "已禁用");
         btnToggle.setTextSize(12f);
         btnToggle.setTextColor(Color.WHITE);
