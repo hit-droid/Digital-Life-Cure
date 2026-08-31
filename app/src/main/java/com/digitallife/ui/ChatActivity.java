@@ -445,6 +445,7 @@ public class ChatActivity extends Activity {
         inputBar.addView(btnVoice, vlp);
 
         ImageButton btnSendView = new ImageButton(this);
+        btnSendView.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnSend = btnSendView;
         btnSend.setImageResource(R.drawable.ic_send);
         btnSend.setBackgroundResource(R.drawable.bg_send);
