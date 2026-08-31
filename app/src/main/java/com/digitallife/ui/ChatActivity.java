@@ -73,6 +73,8 @@ public class ChatActivity extends Activity {
     private Button btnModel;
     /** v1.27.0：输入建议栏（基于历史对话的 3 条短建议） */
     private LinearLayout suggestionBar;
+    /** v1.33.0：固定 chips 栏引用，与动态建议互斥显示避免挤占输入区 */
+    private android.widget.HorizontalScrollView chipScrollRef;
     private long lastSuggestionAt = 0;
     private static final long SUGGESTION_COOLDOWN_MS = 30_000L;
     private static final long SUGGESTION_DEBOUNCE_MS = 1_000L;
@@ -267,6 +269,7 @@ public class ChatActivity extends Activity {
 
         // ===== 快捷操作 chips（输入栏上方） =====
         HorizontalScrollView chipScroll = new HorizontalScrollView(this);
+        chipScrollRef = chipScroll;   // v1.33.0：供与动态建议互斥显示
         chipScroll.setHorizontalScrollBarEnabled(false);
         chipScroll.setBackgroundColor(getColorCompat(R.color.operit_bg));
         chipScroll.setPadding(dp(10), dp(6), dp(10), dp(6));
@@ -402,7 +405,7 @@ public class ChatActivity extends Activity {
                     handler.postDelayed(suggestionDebounce, SUGGESTION_DEBOUNCE_MS);
                 } else {
                     handler.removeCallbacks(suggestionDebounce);
-                    if (suggestionBar != null) suggestionBar.setVisibility(View.GONE);
+                    hideSuggestions();   // v1.33.0
                 }
             }
         });
@@ -413,7 +416,7 @@ public class ChatActivity extends Activity {
                 handler.postDelayed(suggestionDebounce, SUGGESTION_DEBOUNCE_MS);
             } else if (!has) {
                 handler.removeCallbacks(suggestionDebounce);
-                if (suggestionBar != null) suggestionBar.setVisibility(View.GONE);
+                hideSuggestions();   // v1.33.0
             }
         });
         inputBar.addView(etInput, new LinearLayout.LayoutParams(0, dp(48), 1f));
@@ -762,11 +765,11 @@ public class ChatActivity extends Activity {
         if (suggestionBar == null) return;
         if (etInput == null || etInput.getText() == null
                 || !etInput.getText().toString().trim().isEmpty()) {
-            suggestionBar.setVisibility(View.GONE);
+            hideSuggestions();   // v1.33.0
             return;
         }
         if (!etInput.hasFocus()) {
-            suggestionBar.setVisibility(View.GONE);
+            hideSuggestions();   // v1.33.0
             return;
         }
         long now = System.currentTimeMillis();
@@ -809,13 +812,13 @@ public class ChatActivity extends Activity {
 
         llm.chatOnce(msgs, extra, (text, err) -> {
             if (err != null || text == null) {
-                handler.post(() -> suggestionBar.setVisibility(View.GONE));
+                handler.post(() -> hideSuggestions());   // v1.33.0
                 return;
             }
             String[] suggestions = parseSuggestions(text);
             handler.post(() -> {
                 if (suggestions == null) {
-                    suggestionBar.setVisibility(View.GONE);
+                    hideSuggestions();   // v1.33.0
                 } else {
                     renderSuggestions(suggestions);
                 }
@@ -869,11 +872,22 @@ public class ChatActivity extends Activity {
                 UiKit.flash(v);
                 etInput.setText(text);
                 etInput.setSelection(text.length());
-                suggestionBar.setVisibility(View.GONE);
+                hideSuggestions();   // v1.33.0：统一收起并恢复固定 chips
             });
             suggestionBar.addView(chip);
         }
         suggestionBar.setVisibility(View.VISIBLE);
+        // v1.33.0：有动态建议时隐藏固定 chips，避免两栏同时挤占输入区
+        if (chipScrollRef != null) chipScrollRef.setVisibility(View.GONE);
+    }
+
+    /**
+     * v1.33.0：收起动态建议栏并恢复固定 chips 栏。
+     * 所有隐藏 suggestionBar 的地方统一走这里，保证互斥状态一致。
+     */
+    private void hideSuggestions() {
+        if (suggestionBar != null) suggestionBar.setVisibility(View.GONE);
+        if (chipScrollRef != null) chipScrollRef.setVisibility(View.VISIBLE);
     }
 
     // ==================== 对话大脑独立对话（不依赖桌宠） ====================
