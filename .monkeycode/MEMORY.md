@@ -217,3 +217,7 @@ Entries discovered by the Agent during task execution should follow this format:
   - 匿名内部类捕获局部变量的老坑再次复现：MarkdownRenderer 的 appendCodeBlock 里 block 被重新赋值过（去尾部换行），不是 effectively final，两个 ClickableSpan 捕获它直接编译失败。解法是取 final 副本 codeToCopy 再捕获，并抽出静态 copyCodeToClipboard 供两处共用
   - 补丁应用失败不一定是漂移，先确认功能是否已随更早的 commit 落地（v1.42 重试功能其实已完整落地，042 补丁是重复应用才失败）。判断方法：git show HEAD:<文件> | grep 关键符号
   - 同类手工改动与自动生成器的冲突要提前规避：把即将删除的变量名按 `文件:变量:生成器` 格式预先写进 state/processed.txt，生成器就不会再选中它们
+
+- **绝不在 /workspace 里手动 git pull**：autoloop 每轮开头自己会 git pull --no-rebase（脚本 119 行），并在 push 失败后再 pull 重试（164 行），具备自愈能力；我手动 pull 反而会和它撞车，制造出 merge conflict 状态（已踩过一次）。记忆类改动改到隔离区提交，用 git pull --rebase 再 push
+- 已发行的补丁要从 queue 里清掉：autoloop 靠 --3way 应用，已落地的补丁会再次入队重试；虽然它有「已应用则跳过」的判定，但仍应主动 rm 掉 queue 里对应的 .patch/.meta，保持队列干净
+- CI 日志必须带 token 才能取：gh 默认报 "gh auth login"，正确姿势是 GH_TOKEN=$(cat /tmp/opencode/auto/token) gh run view <run_id> --log-failed，再从 error: 行定位编译错误
