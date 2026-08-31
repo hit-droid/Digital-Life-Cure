@@ -119,6 +119,8 @@ public class ChatActivity extends Activity {
     private android.speech.SpeechRecognizer speechRecognizer;
     private boolean listening = false;
     private static final int REQ_AUDIO_PERMISSION = 4001;
+    /** v1.47.0：输入框最多显示的行数，超出后内部滚动 */
+    private static final int INPUT_MAX_LINES = 5;
     private ImageButton btnVoiceRef;
     /** v1.32.0：顶栏标题引用，供自动标题更新 */
     private TextView tvTitleRef;
@@ -377,15 +379,22 @@ public class ChatActivity extends Activity {
         etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 可附带模型 zip…"
                 : "说点什么… ＋ 可附带文件");
         etInput.setTextSize(15f);
-        etInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        etInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
-        etInput.setSingleLine(true);
-        etInput.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
-                send();
-                return true;
+        // v1.47.0：改为多行输入。此前 singleLine + IME_ACTION_SEND 会让回车直接发送，
+        // 用户无法换行排版，长消息只能挤成一行。现在回车＝换行，发送走按钮。
+        etInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        etInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_NONE);
+        etInput.setSingleLine(false);
+        etInput.setMaxLines(INPUT_MAX_LINES);
+        etInput.setHorizontallyScrolling(false);
+        etInput.setVerticalScrollBarEnabled(false);
+        // 随内容自动增高，达到上限后内部滚动，避免顶飞上方对话
+        etInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
+            @Override public void onTextChanged(CharSequence c, int a, int b, int d) {}
+            @Override public void afterTextChanged(android.text.Editable e) {
+                int lines = etInput.getLineCount();
+                etInput.setMaxLines(java.lang.Math.min(lines, INPUT_MAX_LINES));
             }
-            return false;
         });
         etInput.setBackgroundResource(R.drawable.bg_input);
         etInput.setPadding(dp(14), dp(10), dp(14), dp(10));
