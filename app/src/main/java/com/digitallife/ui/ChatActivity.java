@@ -96,6 +96,9 @@ public class ChatActivity extends Activity {
     private TextView tvAttachName;
     private String pendingFileName;
     private String pendingFilePath;
+    /** v1.42.0：记录最后一条用户消息原文，供失败后一键重试 */
+    private String lastUserText = null;
+    private String lastAttachContext = null;
 
     private String sessionKey;
     private String title;
@@ -992,6 +995,9 @@ public class ChatActivity extends Activity {
     }
 
     private void sendChatMessage(String text, String attachContext) {
+        // v1.42.0：记录原文，失败时可一键重试
+        lastUserText = text;
+        lastAttachContext = attachContext;
         ensureChatLlm();
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
             hideThinkingDot();
