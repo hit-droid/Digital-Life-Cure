@@ -685,8 +685,11 @@ public class ChatActivity extends Activity {
         } catch (Exception ignored) {
         }
         if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
-            chatStore.addMessage(sessionKey, "assistant", curAssistantText,
+            // 中断回复：末尾附加「⏹ 已中断」角标，并随消息一起持久化
+            String finalText = curAssistantText + INTERRUPT_MARK;
+            chatStore.addMessage(sessionKey, "assistant", finalText,
                     null, null, System.currentTimeMillis());
+            markInterrupted(curAssistantBubble);
             // v1.28.0：完成后对长消息应用折叠
             applyCollapse(curAssistantBubble);
         }
@@ -1324,6 +1327,8 @@ public class ChatActivity extends Activity {
     /** v1.35.0：工具结果超过此长度默认折叠；折叠时摘要长度 */
     private static final int TOOL_COLLAPSE_CHARS = 300;
     private static final int TOOL_BRIEF_CHARS = 150;
+    /** 中断标记：用户手动停止回复时附加到消息文本末尾 */
+    private static final String INTERRUPT_MARK = "  ⏹ 已中断";
 
     /**
      * v1.28.0：对已完成的气泡应用长消息折叠。
@@ -1901,7 +1906,7 @@ public class ChatActivity extends Activity {
         });
     }
 
-    /** v1.28.0：移除折叠提示后缀（▸ 展开全文 / ▾ 收起） */
+    /** 移除折叠提示后缀（▸ 展开全文 / ▾ 收起）与中断角标（⏹ 已中断） */
     private String stripCollapseHint(String text) {
         if (text == null) return "";
         String t = text;
@@ -1909,7 +1914,29 @@ public class ChatActivity extends Activity {
         if (i >= 0) t = t.substring(0, i);
         i = t.lastIndexOf("\n\n▾ 收起");
         if (i >= 0) t = t.substring(0, i);
+        // 复制/朗读时不带出中断角标
+        if (t.endsWith(INTERRUPT_MARK)) {
+            t = t.substring(0, t.length() - INTERRUPT_MARK.length());
+        }
         return t;
+    }
+
+    /** 中断时给气泡追加「⏹ 已中断」角标（次要色小字）；同步 setText，保证随后的折叠 post 读到含角标的行数 */
+    private void markInterrupted(TextView bubble) {
+        if (bubble == null) return;
+        CharSequence cur = bubble.getText();
+        if (cur == null || cur.length() == 0) return;
+        if (cur.toString().endsWith(INTERRUPT_MARK)) return;
+        // 用 SpannableStringBuilder 保留原有 span（代码块复制链接、Markdown 样式等）
+        android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder(cur);
+        int start = ssb.length();
+        ssb.append(INTERRUPT_MARK);
+        ssb.setSpan(new android.text.style.ForegroundColorSpan(
+                        getColorCompat(R.color.text_secondary)),
+                start, ssb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ssb.setSpan(new android.text.style.RelativeSizeSpan(0.85f),
+                start, ssb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        bubble.setText(ssb);
     }
 
     /**
