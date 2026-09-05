@@ -1613,10 +1613,13 @@ public class ChatActivity extends Activity {
             String txt = bubble.getText() == null ? "" : bubble.getText().toString();
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
-                    .setItems(new String[]{"复制", "重新发送", "分享"}, (d, w) -> {
+                    // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
+                    .setItems(new String[]{"朗读", "复制", "重新发送", "分享"}, (d, w) -> {
                         if (w == 0) {
-                            copyToClipboard(txt);
+                            speakText(txt);
                         } else if (w == 1) {
+                            copyToClipboard(txt);
+                        } else if (w == 2) {
                             sendRaw(txt);
                         } else {
                             shareText(txt);
