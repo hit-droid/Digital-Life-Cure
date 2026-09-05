@@ -205,7 +205,12 @@ app/src/main/java/com/digitallife/ui/ChatActivity.java:btnClear:a11y
 ### 4.7 已发行的补丁要从队列清掉
 autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然有「已应用则跳过」判定，但仍应主动 `rm` 掉 queue 里对应的 `.patch`/`.meta`。
 
-### 4.8 其他小坑
+### 4.8 ⚠️ mkpatch.py 的 `sh().strip()` 会损坏补丁（已修复，2026-09-05）
+`sh()` 原来对所有输出 `strip()`，`finish()` 里的 `git diff` 尾部若含纯空格上下文行（`' '`）会被剥掉 → 补丁报 `corrupt patch`（077/078/082/083 四个补丁曾被误杀进 failed/）。
+**已修复**：`sh()` 增加 `strip` 参数，`finish()` 取 diff 用 `strip=False`。修好后把 failed/ 里能 `git apply --check` 通过的补丁直接捞回 queue，损坏的（如 083）在隔离区重写后重新入队。
+**教训**：生成补丁前永远 `git apply --check` 验证；`mkpatch.py finish` 之后养成再 check 一次的习惯。
+
+### 4.9 其他小坑
 - **zsh 会截断 commit message**：`\`` + `#` 组合会被截断，复杂 message 用 `git commit -F /tmp/xxx.txt`
 - **Edit 工具陷阱**：`oldString` 不能包含与保留代码完全相同的子串；`case MotionEvent.CANCEL` 不会被自动补 `ACTION_` 前缀
 - **模型不支持读图**：read 图片返回成功但模型侧报 `this model does not support image input`；`image_analysis` MCP 报 `insufficient balance`。截图问题只能请用户文字描述
@@ -215,21 +220,35 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 
 ## 5. 还没做完的事 / 下一步
 
-### 5.1 立即可做（队列里还有）
-- `051-multiline-input.patch`：**多行输入**已写好并验证（Enter 换行、自动增高至 5 行、发送走按钮），还在队列里等发行
+### 5.1 立即可做
+- 051 多行输入已发行（v1.59.0）；077 朗读 / 102 中断角标 / 103 模型组降级 / 104 web_fetch 已于 2026-09-05 全部入队发行（v1.102~v1.105）
+- failed/ 里若再有补丁，先 `git apply --check`，损坏的按 4.8 流程重写
 
 ### 5.2 流水线自身的改进方向
 - 生成器现在只做 3 种机械改进（a11y / allcaps / haptic），**会耗尽**。耗尽后 taskgen 每 10 分钟才轮询一次。可以考虑增加新的安全生成器（如 `setImportantForAutofill`、给 EditText 补 `setSingleLine` 提示等）
 - autoloop 目前对每个任务都等完整 CI（3~4 分钟），是吞吐瓶颈
 
-### 5.3 App 功能方向（有价值的候选，按推荐度排序）
+### 5.3 OpenMinis 对标（2026-09-05 用户指定参考对象）
+用户要求参考 GitHub 项目 **OpenMinis**（OpenMinis/OpenMinis，本地优先的设备端 AI Agent，iSH/PRoot 沙箱 + Skills + MCP + 模型组）。已落地的对标项：
+| 版本 | 对标能力 | 说明 |
+|---|---|---|
+| v1.104.0 | **模型组自动降级** | 同 scope 多配置构成降级链，网络错/401/403/408/409/429/5xx 自动切备用配置重发（ChatActivity.tryModelFailover） |
+| v1.105.0 | **web_fetch 网页抓取** | BuiltinTools 新工具，URL → 纯文本正文（去标签/折叠空白/截断） |
+
+后续可继续对标的（按可行性排序）：
+1. **定时任务调度器**：OpenMinis 支持一次性/周期任务；我们已有 Heartbeat/ProactiveEngine，可加用户可配置的 `schedule_task` 工具 + AlarmManager 唤醒
+2. **SKILL.md 技能包**：PluginManager 已有插件机制，可兼容加载声明式技能文件夹
+3. **备份恢复**：OpenMinis 有 .minisbak 加密导出；我们的 ChatStore/MemoryStore/Settings 可打包导出
+4. **真实 web_search**：当前 web_search 还是返回 Bing URL 的桩，可接搜索 API
+
+### 5.4 App 功能方向（其他候选，按推荐度排序）
 1. **消息时间戳**：气泡上没有时间显示，长按才知道
 2. **引用回复**：消息菜单现在只有「复制/重新生成/删除」
 3. **Markdown 表格增强**：当前是等宽文本对齐，可考虑真表格布局
 4. **会话列表空状态**：与聊天页空态一致的引导
 5. 表格单元格内的行内 Markdown（**加粗**等）目前不解析，只显示原始文本
 
-### 5.4 到期后
+### 5.5 到期后
 2026-09-07 三个脚本会自动退出。届时向用户汇报：完整发行记录见 `state/releases.csv`（格式 `版本|任务名|sha`）。
 
 ---
