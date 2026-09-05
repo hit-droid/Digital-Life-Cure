@@ -939,6 +939,11 @@ public class ChatActivity extends Activity {
 
     // ==================== v1.30.0：对话上下文预算裁剪 ====================
 
+    /** 跨配置故障转移：本次发送已尝试过的 profile id（防止循环切换） */
+    private final java.util.Set<String> failoverTriedIds = new java.util.HashSet<>();
+    /** 故障转移自动重发期间不清空已尝试集合 */
+    private boolean inFailoverResend = false;
+
     /** 上下文字符预算（约 6k 字符 ≈ 2~3k token），超出则丢弃较早消息 */
     private static final int CTX_BUDGET_CHARS = 6000;
     /** 无论多长，至少保留最近这么多条原文 */
@@ -982,6 +987,8 @@ public class ChatActivity extends Activity {
         // v1.42.0：记录原文，失败时可一键重试
         lastUserText = text;
         lastAttachContext = attachContext;
+        // 新的发送意图：清空故障转移记录（自动重发期间保留）
+        if (!inFailoverResend) failoverTriedIds.clear();
         ensureChatLlm();
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
             hideThinkingDot();
@@ -1074,6 +1081,8 @@ public class ChatActivity extends Activity {
             public void onError(String error) {
                 runOnUiThread(() -> {
                     if (consumeAbort()) return;
+                    // 模型组自动降级：当前配置不可用且有备用配置时，自动切换并重发
+                    if (tryModelFailover(error)) return;
                     hideThinkingDot();
                     appendAiBubble("出错了：" + error);
                     thinking = false;
@@ -1081,6 +1090,55 @@ public class ChatActivity extends Activity {
                 });
             }
         });
+    }
+
+    /** 错误是否值得换配置重试：网络层错误、鉴权/限流/服务端错误值得；400/404 等请求问题换了也一样 */
+    private boolean isFailoverable(String error) {
+        if (error == null) return false;
+        String e = error.toLowerCase(java.util.Locale.ROOT);
+        if (e.contains("http 4")) {
+            return e.contains("401") || e.contains("403") || e.contains("408")
+                    || e.contains("409") || e.contains("429");
+        }
+        // HTTP 5xx 或无 HTTP 码的网络错误（连接失败、超时、DNS 等）都值得切换
+        return true;
+    }
+
+    /**
+     * 参考 OpenMinis 的模型组设计：当前对话配置失败时，自动切换到同 scope 的
+     * 下一个可用配置并重发本条消息。每个配置每次发送最多尝试一次，全部失败才报错。
+     */
+    private boolean tryModelFailover(String error) {
+        if (isCare) return false; // 护理大脑由 CareAI 自行管理密钥池
+        if (lastUserText == null || lastUserText.isEmpty()) return false;
+        if (!isFailoverable(error)) return false;
+        ApiManager am = new ApiManager(this);
+        ApiProfile cur = am.getCurrent(ApiManager.SCOPE_CHAT);
+        if (cur != null) failoverTriedIds.add(cur.id);
+        ApiProfile next = null;
+        for (ApiProfile p : am.list(ApiManager.SCOPE_CHAT)) {
+            if (failoverTriedIds.contains(p.id)) continue;
+            if (p.baseUrl == null || p.baseUrl.isEmpty() || p.effectiveKeys().isEmpty()) continue;
+            next = p;
+            break;
+        }
+        if (next == null) return false;
+        failoverTriedIds.add(next.id);
+        am.setCurrent(ApiManager.SCOPE_CHAT, next.id);
+        String fromName = cur != null && cur.name != null && !cur.name.isEmpty()
+                ? cur.name : "当前模型";
+        String toName = next.name != null && !next.name.isEmpty()
+                ? next.name : (next.model != null ? next.model : "备用模型");
+        // 仅作界面提示，不写入聊天存储，避免污染后续上下文
+        appendAiBubble("「" + fromName + "」暂时不可用，已自动切换到备用模型「" + toName
+                + "」，正在重新回复…");
+        inFailoverResend = true;
+        try {
+            sendChatMessage(lastUserText, lastAttachContext);
+        } finally {
+            inFailoverResend = false;
+        }
+        return true;
     }
 
     private String chatSystemPrompt() {
