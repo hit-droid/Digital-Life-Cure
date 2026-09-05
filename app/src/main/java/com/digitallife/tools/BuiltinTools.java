@@ -200,6 +200,86 @@ public class BuiltinTools {
                 "获取最近文件列表（占位）",
                 new String[]{},
                 args -> "文件浏览功能请在主程序中打开「设置 → 通用」查看");
+
+        // ===== 网络类（1 个） =====
+        registerIfAbsent(tools, "web_fetch",
+                "抓取指定 URL 的网页并返回纯文本正文（自动去标签、截断，默认最多 4000 字）",
+                new String[]{"url"},
+                args -> fetchWebPage(args.optString("url", ""),
+                        args.optInt("max_chars", 4000)));
+    }
+
+    /**
+     * 抓取网页正文：HttpURLConnection 直连，跟随重定向，
+     * 去除 script/style/标签后折叠空白，返回纯文本。
+     * 工具在后台线程执行，允许网络 IO。
+     */
+    private static String fetchWebPage(String url, int maxChars) {
+        if (url == null || url.trim().isEmpty()) return "缺少 url 参数";
+        url = url.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://" + url;
+        }
+        if (maxChars <= 0) maxChars = 4000;
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Linux; Android) DigitalLife/1.0");
+            conn.setRequestProperty("Accept", "text/html,text/plain,*/*");
+            int code = conn.getResponseCode();
+            if (code >= 400) return "抓取失败：HTTP " + code;
+            String ctype = conn.getContentType();
+            if (ctype != null && !ctype.contains("text") && !ctype.contains("json")
+                    && !ctype.contains("xml")) {
+                return "不支持的内容类型：" + ctype;
+            }
+            java.io.InputStream in = conn.getInputStream();
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            int total = 0;
+            while ((n = in.read(chunk)) != -1 && total < 512 * 1024) {
+                buf.write(chunk, 0, n);
+                total += n;
+            }
+            in.close();
+            String html = new String(buf.toByteArray(), "UTF-8");
+            String text = htmlToText(html);
+            if (text.isEmpty()) return "页面为空或无法提取正文";
+            if (text.length() > maxChars) {
+                text = text.substring(0, maxChars) + "\n…（已截断，全文共 "
+                        + text.length() + " 字）";
+            }
+            return text;
+        } catch (Exception e) {
+            return "抓取失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /** 粗糙但够用的 HTML → 纯文本：去 script/style、去标签、折叠空白、解常见实体 */
+    private static String htmlToText(String html) {
+        if (html == null) return "";
+        String t = html;
+        t = t.replaceAll("(?is)<script[^>]*>.*?</script>", " ");
+        t = t.replaceAll("(?is)<style[^>]*>.*?</style>", " ");
+        t = t.replaceAll("(?is)<!--.*?-->", " ");
+        // 块级标签换成换行，保留段落结构
+        t = t.replaceAll("(?i)</(p|div|br|li|tr|h[1-6]|section|article|header|footer)[^>]*>", "\n");
+        t = t.replaceAll("(?is)<[^>]+>", " ");
+        t = t.replace("&nbsp;", " ").replace("&amp;", "&")
+                .replace("&lt;", "<").replace("&gt;", ">")
+                .replace("&quot;", "\"").replace("&#39;", "'");
+        // 折叠空白：行内多空格合一，多余空行合一
+        t = t.replaceAll("[ \\t\\x0B\\f\\r]+", " ");
+        t = t.replaceAll(" ?\\n ?", "\n");
+        t = t.replaceAll("\\n{3,}", "\n\n");
+        return t.trim();
     }
 
     private static void registerIfAbsent(Tools tools, String name, String desc,
