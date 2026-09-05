@@ -222,6 +222,29 @@ public class BuiltinTools {
                 new String[]{"id"},
                 args -> com.digitallife.brain.TaskScheduler.cancel(appContext,
                         args.optString("id", "")));
+
+        // ===== 备份恢复类（3 个，参考 OpenMinis 的备份导出） =====
+        registerIfAbsent(tools, "backup_data",
+                "备份全部本地数据（聊天记录/记忆/设置/模型配置/人设）到应用专属目录",
+                new String[]{},
+                args -> {
+                    String path = com.digitallife.util.BackupManager.exportBackup(appContext);
+                    return path != null ? "备份完成：" + path : "备份失败，请稍后再试";
+                });
+
+        registerIfAbsent(tools, "list_backups",
+                "列出已有的数据备份文件",
+                new String[]{},
+                args -> com.digitallife.util.BackupManager.describe(appContext));
+
+        registerIfAbsent(tools, "restore_data",
+                "从备份文件恢复数据（恢复前自动做一次安全备份；重启 App 后生效）",
+                new String[]{"filename"},
+                args -> {
+                    String err = com.digitallife.util.BackupManager.restoreBackup(
+                            appContext, args.optString("filename", ""));
+                    return err != null ? err : "恢复完成，重启 App 后生效";
+                });
     }
 
     /**
