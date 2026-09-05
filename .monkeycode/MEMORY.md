@@ -221,3 +221,13 @@ Entries discovered by the Agent during task execution should follow this format:
 - **绝不在 /workspace 里手动 git pull**：autoloop 每轮开头自己会 git pull --no-rebase（脚本 119 行），并在 push 失败后再 pull 重试（164 行），具备自愈能力；我手动 pull 反而会和它撞车，制造出 merge conflict 状态（已踩过一次）。记忆类改动改到隔离区提交，用 git pull --rebase 再 push
 - 已发行的补丁要从 queue 里清掉：autoloop 靠 --3way 应用，已落地的补丁会再次入队重试；虽然它有「已应用则跳过」的判定，但仍应主动 rm 掉 queue 里对应的 .patch/.meta，保持队列干净
 - CI 日志必须带 token 才能取：gh 默认报 "gh auth login"，正确姿势是 GH_TOKEN=$(cat /tmp/opencode/auto/token) gh run view <run_id> --log-failed，再从 error: 行定位编译错误
+
+[User Preferences]
+- Date: 2026-09-05
+- Context: 用户在指导智能体升级方向时明确提出（原话为字面意思，不要引申理解）
+- Category: Preference
+- Instructions:
+  - **交付标准：可出售的品质（商业级），功能与质量并重**——不允许为了凑任务量/刷版本号而产出低质代码；宁可少做，也只做能真正发行、能用的东西
+  - **方向：多智能体集成（multi-agent）**——智能体要往多智能体协作的形态做
+  - **决策纪律：不确定的、或不知道用户想要什么样的，宁可去 GitHub 搜索参考实现，也不要私自拍脑袋决定**——"deepseek harness" 这类用户给的参照目标，先去 GitHub 找真实项目读架构，再照着落地，不要自己臆想形态
+  - 用户反感：自我贬低式长篇检讨、答非所问、空谈不落地、为完成任务而乱做
