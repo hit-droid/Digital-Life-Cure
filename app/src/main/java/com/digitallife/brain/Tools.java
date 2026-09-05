@@ -25,6 +25,20 @@ public class Tools {
     }
 
     public Tools() {
+        registerCoreTools();
+    }
+
+    /**
+     * 纯宿主构造：不注册桌宠表现层工具（表情/动作/说话/移动）。
+     * 供对话大脑等没有桌宠场景使用，仅承载 BuiltinTools / MCP / 插件的工具注册。
+     */
+    public Tools(boolean coreOnly) {
+        if (!coreOnly) {
+            registerCoreTools();
+        }
+    }
+
+    private void registerCoreTools() {
         register("set_expression",
                 "设置角色的面部表情，用于表达当前情绪",
                 new String[]{"emotion", "intensity"},
