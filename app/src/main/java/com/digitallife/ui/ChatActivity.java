@@ -948,6 +948,18 @@ public class ChatActivity extends Activity {
     /** 故障转移自动重发期间不清空已尝试集合 */
     private boolean inFailoverResend = false;
 
+    // ==================== 对话大脑工具调用（v1.110.0） ====================
+
+    /** 对话大脑工具宿主：仅注册 BuiltinTools/MCP/插件工具，不含桌宠表现工具 */
+    private com.digitallife.brain.Tools chatTools;
+    /** 本轮消息链（含工具往返消息），工具循环续轮时原样重发 */
+    private final java.util.List<LLMClient.ChatMessage> chatLiveMsgs = new java.util.ArrayList<>();
+    /** 工具循环已续轮次数（防死循环上限） */
+    private int chatLoopRounds = 0;
+    private static final int MAX_TOOL_LOOP_ROUNDS = 6;
+    /** 聊天流式监听器（工具续轮时复用同一个） */
+    private LLMClient.StreamListener chatListener;
+
     /** 上下文字符预算（约 6k 字符 ≈ 2~3k token），超出则丢弃较早消息 */
     private static final int CTX_BUDGET_CHARS = 6000;
     /** 无论多长，至少保留最近这么多条原文 */
@@ -1029,13 +1041,65 @@ public class ChatActivity extends Activity {
                             ? text + "\n\n" + attachContext : text));
         }
 
+        // v1.110.0：本轮消息链交给工具循环续轮复用
+        chatLiveMsgs.clear();
+        chatLiveMsgs.addAll(msgs);
+        chatLoopRounds = 0;
+        startChatLoop();
+    }
+
+    /** v1.110.0：确保对话大脑工具宿主就绪（核心工具除外 + 扩展工具注入） */
+    private void ensureChatTools() {
+        if (chatTools != null) return;
+        chatTools = new com.digitallife.brain.Tools(true);
+        com.digitallife.tools.BuiltinTools.install(chatTools, getApplicationContext());
+    }
+
+    /** v1.110.0：发起/续轮一次聊天流式请求（带工具 schema 与工具描述） */
+    private void startChatLoop() {
+        ensureChatLlm();
+        if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
+            runOnUiThread(() -> {
+                hideThinkingDot();
+                thinking = false;
+                updateSendButton();
+            });
+            return;
+        }
+        ensureChatTools();
         JSONObject extra = new JSONObject();
         try {
             extra.put("system", chatSystemPrompt());
+            String td = chatTools.describe();
+            if (!td.trim().isEmpty()) {
+                extra.put("tools_desc",
+                        "你拥有以下工具，可以在必要时调用它们帮用户做事（如联网搜索、查记忆、"
+                                + "建定时任务、备份数据等）。先判断是否需要工具，不需要就直接回答；"
+                                + "需要就调用，调用后结合结果继续回答：\n" + td);
+            }
         } catch (Exception ignored) {
         }
+        if (chatListener == null) chatListener = createChatStreamListener();
+        llm.setTools(chatTools.toJsonArray());
+        llm.chatStream(chatLiveMsgs, extra, chatListener);
+    }
 
-        llm.chatStream(msgs, extra, new LLMClient.StreamListener() {
+    /** v1.110.0：同步执行一次工具调用（Tools.execute 的回调是同步的） */
+    private String execTool(String name, JSONObject args) {
+        final String[] res = new String[1];
+        final String[] err = new String[1];
+        chatTools.execute(name, args, (n, a, r, e) -> {
+            res[0] = r;
+            err[0] = e;
+        });
+        if (err[0] != null) return "工具执行失败：" + err[0];
+        String r = res[0];
+        return r != null && !r.isEmpty() ? r : "（工具无返回）";
+    }
+
+    /** v1.110.0：聊天流式监听器——工具往返 + 空文本自动续轮 */
+    private LLMClient.StreamListener createChatStreamListener() {
+        return new LLMClient.StreamListener() {
             @Override
             public void onDelta(String t) {
                 runOnUiThread(() -> {
@@ -1054,12 +1118,67 @@ public class ChatActivity extends Activity {
 
             @Override
             public void onToolCall(String name, JSONObject args, String toolCallId) {
+                if (name == null || name.isEmpty()) return;
+                JSONObject a = args != null ? args : new JSONObject();
+                runOnUiThread(() -> appendToolBubble(name, a.toString()));
+                // 在 LLM 线程同步执行工具；气泡先入队，结果后更新，主线程顺序保证
+                String result = null;
+                String error = null;
+                try {
+                    result = execTool(name, a);
+                } catch (Exception e) {
+                    error = com.digitallife.ui.UiKit.safeMsg(e);
+                }
+                final String res = result;
+                final String err = error;
+                runOnUiThread(() -> markLastToolResult(name, err != null ? false : true,
+                        err != null ? "执行失败：" + err : res));
+                // 拼 assistant(tool_calls) + tool(result) 到本轮消息链
+                String cleanId = (toolCallId == null || toolCallId.isEmpty())
+                        ? "call_" + name : toolCallId;
+                try {
+                    JSONArray tcs = new JSONArray();
+                    JSONObject tc = new JSONObject();
+                    tc.put("id", cleanId);
+                    tc.put("type", "function");
+                    JSONObject fn = new JSONObject();
+                    fn.put("name", name);
+                    fn.put("arguments", a.toString());
+                    tc.put("function", fn);
+                    tcs.put(tc);
+                    LLMClient.ChatMessage asstMsg = new LLMClient.ChatMessage("assistant", null);
+                    asstMsg.toolCalls = tcs;
+                    chatLiveMsgs.add(asstMsg);
+                    LLMClient.ChatMessage toolMsg =
+                            new LLMClient.ChatMessage("tool",
+                                    err != null ? "工具执行失败：" + err : res);
+                    toolMsg.toolCallId = cleanId;
+                    chatLiveMsgs.add(toolMsg);
+                } catch (Exception ignored) {
+                }
             }
 
             @Override
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
                     if (consumeAbort()) return;
+                    // 工具循环：本轮回调无文本且消息链末尾是 tool → 携带结果续轮
+                    boolean toolEnd = (fullText == null || fullText.isEmpty())
+                            && !chatLiveMsgs.isEmpty()
+                            && "tool".equals(chatLiveMsgs.get(chatLiveMsgs.size() - 1).role);
+                    if (toolEnd && chatLoopRounds < MAX_TOOL_LOOP_ROUNDS) {
+                        chatLoopRounds++;
+                        startChatLoop();
+                        return;
+                    }
+                    if (toolEnd) {
+                        // 超过轮次上限：仅界面提示，不落库
+                        appendAiBubble("（工具调用次数较多，已自动收尾，有需要可以再问我）");
+                        hideThinkingDot();
+                        thinking = false;
+                        updateSendButton();
+                        return;
+                    }
                     // v1.32.0：首轮完成后自动命名会话
                     maybeAutoTitle();
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
@@ -1093,7 +1212,7 @@ public class ChatActivity extends Activity {
                     updateSendButton();
                 });
             }
-        });
+        };
     }
 
     /** 错误是否值得换配置重试：网络层错误、鉴权/限流/服务端错误值得；400/404 等请求问题换了也一样 */
