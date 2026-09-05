@@ -32,15 +32,18 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.55.0，其中 v1.37.0 ~ v1.55.0 是本轮自治流水线产出的（17 个已发行版本）
-- **自动化本轮手工功能**（我亲自写的，非机械生成）：
-  | 版本 | 功能 | commit |
+- **已完成**：v1.0 → v1.55.0，其中 v1.37.0 ~ v1.55.0 是本轮自治流水线产出的（17 个已发行版本）；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮（我亲自写的）
+- **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
+  | 版本 | 功能 | 说明 |
   |---|---|---|
-  | v1.44.0 | 顶栏溢出菜单（搜索/导出/清空收进「⋯」） | `701849a` |
-  | v1.46.0 | 代码块点击复制 | `6f2dc36` |
-  | v1.50.0 | 新会话引导卡片（「试试这样问我」+ 3 枚快捷入口） | `a7c327d` |
-  | v1.51.0 | Markdown 表格渲染 | `e04507d` |
-- **待发行**：v1.47 多行输入（补丁 `051-multiline-input.patch` 已在队列，还没轮到）
+  | v1.104.0 | 模型组自动降级 | 同 scope 多配置降级链，网络错/401/403/408/409/429/5xx 自动切备用重发（`ChatActivity.tryModelFailover`） |
+  | v1.105.0 | web_fetch 网页抓取 | BuiltinTools 新工具，URL → 纯文本正文 |
+  | v1.106.0 | 真实 web_search | DDG lite HTML 解析，替代返回 Bing URL 的桩 |
+  | v1.107.0 | 定时任务调度器 | TaskScheduler + AlarmManager 非精确闹钟 + TaskReceiver（goAsync + 90s 唤醒锁）+ 3 工具 |
+  | v1.108.0 | 数据备份恢复 | BackupManager zip（databases/shared_prefs 白名单）+ 恢复前安全备份 + 路径穿越防护 + 3 工具 |
+  | v1.109.0 | SKILL.md 技能包 | SkillManager + assets 内置 deep_research/daily_brief + skill_summary/load_skill |
+  | v1.110.0 | **对话大脑工具调用循环** | ChatActivity 聊天模式启用 function calling：17 个工具全接入，assistant(tool_calls)+tool 拼消息链、空文本自动续轮（上限 6 轮防死循环）；Tools 支持 coreOnly 纯宿主构造（不含桌宠表情工具）；extra.tools_desc 引导模型决定何时调工具 |
+- **待发行**：无（queue 空，等 taskgen 机械补丁或新手工任务）
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
 ---
@@ -93,6 +96,7 @@ SUGGESTION_COOLDOWN_MS= 30s
 SUGGESTION_DEBOUNCE_MS= 1s
 REQ_AUDIO_PERMISSION  = 4001
 INPUT_MAX_LINES       = 5      输入框最大行数（v1.47）
+MAX_TOOL_LOOP_ROUNDS  = 6      对话大脑工具续轮上限（防死循环，v1.110.0）
 ```
 
 **关键字段**：`listContainer`（气泡容器）、`etInput`（输入框）、`curAssistantBubble`、`curToolBubble`、`speechRecognizer`、`tvTitleRef`、`chipScrollRef`、`suggestionBar`、`lastUserText` / `lastAttachContext`（失败重试用）
@@ -221,7 +225,7 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 ## 5. 还没做完的事 / 下一步
 
 ### 5.1 立即可做
-- 051 多行输入已发行（v1.59.0）；077 朗读 / 102 中断角标 / 103 模型组降级 / 104 web_fetch 已于 2026-09-05 全部入队发行（v1.102~v1.105）
+- 对话大脑工具循环已接入（v1.110.0），聊天模式可直接用全部 BuiltinTools（web_search/web_fetch/schedule_task/backup_data/skill_summary…）
 - failed/ 里若再有补丁，先 `git apply --check`，损坏的按 4.8 流程重写
 
 ### 5.2 流水线自身的改进方向
@@ -234,12 +238,24 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 |---|---|---|
 | v1.104.0 | **模型组自动降级** | 同 scope 多配置构成降级链，网络错/401/403/408/409/429/5xx 自动切备用配置重发（ChatActivity.tryModelFailover） |
 | v1.105.0 | **web_fetch 网页抓取** | BuiltinTools 新工具，URL → 纯文本正文（去标签/折叠空白/截断） |
+| v1.106.0 | **真实 web_search** | DDG lite HTML 解析（cleanDuckLink），替代返回 Bing URL 的桩 |
+| v1.107.0 | **定时任务调度器** | TaskScheduler/TaskReceiver + AlarmManager 非精确闹钟 + WAKE_LOCK；周期任务先排下次再执行防丢 |
+| v1.108.0 | **数据备份恢复** | BackupManager zip 导出/恢复，恢复前自动安全备份，路径穿越防护 |
+| v1.109.0 | **SKILL.md 技能包** | SkillManager 声明式技能；assets 内置 deep_research/daily_brief |
+| v1.110.0 | **对话大脑工具调用** | ChatActivity 聊天模式接入 function calling 循环（Tools coreOnly 宿主 + BuiltinTools 注入 + extra.tools_desc）——**OpenMinis 的核心 Agent 形态** |
+
+**工具循环实现要点**（v1.110.0，改对话发送逻辑前先看）：
+- `sendChatMessage` 只构建用户消息 → 存 `chatLiveMsgs` → `startChatLoop()`
+- `startChatLoop`：ensureChatLlm + ensureChatTools（new Tools(true) coreOnly + BuiltinTools.install）→ extra 注入 system + tools_desc → setTools(chatTools.toJsonArray()) → chatStream(chatLiveMsgs)
+- `createChatStreamListener` 单例复用：onToolCall 同步 execTool（LLM 线程）→ 气泡入队（主线程 handler 保序）→ assistant(tool_calls)+tool 消息拼入 chatLiveMsgs → onDone 判「空文本且末条 role=tool」自动续轮（chatLoopRounds < 6）
+- onError 的 tryModelFailover 仍走 sendChatMessage(lastUserText) 重发，工具链随消息重建自然丢弃
+- Tools.execute 回调为同步返回，execTool 用 1 元素数组捕获 res/err（lambda 只捕获 effectively final）
 
 后续可继续对标的（按可行性排序）：
-1. **定时任务调度器**：OpenMinis 支持一次性/周期任务；我们已有 Heartbeat/ProactiveEngine，可加用户可配置的 `schedule_task` 工具 + AlarmManager 唤醒
-2. **SKILL.md 技能包**：PluginManager 已有插件机制，可兼容加载声明式技能文件夹
-3. **备份恢复**：OpenMinis 有 .minisbak 加密导出；我们的 ChatStore/MemoryStore/Settings 可打包导出
-4. **真实 web_search**：当前 web_search 还是返回 Bing URL 的桩，可接搜索 API
+1. **对话记忆自主提取**：工具循环已通，可加「系统定期把聊天摘要写入 MemoryStore」的工具（现只靠 ChatStore 原文 + LLM 无工具记忆）
+2. **浏览器/App 自动化操作**：OpenMinis 有 browser-automation；Android 上等价物是辅助功能 AccessibilityService 点击，成本高
+3. **真 MCP 对接**：现只本地 17 工具，可支持远端 MCP server 的 SSE 流式调用
+4. **iSH/PRoot 沙箱**：在本机跑 shell，工程量大且 Android 权限受限
 
 ### 5.4 App 功能方向（其他候选，按推荐度排序）
 1. **消息时间戳**：气泡上没有时间显示，长按才知道
