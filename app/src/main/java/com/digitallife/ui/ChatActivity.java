@@ -141,6 +141,8 @@ public class ChatActivity extends Activity {
         chatStore = new ChatStore(this);
         // App 启动时重排定时任务闹钟（进程被杀/重启后 AlarmManager 注册会丢）
         com.digitallife.brain.TaskScheduler.rescheduleAll(this);
+        // 首次启动复制内置 SKILL.md 技能到 files/skills/
+        com.digitallife.skill.SkillManager.ensureDefaults(this);
         sessionKey = getIntent().getStringExtra(EXTRA_SESSION);
         title = getIntent().getStringExtra(EXTRA_TITLE);
         type = getIntent().getStringExtra(EXTRA_TYPE);

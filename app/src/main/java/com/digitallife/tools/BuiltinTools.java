@@ -245,6 +245,27 @@ public class BuiltinTools {
                             appContext, args.optString("filename", ""));
                     return err != null ? err : "恢复完成，重启 App 后生效";
                 });
+
+        // ===== 技能类（2 个，参考 OpenMinis 的 SKILL.md 技能系统） =====
+        registerIfAbsent(tools, "skill_summary",
+                "列出已安装的技能（含名称与适用场景描述），判断当前任务是否命中某个技能",
+                new String[]{},
+                args -> com.digitallife.skill.SkillManager.summarize(appContext));
+
+        registerIfAbsent(tools, "load_skill",
+                "加载指定技能的执行流程说明（skill_summary 命中后调用）",
+                new String[]{"name"},
+                args -> {
+                    com.digitallife.skill.SkillManager.Skill s =
+                            com.digitallife.skill.SkillManager.find(appContext,
+                                    args.optString("name", ""));
+                    if (s == null) return "未找到技能：" + args.optString("name", "")
+                            + "，可先用 skill_summary 查看可用技能";
+                    if (s.body.length() > 6000) {
+                        return s.body.substring(0, 6000) + "\n…（技能过长已截断）";
+                    }
+                    return s.body;
+                });
     }
 
     /**
