@@ -202,6 +202,26 @@ public class BuiltinTools {
                 new String[]{"url"},
                 args -> fetchWebPage(args.optString("url", ""),
                         args.optInt("max_chars", 4000)));
+
+        // ===== 定时任务类（3 个，参考 OpenMinis 调度器） =====
+        registerIfAbsent(tools, "schedule_task",
+                "创建定时任务：delay_minutes 分钟后自动执行 prompt 描述的任务；repeat_minutes>0 时按周期重复",
+                new String[]{"prompt", "delay_minutes"},
+                args -> com.digitallife.brain.TaskScheduler.schedule(appContext,
+                        args.optString("prompt", ""),
+                        args.optLong("delay_minutes", 0),
+                        args.optLong("repeat_minutes", 0)));
+
+        registerIfAbsent(tools, "list_tasks",
+                "列出当前所有定时任务（含任务 id、内容、触发时间）",
+                new String[]{},
+                args -> com.digitallife.brain.TaskScheduler.describe(appContext));
+
+        registerIfAbsent(tools, "cancel_task",
+                "按任务 id 取消定时任务",
+                new String[]{"id"},
+                args -> com.digitallife.brain.TaskScheduler.cancel(appContext,
+                        args.optString("id", "")));
     }
 
     /**

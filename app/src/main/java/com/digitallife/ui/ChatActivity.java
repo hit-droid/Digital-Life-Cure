@@ -139,6 +139,8 @@ public class ChatActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         chatStore = new ChatStore(this);
+        // App 启动时重排定时任务闹钟（进程被杀/重启后 AlarmManager 注册会丢）
+        com.digitallife.brain.TaskScheduler.rescheduleAll(this);
         sessionKey = getIntent().getStringExtra(EXTRA_SESSION);
         title = getIntent().getStringExtra(EXTRA_TITLE);
         type = getIntent().getStringExtra(EXTRA_TYPE);
