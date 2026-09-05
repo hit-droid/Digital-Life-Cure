@@ -231,3 +231,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - **方向：多智能体集成（multi-agent）**——智能体要往多智能体协作的形态做
   - **决策纪律：不确定的、或不知道用户想要什么样的，宁可去 GitHub 搜索参考实现，也不要私自拍脑袋决定**——"deepseek harness" 这类用户给的参照目标，先去 GitHub 找真实项目读架构，再照着落地，不要自己臆想形态
   - 用户反感：自我贬低式长篇检讨、答非所问、空谈不落地、为完成任务而乱做
+
+[Technical Learnings]
+- Date: 2026-09-05
+- Context: v1.111.0 多智能体补丁两次 CI 失败教训
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - **Java 局部变量 definite assignment 坑**：`if/else` 分支必须保证每个路径都赋值给后续使用的变量；最稳的做法是声明时直接初始化 `String x = null;`，不要依赖分支里赋值
+  - **mkpatch finish 后工作区会被 checkout 还原**（Tools/ChatActivity 改动被清空 + `git add -N` 的新文件变 0 字节）。如果下一步还要继续改，先 `git reset -q` 清索引前**先确认改动都已落到 patch**——否则改动会丢
+  - **失败 commit 的代码可从 GitHub 用 `git fetch <sha> && git checkout <ref> -- <file>` 恢复**——autoloop 的 `git reset --hard HEAD~2` 不会删对象，失败 commit 在 fetch 后仍可访问
+  - **`git diff` 默认不看 staged 和 untracked**：staged 改动用 `git diff --cached`，untracked 改动必须先 `git add -N` 再 diff。mkpatch finish 入队时若少了关键文件，会生成残缺 patch 二次失败
