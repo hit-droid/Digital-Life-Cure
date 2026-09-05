@@ -81,7 +81,11 @@ public class Tools {
                 });
     }
 
-    private void register(String name, String desc, String[] required, Executor ex) {
+    /**
+     * 注册一个工具。v1.111.0 起对外开放：对话大脑等宿主可注册自定义工具
+     * （如把子任务委派给子智能体的 delegate_task）。
+     */
+    public void register(String name, String desc, String[] required, Executor ex) {
         try {
             JSONObject schema = new JSONObject();
             JSONObject fn = new JSONObject();
@@ -172,6 +176,43 @@ public class Tools {
             }
         } catch (Exception ignored) {}
         return out;
+    }
+
+    /** v1.111.0：只导出白名单内的工具 schema（子智能体最小权限用） */
+    public org.json.JSONArray toJsonArray(java.util.Set<String> allow) {
+        org.json.JSONArray arr = new org.json.JSONArray();
+        if (allow == null) return arr;
+        for (JSONObject s : schemas) {
+            JSONObject fn = s.optJSONObject("function");
+            if (fn != null && allow.contains(fn.optString("name"))) arr.put(s);
+        }
+        org.json.JSONArray global = ToolRegistry.getInstance().toJsonArray();
+        for (int i = 0; i < global.length(); i++) {
+            JSONObject t = global.optJSONObject(i);
+            if (t == null) continue;
+            JSONObject fn = t.optJSONObject("function");
+            if (fn != null && allow.contains(fn.optString("name"))) arr.put(t);
+        }
+        return arr;
+    }
+
+    /**
+     * v1.111.0：同步执行工具并返回结果字符串。
+     * 复用 {@link #execute} 的完整流程（含 Hook Runner 前置/后置钩子），
+     * 行为与异步调用一致，仅是把回调结果转成返回值。
+     */
+    public String executeSync(String name, JSONObject args) {
+        final String[] res = new String[1];
+        final String[] err = new String[1];
+        execute(name, args, new Callback() {
+            @Override
+            public void onResult(String toolName, JSONObject a, String resultText, String error) {
+                res[0] = resultText;
+                err[0] = error;
+            }
+        });
+        if (err[0] != null) throw new RuntimeException(err[0]);
+        return res[0];
     }
 
     /** 执行一次工具调用（内置优先，未命中则委托全局注册表） */
