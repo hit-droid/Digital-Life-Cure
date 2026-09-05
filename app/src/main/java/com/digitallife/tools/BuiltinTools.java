@@ -128,15 +128,10 @@ public class BuiltinTools {
 
         // ===== 实用类（4 个） =====
         registerIfAbsent(tools, "web_search",
-                "联网搜索关键词（受网络可用性影响）",
+                "联网搜索关键词，返回结果标题/链接/摘要（可配合 web_fetch 读取全文）",
                 new String[]{"query"},
-                args -> {
-                    String q = args.optString("query", "");
-                    // 真实实现需要联网抓取，这里返回搜索建议 URL
-                    return "建议搜索关键词：" + q
-                            + "\n（可在浏览器中打开：https://www.bing.com/search?q="
-                            + java.net.URLEncoder.encode(q, "UTF-8") + "）";
-                });
+                args -> webSearch(args.optString("query", ""),
+                        args.optInt("count", 5)));
 
         registerIfAbsent(tools, "open_app",
                 "通过包名打开其他 App",
@@ -221,6 +216,83 @@ public class BuiltinTools {
             url = "https://" + url;
         }
         if (maxChars <= 0) maxChars = 4000;
+        try {
+            String text = htmlToText(httpGet(url));
+            if (text.isEmpty()) return "页面为空或无法提取正文";
+            if (text.length() > maxChars) {
+                text = text.substring(0, maxChars) + "\n…（已截断，全文共 "
+                        + text.length() + " 字）";
+            }
+            return text;
+        } catch (Exception e) {
+            return "抓取失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /**
+     * 真实联网搜索：抓取 DuckDuckGo lite 结果页并解析标题/链接/摘要。
+     * 无需 API key；解析失败时给出可 web_fetch 的兜底地址。
+     */
+    private static String webSearch(String query, int count) {
+        if (query == null || query.trim().isEmpty()) return "缺少 query 参数";
+        query = query.trim();
+        if (count <= 0 || count > 10) count = 5;
+        try {
+            String url = "https://lite.duckduckgo.com/lite/?q="
+                    + java.net.URLEncoder.encode(query, "UTF-8");
+            String html = httpGet(url);
+            // 结果链接：<a ... class='result-link' ...>标题</a>（属性顺序不固定，先取整标签再提 href）
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                            "<a\\b[^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>",
+                            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL)
+                    .matcher(html);
+            java.util.regex.Matcher sm = java.util.regex.Pattern.compile(
+                            "<td[^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</td>",
+                            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL)
+                    .matcher(html);
+            StringBuilder sb = new StringBuilder("搜索「" + query + "」的结果：");
+            int i = 0;
+            while (m.find() && i < count) {
+                String title = htmlToText(m.group(1));
+                String link = "";
+                java.util.regex.Matcher hm = java.util.regex.Pattern
+                        .compile("href=['\"]([^'\"]+)['\"]")
+                        .matcher(m.group(0));
+                if (hm.find()) link = cleanDuckLink(hm.group(1));
+                String snippet = sm.find() ? htmlToText(sm.group(1)) : "";
+                i++;
+                sb.append("\n\n").append(i).append(". ").append(title);
+                if (!link.isEmpty()) sb.append("\n   ").append(link);
+                if (!snippet.isEmpty()) sb.append("\n   ").append(snippet);
+            }
+            if (i == 0) {
+                return "未解析到搜索结果，可用 web_fetch 打开："
+                        + "https://www.bing.com/search?q="
+                        + java.net.URLEncoder.encode(query, "UTF-8");
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "搜索失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** DuckDuckGo 跳转链接解出真实地址（?uddg=<urlencoded>） */
+    private static String cleanDuckLink(String href) {
+        try {
+            int i = href.indexOf("uddg=");
+            if (i >= 0) {
+                String enc = href.substring(i + 5);
+                int amp = enc.indexOf('&');
+                if (amp >= 0) enc = enc.substring(0, amp);
+                return java.net.URLDecoder.decode(enc, "UTF-8");
+            }
+        } catch (Exception ignored) {
+        }
+        return href;
+    }
+
+    /** 共用 HTTP GET：15s 超时、跟随重定向、512KB 上限；非 2xx 或非文本内容抛异常 */
+    private static String httpGet(String url) throws Exception {
         java.net.HttpURLConnection conn = null;
         try {
             conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
@@ -231,11 +303,11 @@ public class BuiltinTools {
                     "Mozilla/5.0 (Linux; Android) DigitalLife/1.0");
             conn.setRequestProperty("Accept", "text/html,text/plain,*/*");
             int code = conn.getResponseCode();
-            if (code >= 400) return "抓取失败：HTTP " + code;
+            if (code >= 400) throw new java.io.IOException("HTTP " + code);
             String ctype = conn.getContentType();
             if (ctype != null && !ctype.contains("text") && !ctype.contains("json")
                     && !ctype.contains("xml")) {
-                return "不支持的内容类型：" + ctype;
+                throw new java.io.IOException("不支持的内容类型：" + ctype);
             }
             java.io.InputStream in = conn.getInputStream();
             java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
@@ -247,16 +319,7 @@ public class BuiltinTools {
                 total += n;
             }
             in.close();
-            String html = new String(buf.toByteArray(), "UTF-8");
-            String text = htmlToText(html);
-            if (text.isEmpty()) return "页面为空或无法提取正文";
-            if (text.length() > maxChars) {
-                text = text.substring(0, maxChars) + "\n…（已截断，全文共 "
-                        + text.length() + " 字）";
-            }
-            return text;
-        } catch (Exception e) {
-            return "抓取失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+            return new String(buf.toByteArray(), "UTF-8");
         } finally {
             if (conn != null) conn.disconnect();
         }
