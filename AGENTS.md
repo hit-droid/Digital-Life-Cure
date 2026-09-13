@@ -32,7 +32,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.55.0，其中 v1.37.0 ~ v1.55.0 是本轮自治流水线产出的（17 个已发行版本）；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮（我亲自写的）
+- **已完成**：v1.0 → v1.112.0；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改为 DeepSeek Harness
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -43,6 +43,7 @@
   | v1.108.0 | 数据备份恢复 | BackupManager zip（databases/shared_prefs 白名单）+ 恢复前安全备份 + 路径穿越防护 + 3 工具 |
   | v1.109.0 | SKILL.md 技能包 | SkillManager + assets 内置 deep_research/daily_brief + skill_summary/load_skill |
   | v1.110.0 | **对话大脑工具调用循环** | ChatActivity 聊天模式启用 function calling：17 个工具全接入，assistant(tool_calls)+tool 拼消息链、空文本自动续轮（上限 6 轮防死循环）；Tools 支持 coreOnly 纯宿主构造（不含桌宠表情工具）；extra.tools_desc 引导模型决定何时调工具 |
+  | v1.112.0 | **DeepSeek Harness** | 对话大脑改为 everything-is-a-plugin：`com.digitallife.harness`（session log / prompt assembler / tool pipeline / agent-loop / guard），ChatActivity.startChatLoop 走 `DeepSeekHarness.startTurn` |
 - **待发行**：无（queue 空，等 taskgen 机械补丁或新手工任务）
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 

@@ -83,7 +83,7 @@ public class AgentConsoleActivity extends Activity {
         topBar.addView(title, tlp);
 
         TextView stat = new TextView(this);
-        stat.setText("v1.24.0");
+        stat.setText("v1.112.0");
         stat.setTextSize(12f);
         stat.setTextColor(android.graphics.Color.WHITE);
         topBar.addView(stat);
@@ -230,6 +230,23 @@ public class AgentConsoleActivity extends Activity {
             act.append("  预钩子: ").append(preCnt).append(" 个\n");
             act.append("  后钩子: ").append(postCnt).append(" 个\n");
             act.append("  错误钩子: ").append(errCnt).append(" 个\n");
+            com.digitallife.harness.DeepSeekHarness dsh =
+                    com.digitallife.harness.DeepSeekHarness.current();
+            act.append("\n● DeepSeek Harness\n");
+            if (dsh == null) {
+                act.append("  未启动（进入对话页后加载）\n");
+            } else {
+                act.append("  状态: ").append(dsh.isBusy() ? "轮次进行中" : "待机").append("\n");
+                java.util.List<String> ids = dsh.pluginIds();
+                act.append("  插件: ").append(ids.size()).append(" 个\n");
+                for (String id : ids) {
+                    act.append("    - ").append(id).append("\n");
+                }
+                com.digitallife.harness.SessionLog slog = dsh.session();
+                int ev = slog == null ? 0 : slog.all().size();
+                act.append("  会话事件: ").append(ev).append("\n");
+                if (dsh.isBusy()) activityScore++;
+            }
             txtActivity.setText(act.toString());
 
             // 2) 工具日志
