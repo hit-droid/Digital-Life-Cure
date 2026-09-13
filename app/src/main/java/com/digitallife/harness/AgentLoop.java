@@ -77,7 +77,7 @@ public final class AgentLoop {
         log.append(SessionEvent.STEP_START, stepMeta);
         events.waterfall(EVENT_REQUEST, agent);
 
-        LLMClient llm = agent.llm;
+        LlmAdapter llm = agent.llm;
         if (llm == null) {
             if (agent.listener != null) agent.listener.onError("没有可用的模型配置");
             log.append(SessionEvent.STEP_END, stepMeta);
