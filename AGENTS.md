@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-08-31（版本 v1.55.0，已发行 17 个版本）
+> 最后更新：2026-09-13（版本 v1.113.0，Harness 内核化）
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.112.0；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改为 DeepSeek Harness
+- **已完成**：v1.0 → v1.113.0；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改为 DeepSeek Harness；v1.113.0 Harness 内核化（seam 拆分 + 85 单测 + 大脑收敛）
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -44,6 +44,7 @@
   | v1.109.0 | SKILL.md 技能包 | SkillManager + assets 内置 deep_research/daily_brief + skill_summary/load_skill |
   | v1.110.0 | **对话大脑工具调用循环** | ChatActivity 聊天模式启用 function calling：17 个工具全接入，assistant(tool_calls)+tool 拼消息链、空文本自动续轮（上限 6 轮防死循环）；Tools 支持 coreOnly 纯宿主构造（不含桌宠表情工具）；extra.tools_desc 引导模型决定何时调工具 |
   | v1.112.0 | **DeepSeek Harness** | 对话大脑改为 everything-is-a-plugin：`com.digitallife.harness`（session log / prompt assembler / tool pipeline / agent-loop / guard），ChatActivity.startChatLoop 走 `DeepSeekHarness.startTurn` |
+  | v1.113.0 | **Harness 内核化** | LLM seam（`LlmAdapter`）使循环可脚本化驱动；85 个内核单测；子智能体改独立 harness 树 + `SubagentPreset`/`ScopedTools`（删 `AgentTeam`）；CareAI 收敛并新增 `CareToolHost`；AICore 工具走 `ToolPipeline`（修回断掉的 `ToolUsageLog`）；删死代码 `AgentBrain` |
 - **待发行**：无（queue 空，等 taskgen 机械补丁或新手工任务）
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
@@ -70,8 +71,29 @@
 │   ├── watchdog.sh                 ← 看门狗自愈
 │   ├── genpatch.py                 ← 机械改进补丁生成器
 │   └── mkpatch.py                  ← 安全补丁生成助手（隔离区工作流）
+├── tools/local-build.sh            ← 【v1.113.0】本地构建（免 Android Studio）
+├── app/src/test/java/              ← 【v1.113.0】harness 内核单测（85 个）
 └── AGENTS.md                       ← 本文件
 ```
+
+### 2.1.1 本地构建环境（v1.113.0 起可用）
+
+本容器原本没有 JDK / Android SDK，只能推 CI 验证（一轮约 3 分钟）。现已装好并固化为脚本：
+
+```sh
+./tools/local-build.sh                # 编译 Java（增量约 10 秒）
+./tools/local-build.sh testDebugUnitTest   # 跑 85 个单测
+./tools/local-build.sh assembleDebug       # 出 APK
+```
+
+| 组件 | 路径 |
+|---|---|
+| JDK 17 | `/tmp/opencode/toolchain/jdk-17.0.20.1+1` |
+| Android SDK | `/opt/android-sdk`（platform-34 / build-tools-34.0.0 / NDK 26.1.10909125） |
+| Gradle | 8.7（wrapper 已缓存） |
+
+**注意**：`/tmp/opencode/toolchain` 在重启后会消失，届时重跑第 1 步（见 CHANGELOG v1.113.0）或重装 JDK。
+`app/release-key.p12` 本地需自行生成（CI 里由 workflow 自动生成，`.gitignore` 已忽略 `*.p12`），否则 `assembleDebug` 会报 `validateSigningDebug` 失败。
 
 ### 2.2 最关键的几个源文件
 

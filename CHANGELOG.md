@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.113.0 (2026-09-13)
+
+### Harness 内核化：seam 拆分、单测覆盖、大脑收敛
+
+- **LLM seam**：新增 `LlmAdapter`（Service Definition），`LLMClient` 实现之，`AgentLoop` 只依赖接口——循环首次可在无网络下被脚本化 provider 驱动。
+- **85 个内核单测**：覆盖会话投影（含 tool_calls 配对、system 截断说明）、waterfall 委托与短路语义、`generation` 防过期回调串轮、step 上限收尾、取消路径、工具把关与审计。`testOptions.unitTests.returnDefaultValues` + `junit`/`org.json` 依赖。
+- **工具装配插件化**：`delegate_task` 装配移入 `SubagentRunner.installDelegateTool`，ChatActivity 不再手工拼工具循环。
+- **子智能体改为真 seam**：从裸 `LLMClient` + `CountDownLatch` 改为独立 harness 实例（`bootIsolated`，不覆盖主对话引用），共用同一套 plugin 树，差异只在 `SubagentPreset`（提示词 + 工具白名单 + 步数上限）；新增 `ScopedTools` 在 schema 与执行两侧同时收敛权限。删除已被替代的 `AgentTeam`。
+- **护理大脑收敛**：`CareAI.doConverse` 改由 harness 投影历史、驱动 step；新增 `CareToolHost` 适配 `CareTools`（含 `play_motion`）。保留护理侧两处行为——结果成败仍用 `isToolResultOk` 判定（`CareTools` 内部吞异常并返回「❌ …」文本），工具往返补写回内存历史。
+- **修复工具日志断流**：`ToolUsageLog` 原先由 `AgentBrain` 的 post hook 写入，该文件删除后日志彻底断流，现由 `AICore` 的 `ToolPipeline` 接回；补测试锁住「被拒绝的调用也要留审计记录」。
+- **删除死代码**：`AgentBrain` 全仓库无实例化点（`AICore` 已取代）。
+- **本地构建环境**：新增 `tools/local-build.sh` 固化 JDK/SDK 路径，`gradle.properties` 按容器内存下调堆（1024m + 单 worker），可在无 Android Studio 环境下编译、跑测试、出 APK。
+
 ## v1.112.0 (2026-09-13)
 
 ### DeepSeek Harness（一切皆插件）
