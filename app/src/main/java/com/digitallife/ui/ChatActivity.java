@@ -966,8 +966,8 @@ public class ChatActivity extends Activity {
     private com.digitallife.harness.DeepSeekHarness harness;
     /** v1.111.0：当前正在运行的子智能体客户端（用户点停止时一并取消） */
     private LLMClient subAgentLlm;
-    /** v1.111.0：子智能体协作过程的可视化（严格成对的「建气泡→回填」） */
-    private final com.digitallife.brain.AgentTeam.ProgressListener subAgentProgress =
+    /** 子智能体协作过程的可视化（严格成对的「建气泡→回填」） */
+    private final com.digitallife.harness.subagent.SubagentRunner.ProgressListener subAgentProgress =
             (agent, phase, detail) -> runOnUiThread(() -> {
                 if ("tool".equals(phase)) {
                     appendToolBubble(agent + " · " + detail.split(" ")[0],
@@ -1064,42 +1064,13 @@ public class ChatActivity extends Activity {
         startChatLoop();
     }
 
-    /** v1.110.0：确保对话大脑工具宿主就绪（核心工具除外 + 扩展工具注入） */
+    /** 确保对话大脑工具宿主就绪：BuiltinTools + delegate_task（子智能体 seam） */
     private void ensureChatTools() {
         if (chatTools != null) return;
         chatTools = new com.digitallife.brain.Tools(true);
         com.digitallife.tools.BuiltinTools.install(chatTools, getApplicationContext());
-        registerDelegateTool();
-    }
-
-    /**
-     * v1.111.0：注册 delegate_task——主智能体把子任务委派给专职子智能体。
-     * 子智能体独立上下文、最小工具集，只回传结论，过程中的大量检索不污染主对话。
-     */
-    private void registerDelegateTool() {
-        StringBuilder desc = new StringBuilder(
-                "把一个完整的子任务交给专职子智能体去做，它会独立完成后把结论回传给你。"
-                        + "适合步骤多、需要多次工具调用的任务（如查资料要搜很多次、要连查带抓）。"
-                        + "简单的事（一两次工具调用就能完成）自己直接做，不要委派。可选子智能体：");
-        for (com.digitallife.brain.AgentTeam.SubAgent a
-                : com.digitallife.brain.AgentTeam.all()) {
-            desc.append("\n- ").append(a.name).append("：").append(a.description);
-        }
-        chatTools.register("delegate_task", desc.toString(),
-                new String[]{"agent", "task"},
-                args -> {
-                    String agent = args.optString("agent", "");
-                    String task = args.optString("task", "");
-                    // 子智能体会占用 curToolBubble，先留住自己这张卡片
-                    final android.widget.TextView mine = curToolBubble;
-                    com.digitallife.brain.AgentTeam.Result r =
-                            com.digitallife.brain.AgentTeam.run(agent, task, chatTools,
-                                    this::newSubAgentLlm, subAgentProgress);
-                    // 子智能体的界面事件都排在前面，这里恢复自己的卡片再回填结论
-                    runOnUiThread(() -> curToolBubble = mine);
-                    if (!r.ok()) throw new RuntimeException(r.error);
-                    return r.text;
-                });
+        com.digitallife.harness.subagent.SubagentRunner.installDelegateTool(
+                chatTools, this::newSubAgentLlm, subAgentProgress);
     }
 
     /** 子智能体专用模型客户端：与主对话同配置，但独立实例（互不干扰 tools/线程池） */

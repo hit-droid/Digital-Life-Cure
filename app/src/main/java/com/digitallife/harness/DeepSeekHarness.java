@@ -40,6 +40,21 @@ public final class DeepSeekHarness {
         return h;
     }
 
+    /**
+     * 挂载一棵不注册为 current 的独立 plugin 树（子智能体用）。
+     * 子智能体有自己的 session log，但不应覆盖主对话在控制台里的引用。
+     */
+    public static DeepSeekHarness bootIsolated(Context app) {
+        DeepSeekHarness h = new DeepSeekHarness();
+        h.mount(new SessionPlugin());
+        h.mount(new SystemPromptPlugin());
+        h.mount(new ToolsPlugin());
+        h.mount(new AgentLoopPlugin());
+        h.mount(new GuardPlugin(app));
+        h.activateAll();
+        return h;
+    }
+
     public static DeepSeekHarness current() {
         return current;
     }
@@ -126,13 +141,23 @@ public final class DeepSeekHarness {
     public AgentHandle startTurn(LlmAdapter llm, Tools host, String systemPrompt,
                                  List<LLMClient.ChatMessage> history,
                                  AgentHandle.Listener listener) {
+        return startTurn(llm, host, systemPrompt, history, listener, MAX_STEPS);
+    }
+
+    /**
+     * @param maxSteps 本轮最多允许的 step 数；必须在此处传入，因为首个 step
+     *                 会在本方法内同步开始并读取该值。
+     */
+    public AgentHandle startTurn(LlmAdapter llm, Tools host, String systemPrompt,
+                                 List<LLMClient.ChatMessage> history,
+                                 AgentHandle.Listener listener, int maxSteps) {
         cancel();
         bind(llm, host, systemPrompt);
         seedHistory(history);
         live = new AgentHandle("agent-" + (++agentSeq), ctx);
         live.llm = llm;
         live.listener = listener;
-        live.maxSteps = MAX_STEPS;
+        live.maxSteps = maxSteps > 0 ? maxSteps : MAX_STEPS;
         live.running = true;
         AgentLoop loop = loop();
         if (loop != null) loop.runTurn(live, null);
