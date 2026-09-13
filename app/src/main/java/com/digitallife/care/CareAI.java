@@ -89,6 +89,10 @@ public class CareAI {
     private volatile String configFingerprint = "";
     /** 对话进行中时收到新用户消息则置 true；当前轮 LLM 完成后会自动接续，避免消息丢失 */
     private final AtomicBoolean pendingMessage = new AtomicBoolean(false);
+    /** 护理大脑的 harness 实例：session log 由 agent-loop 投影，工具走 ToolPipeline */
+    private com.digitallife.harness.DeepSeekHarness harness;
+    /** 护理工具到 harness Tools seam 的适配器 */
+    private CareToolHost toolHost;
 
     /** 护理大脑对话历史持久化会话 key */
     private static final String SESSION_CARE = "care";
@@ -423,108 +427,132 @@ public class CareAI {
             return;
         }
 
-        // 构建消息列表
-        List<LLMClient.ChatMessage> messages = new ArrayList<>();
-        messages.add(new LLMClient.ChatMessage("system", SYSTEM_PROMPT));
+        if (harness == null) {
+            harness = com.digitallife.harness.DeepSeekHarness.bootIsolated(null);
+        }
+        if (toolHost == null) {
+            toolHost = new CareToolHost(executor.getTools(), executor);
+        }
+        // 交给 harness：session log 投影历史，agent-loop 驱动 step 与工具往返
+        harness.startTurn(llm, toolHost, SYSTEM_PROMPT, snapshotHistory(),
+                new com.digitallife.harness.AgentHandle.Listener() {
+                    @Override
+                    public void onDelta(String text) {
+                        if (gen != generation) return;
+                        postDelta(text);
+                    }
+
+                    @Override
+                    public void onToolCall(String name, JSONObject args, String toolCallId) {
+                        if (gen != generation) return;
+                        postToolCall(name, args, toolCallId);
+                        appendToolCallToHistory(name, args, toolCallId);
+                    }
+
+                    @Override
+                    public void onToolResult(String name, boolean ok, String result) {
+                        if (gen != generation) return;
+                        // CareTools 内部吞掉异常并以「❌ …」文本返回，因此不能只信 harness 的
+                        // 异常判定，必须沿用护理侧的结果文本判定，避免把失败显示成成功
+                        boolean okText = isToolResultOk(result);
+                        postToolResult(name, okText, result);
+                        appendToolResultToHistory(result);
+                        // 工具执行成功后，通知执行层（AI-2）落地：模型/动作变更实时生效
+                        notifyExecutorResult(name, new JSONObject(), result);
+                    }
+
+                    @Override
+                    public void onDone(String fullText) {
+                        if (gen != generation) return;
+                        if (fullText != null && !fullText.isEmpty()) {
+                            history.add(new LLMClient.ChatMessage("assistant", fullText));
+                            persistHistory();
+                            postDone(fullText);
+                        }
+                        // 是否继续对话：
+                        // 1) 纯文本回复 → 默认结束，仅当有用户排队的新消息时才接续（防死循环）
+                        // 2) 无文本但调用了工具 → harness 已自动续 step，此处无需再接续
+                        boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
+                        if (hasPendingUser) {
+                            doConverse();
+                        } else {
+                            if (gen == generation) running.set(false);
+                        }
+                    }
+
+                    @Override
+                    public void onError(String error) {
+                        if (gen != generation) return;
+                        postError(error);
+                        // 出错后也要尝试接续排队的新消息，避免用户输入被吞
+                        boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
+                        if (hasPendingUser) {
+                            doConverse();
+                        } else {
+                            if (gen == generation) running.set(false);
+                        }
+                    }
+
+                    @Override
+                    public void onTurn(String phase) {
+                    }
+                });
+    }
+
+    /**
+     * 把内存历史投影成 harness 的种子消息。
+     * system 角色在 harness 里由 extra.system 承载，因此这里跳过，
+     * 避免同一段提示词既进消息链又进 system 字段。
+     */
+    private List<LLMClient.ChatMessage> snapshotHistory() {
+        List<LLMClient.ChatMessage> out = new ArrayList<>();
         int start = Math.max(0, history.size() - 30);
         for (int i = start; i < history.size(); i++) {
-            messages.add(history.get(i));
+            LLMClient.ChatMessage m = history.get(i);
+            if (m == null || "system".equals(m.role)) continue;
+            out.add(m);
         }
-
-        llm.chatStream(messages, null, new LLMClient.StreamListener() {
-            @Override
-            public void onDelta(String text) {
-                postDelta(text);
-            }
-
-            @Override
-            public void onToolCall(String name, JSONObject args, String toolCallId) {
-                postToolCall(name, args, toolCallId);
-                try {
-                    String result;
-                    if ("play_motion".equals(name)) {
-                        // 实时播放动作：走执行层，桌宠立即响应
-                        String action = args.optString("action", "");
-                        executor.playAction(action);
-                        result = "已在桌宠上播放动作: " + action;
-                    } else {
-                        result = executor.getTools().execute(name, args);
-                        if (result.length() > 2000) {
-                            result = result.substring(0, 2000) + "\n...（结果已截断）";
-                        }
-                        // 工具执行成功后，通知执行层（AI-2）落地：模型/动作变更实时生效
-                        notifyExecutorResult(name, args, result);
-                    }
-                    // 结果实时反馈到 UI，避免用户干等
-                    postToolResult(name, isToolResultOk(result), result);
-                    // 添加 assistant 消息（含 tool_calls）到历史
-                    JSONArray tcs = new JSONArray();
-                    JSONObject tc = new JSONObject();
-                    tc.put("id", toolCallId);
-                    tc.put("type", "function");
-                    JSONObject fn = new JSONObject();
-                    fn.put("name", name);
-                    fn.put("arguments", args.toString());
-                    tc.put("function", fn);
-                    tcs.put(tc);
-                    LLMClient.ChatMessage asstMsg = new LLMClient.ChatMessage("assistant", null);
-                    asstMsg.toolCalls = tcs;
-                    history.add(asstMsg);
-                    // 添加 tool 结果消息
-                    LLMClient.ChatMessage toolMsg = new LLMClient.ChatMessage("tool", result);
-                    toolMsg.toolCallId = toolCallId;
-                    history.add(toolMsg);
-                    persistHistory();
-                } catch (Exception e) {
-                    postToolResult(name, false, "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e));
-                    history.add(new LLMClient.ChatMessage("tool", "工具执行失败: " + com.digitallife.ui.UiKit.safeMsg(e)));
-                }
-            }
-
-            @Override
-            public void onDone(String fullText) {
-                if (!fullText.isEmpty()) {
-                    history.add(new LLMClient.ChatMessage("assistant", fullText));
-                    persistHistory();
-                    postDone(fullText);
-                }
-                // 是否继续对话：
-                // 1) 纯文本回复 → 默认结束，仅当有用户排队的新消息时才接续（防死循环）
-                // 2) 无文本但调用了工具 → 继续让 LLM 看工具结果
-                boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
-                boolean shouldContinue = false;
-                if (fullText.isEmpty()) {
-                    if (!history.isEmpty() && "tool".equals(history.get(history.size() - 1).role)) {
-                        shouldContinue = true;
-                    }
-                } else if (hasPendingUser) {
-                    shouldContinue = true;
-                }
-                if (shouldContinue) {
-                    doConverse();
-                } else {
-                    if (gen == generation) running.set(false);
-                }
-            }
-
-            @Override
-            public void onError(String error) {
-                postError(error);
-                // 出错后也要尝试接续排队的新消息，避免用户输入被吞
-                boolean hasPendingUser = pendingMessage.compareAndSet(true, false);
-                if (hasPendingUser && gen == generation) {
-                    doConverse();
-                } else {
-                    if (gen == generation) running.set(false);
-                }
-            }
-        });
+        return out;
     }
+
+    /** 工具往返也要进内存历史，否则重启后丢失（harness 的 session log 是每轮重建的） */
+    private void appendToolCallToHistory(String name, JSONObject args, String toolCallId) {
+        try {
+            String id = (toolCallId == null || toolCallId.isEmpty())
+                    ? "call_" + name : toolCallId;
+            JSONArray tcs = new JSONArray();
+            JSONObject tc = new JSONObject();
+            tc.put("id", id);
+            tc.put("type", "function");
+            JSONObject fn = new JSONObject();
+            fn.put("name", name);
+            fn.put("arguments", args != null ? args.toString() : "{}");
+            tc.put("function", fn);
+            tcs.put(tc);
+            LLMClient.ChatMessage asst = new LLMClient.ChatMessage("assistant", null);
+            asst.toolCalls = tcs;
+            history.add(asst);
+            pendingToolCallId = id;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void appendToolResultToHistory(String result) {
+        LLMClient.ChatMessage tool = new LLMClient.ChatMessage("tool",
+                result == null ? "（工具无返回）" : result);
+        tool.toolCallId = pendingToolCallId;
+        history.add(tool);
+        persistHistory();
+    }
+
+    /** 最近一次工具调用的 id，供 tool 结果消息配对 */
+    private String pendingToolCallId;
 
     public void cancel() {
         cancelled = true;
         generation++;
         running.set(false);
+        if (harness != null) harness.cancel();
         if (llm != null) llm.cancel();
     }
 
