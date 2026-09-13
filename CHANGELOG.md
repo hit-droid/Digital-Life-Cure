@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.114.0 (2026-09-13)
+
+### 真机前自动化测试体系（Robolectric）+ 低版本兼容修复
+
+- **Robolectric 接入**：容器无 `/dev/kvm`（Firecracker microVM 内无 vmx/svm），模拟器不可用，改用 Robolectric 在 JVM 上运行真实 Android 框架。探针实测 `SDK_INT=33`、`getPackageName()` 返回真实包名，确认非 `returnDefaultValues` 桩。
+- **单测 85 → 110**：新增 `CareToolHostTest`（护理工具 seam 的 schema/截断/流水线接线）与 `ToolGovernanceTest`（禁用短路、审计落盘、参数留存、边界值）。
+- **修 6 处 minSdk 21 崩溃点**（lint `NewApi`，真机低版本会 `NoSuchMethodError`）：`ByteArrayOutputStream#toString(Charset)`（需 33）、`Map#getOrDefault` / `List#sort` / `ArrayList#sort` / `Collection#removeIf`（需 24）、`AlarmManager#setAndAllowWhileIdle`（需 23）。
+- **修 20 处 locale 敏感调用**：`toLowerCase()` / `toUpperCase()` / `String.format` 补 `Locale.ROOT`，避免土耳其语等区域下工具名与关键词匹配失效。lint `DefaultLocale` 警告 20 → 0。
+- **修一处静默失败**：`play_motion` 在执行层不可用时返回成功，模型会以为动作已播放、后续决策基于假前提，改为显式报错。
+- **策略装配收敛**：新增 `ToolGovernance.install()` 统一装配禁用策略与使用日志，AICore 不再内联这段逻辑。
+- **自动验证脚本**：`tools/verify.sh` 一条命令跑完编译 + 单测 + lint + APK（约 41 秒），失败即打印详情中止。
+
 ## v1.113.0 (2026-09-13)
 
 ### Harness 内核化：seam 拆分、单测覆盖、大脑收敛
