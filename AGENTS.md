@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-09-13（版本 v1.113.0，Harness 内核化）
+> 最后更新：2026-09-13（版本 v1.114.0，自动化测试体系）
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.113.0；v1.102.0 ~ v1.110.0 是 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改为 DeepSeek Harness；v1.113.0 Harness 内核化（seam 拆分 + 85 单测 + 大脑收敛）
+- **已完成**：v1.0 → v1.114.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -45,6 +45,7 @@
   | v1.110.0 | **对话大脑工具调用循环** | ChatActivity 聊天模式启用 function calling：17 个工具全接入，assistant(tool_calls)+tool 拼消息链、空文本自动续轮（上限 6 轮防死循环）；Tools 支持 coreOnly 纯宿主构造（不含桌宠表情工具）；extra.tools_desc 引导模型决定何时调工具 |
   | v1.112.0 | **DeepSeek Harness** | 对话大脑改为 everything-is-a-plugin：`com.digitallife.harness`（session log / prompt assembler / tool pipeline / agent-loop / guard），ChatActivity.startChatLoop 走 `DeepSeekHarness.startTurn` |
   | v1.113.0 | **Harness 内核化** | LLM seam（`LlmAdapter`）使循环可脚本化驱动；85 个内核单测；子智能体改独立 harness 树 + `SubagentPreset`/`ScopedTools`（删 `AgentTeam`）；CareAI 收敛并新增 `CareToolHost`；AICore 工具走 `ToolPipeline`（修回断掉的 `ToolUsageLog`）；删死代码 `AgentBrain` |
+  | v1.114.0 | **测试体系 + 兼容修复** | Robolectric 接入（110 单测）；修 6 处 minSdk 21 崩溃点与 20 处 locale 敏感调用；`ToolGovernance` 统一装配策略；`tools/verify.sh` 一条命令全量验证 |
 - **待发行**：无（queue 空，等 taskgen 机械补丁或新手工任务）
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
@@ -94,6 +95,18 @@
 
 **注意**：`/tmp/opencode/toolchain` 在重启后会消失，届时重跑第 1 步（见 CHANGELOG v1.113.0）或重装 JDK。
 `app/release-key.p12` 本地需自行生成（CI 里由 workflow 自动生成，`.gitignore` 已忽略 `*.p12`），否则 `assembleDebug` 会报 `validateSigningDebug` 失败。
+
+#### 测试能力边界（v1.114.0）
+
+| 能做 | 不能做 |
+|---|---|
+| 编译、单测、lint、出 APK（`tools/verify.sh`，约 41 秒） | **真机/模拟器运行测试** |
+| Robolectric 跑真实 Android 框架（Activity/Context/SharedPreferences 等） | 依赖 native 库的代码（`Live2DNative` 在 JVM 加载不了） |
+| 纯 Java 逻辑与 Android 框架交互的回归验证 | 渲染、动画、真实网络、TTS/STT 等设备相关行为 |
+
+**模拟器为什么不可用**：容器是 Firecracker microVM，无 `/dev/kvm`、CPU 无 `vmx/svm` 标志，硬件加速模拟器起不来。
+**Robolectric 陷阱**：`testOptions.unitTests.returnDefaultValues = true` 会把 Android 方法桩成返回默认值，与 Robolectric 的真实实现冲突，已移除；测试类加 `@RunWith(RobolectricTestRunner.class)` + `@Config(sdk = 33)` 即可。
+**首次运行慢**：Robolectric 需下载 `android-all-instrumented` jar（约 13 分钟），之后走缓存约 15 秒。
 
 ### 2.2 最关键的几个源文件
 

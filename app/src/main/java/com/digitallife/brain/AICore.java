@@ -151,57 +151,14 @@ public class AICore {
     public void setOutput(Output o) { this.out = o; }
 
     /**
-     * 工具执行统一走 harness 的 ToolPipeline：禁用策略在 tools/pre-execute 上把关，
-     * 使用日志在 tools/post-execute 上记录（原先由 AgentBrain 的 post hook 承担，
-     * 该文件已删除，日志随之断流）。
+     * 工具执行统一走 harness 的 ToolPipeline：禁用策略与使用日志由
+     * {@link com.digitallife.tools.ToolGovernance} 统一装配。
      */
     private com.digitallife.harness.ToolPipeline toolPipeline;
 
     private void installToolPipeline() {
-        com.digitallife.harness.EventBus bus = new com.digitallife.harness.EventBus();
-        final android.content.Context app = settings.getContext().getApplicationContext();
-        bus.addWaterfall("tools/pre-execute",
-                new com.digitallife.harness.EventBus.Waterfall<com.digitallife.harness.ToolPipeline.Call>() {
-                    @Override
-                    public com.digitallife.harness.ToolPipeline.Call handle(
-                            com.digitallife.harness.ToolPipeline.Call call,
-                            com.digitallife.harness.EventBus.Next<com.digitallife.harness.ToolPipeline.Call> next) {
-                        if (call == null) return null;
-                        if (com.digitallife.ui.ToolMarketActivity.isDisabled(app, call.name)) {
-                            call.rejected = true;
-                            call.error = "工具已被用户禁用：" + call.name;
-                            return call;
-                        }
-                        return next.apply(call);
-                    }
-                });
-        bus.addWaterfall("tools/post-execute",
-                new com.digitallife.harness.EventBus.Waterfall<com.digitallife.harness.ToolPipeline.Call>() {
-                    @Override
-                    public com.digitallife.harness.ToolPipeline.Call handle(
-                            com.digitallife.harness.ToolPipeline.Call call,
-                            com.digitallife.harness.EventBus.Next<com.digitallife.harness.ToolPipeline.Call> next) {
-                        if (call != null) {
-                            try {
-                                com.digitallife.tools.ToolUsageLog log =
-                                        new com.digitallife.tools.ToolUsageLog(app);
-                                com.digitallife.tools.ToolUsageLog.Entry e =
-                                        new com.digitallife.tools.ToolUsageLog.Entry();
-                                e.timestamp = System.currentTimeMillis();
-                                e.toolName = call.name;
-                                e.args = call.args != null ? call.args.toString() : "";
-                                e.result = call.result;
-                                e.error = call.error;
-                                e.durationMs = 0;
-                                log.add(e);
-                            } catch (Exception ignored) {
-                            }
-                        }
-                        return next.apply(call);
-                    }
-                });
-        toolPipeline = new com.digitallife.harness.ToolPipeline(bus);
-        toolPipeline.setHost(tools);
+        toolPipeline = com.digitallife.tools.ToolGovernance.install(
+                settings.getContext(), tools);
     }
 
     /** 执行一次工具（走统一流水线，禁用与日志策略一致） */
