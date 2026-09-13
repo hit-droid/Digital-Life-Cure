@@ -67,7 +67,9 @@ public class MemoryGraphView extends View {
             String[] words = extractWords(e.content);
             for (String w : words) {
                 if (w.length() < 2) continue;
-                freq.put(w, freq.getOrDefault(w, 0) + 1);
+                // Map#getOrDefault 需 API 24，改用显式判空兼容 minSdk 21
+                Integer prev = freq.get(w);
+                freq.put(w, (prev == null ? 0 : prev) + 1);
                 categoryMap.put(w, e.category);
             }
         }

@@ -296,7 +296,8 @@ public class MemoryStore {
             if (heap.size() > topK) heap.poll();
         }
         ArrayList<ScoredFact> sorted = new ArrayList<>(heap);
-        sorted.sort((a, b) -> Double.compare(b.score, a.score));
+        // ArrayList#sort 需 API 24，改用 Collections.sort 兼容 minSdk 21
+        java.util.Collections.sort(sorted, (a, b) -> Double.compare(b.score, a.score));
         ArrayList<Fact> out = new ArrayList<>();
         for (ScoredFact sf : sorted) out.add(sf.fact);
         return out;

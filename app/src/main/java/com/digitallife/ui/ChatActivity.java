@@ -626,7 +626,8 @@ public class ChatActivity extends Activity {
             byte[] buf = new byte[8192];
             int n;
             while ((n = fis.read(buf)) > 0) bos.write(buf, 0, n);
-            String content = bos.toString(java.nio.charset.StandardCharsets.UTF_8);
+            // ByteArrayOutputStream#toString(Charset) 需 API 33，改用 String 构造器兼容 minSdk 21
+            String content = new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
             if (content.length() > 20000) {
                 content = content.substring(0, 20000) + "\n…（内容已截断）";
             }
