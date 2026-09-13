@@ -50,7 +50,7 @@ public final class EventBus {
         }
     }
 
-    public synchronized <T> Disposable waterfall(String name, Waterfall<T> w) {
+    public synchronized <T> Disposable addWaterfall(String name, Waterfall<T> w) {
         if (name == null || w == null) return Disposable.NONE;
         List<Waterfall<?>> list = waterfalls.get(name);
         if (list == null) {
