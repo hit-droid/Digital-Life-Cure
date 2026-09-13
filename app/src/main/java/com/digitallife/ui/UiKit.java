@@ -179,7 +179,7 @@ public final class UiKit {
 
     /** 将常见 HTTP 错误转换为可操作的排查提示 */
     public static String friendlyApiError(String err, String base, String model) {
-        String lower = err == null ? "" : err.toLowerCase();
+        String lower = err == null ? "" : err.toLowerCase(java.util.Locale.ROOT);
         String hint;
         if (lower.contains("400")) {
             hint = "提示：HTTP 400 通常是「模型名不支持」或「请求参数不被服务端接受」。\n"

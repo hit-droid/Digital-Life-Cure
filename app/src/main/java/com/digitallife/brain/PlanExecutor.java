@@ -236,7 +236,7 @@ public class PlanExecutor {
     /** v1.26.0：判断错误是否可重试（网络/超时/5xx） */
     private static boolean isRetryableError(String error) {
         if (error == null) return false;
-        String e = error.toLowerCase();
+        String e = error.toLowerCase(java.util.Locale.ROOT);
         return e.contains("timeout") || e.contains("timed out")
                 || e.contains("5xx") || e.contains("503") || e.contains("502")
                 || e.contains("504") || e.contains("500")
@@ -247,11 +247,11 @@ public class PlanExecutor {
     /** v1.26.0：工具名容错匹配。返回最佳匹配工具名，无匹配返回 null。 */
     private String fuzzyMatchTool(Tools tools, String requested) {
         if (requested == null) return null;
-        String lower = requested.toLowerCase();
+        String lower = requested.toLowerCase(java.util.Locale.ROOT);
         try {
             for (String name : tools.allToolNames()) {
                 if (name == null) continue;
-                String n = name.toLowerCase();
+                String n = name.toLowerCase(java.util.Locale.ROOT);
                 if (n.equals(lower)) return name;       // 精确
                 if (n.contains(lower) || lower.contains(n)) return name;  // 包含
             }

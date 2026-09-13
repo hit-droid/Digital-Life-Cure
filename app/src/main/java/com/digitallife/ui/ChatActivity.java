@@ -1562,13 +1562,13 @@ public class ChatActivity extends Activity {
         searchQuery = query;
         searchHits.clear();
         searchHitIndex = 0;
-        String lower = query.toLowerCase();
+        String lower = query.toLowerCase(java.util.Locale.ROOT);
         for (int i = 0; i < listContainer.getChildCount(); i++) {
             android.view.View child = listContainer.getChildAt(i);
             if (!(child instanceof TextView)) continue;
             String txt = ((TextView) child).getText() == null ? ""
                     : ((TextView) child).getText().toString();
-            if (txt.toLowerCase().contains(lower)) searchHits.add(i);
+            if (txt.toLowerCase(java.util.Locale.ROOT).contains(lower)) searchHits.add(i);
         }
         if (searchHits.isEmpty()) {
             Toast.makeText(this, "没有找到「" + query + "」", Toast.LENGTH_SHORT).show();
@@ -1602,8 +1602,8 @@ public class ChatActivity extends Activity {
     private void highlightText(TextView tv, String query) {
         if (tv == null || query == null || query.isEmpty()) return;
         String text = tv.getText() == null ? "" : tv.getText().toString();
-        String lower = text.toLowerCase();
-        String q = query.toLowerCase();
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
+        String q = query.toLowerCase(java.util.Locale.ROOT);
         SpannableString ss = new SpannableString(text);
         int from = 0;
         while (true) {
