@@ -21,10 +21,10 @@ public class MemoryTools {
         if (query == null || query.trim().isEmpty()) return "查询关键词不能为空";
         MemoryStore store = new MemoryStore(ctx);
         List<MemoryStore.Fact> facts = store.getAllFacts();
-        String q = query.toLowerCase();
+        String q = query.toLowerCase(java.util.Locale.ROOT);
         List<MemoryStore.Fact> matched = new ArrayList<>();
         for (MemoryStore.Fact f : facts) {
-            if (f.content != null && f.content.toLowerCase().contains(q)) {
+            if (f.content != null && f.content.toLowerCase(java.util.Locale.ROOT).contains(q)) {
                 matched.add(f);
                 if (matched.size() >= 5) break;
             }
@@ -33,7 +33,7 @@ public class MemoryTools {
         StringBuilder sb = new StringBuilder("找到 " + matched.size() + " 条相关记忆：\n");
         for (MemoryStore.Fact f : matched) {
             sb.append("- [").append(f.category).append("] ").append(f.content)
-                    .append("（置信度 ").append(String.format("%.1f", f.confidence)).append("）\n");
+                    .append("（置信度 ").append(String.format(java.util.Locale.ROOT, "%.1f", f.confidence)).append("）\n");
         }
         return sb.toString();
     }
@@ -42,10 +42,10 @@ public class MemoryTools {
         if (topic == null || topic.trim().isEmpty()) return "回忆主题不能为空";
         MemoryStore store = new MemoryStore(ctx);
         List<MemoryStore.Fact> facts = store.getAllFacts();
-        String t = topic.toLowerCase();
+        String t = topic.toLowerCase(java.util.Locale.ROOT);
         List<MemoryStore.Fact> matched = new ArrayList<>();
         for (MemoryStore.Fact f : facts) {
-            if (f.content != null && f.content.toLowerCase().contains(t)) {
+            if (f.content != null && f.content.toLowerCase(java.util.Locale.ROOT).contains(t)) {
                 matched.add(f);
                 if (matched.size() >= 10) break;
             }
@@ -74,10 +74,10 @@ public class MemoryTools {
         if (content == null || content.trim().isEmpty()) return "遗忘内容不能为空";
         MemoryStore store = new MemoryStore(ctx);
         List<MemoryStore.Fact> facts = store.getAllFacts();
-        String c = content.toLowerCase();
+        String c = content.toLowerCase(java.util.Locale.ROOT);
         List<Long> toDelete = new ArrayList<>();
         for (MemoryStore.Fact f : facts) {
-            if (f.content != null && f.content.toLowerCase().contains(c)) {
+            if (f.content != null && f.content.toLowerCase(java.util.Locale.ROOT).contains(c)) {
                 toDelete.add(f.id);
             }
         }

@@ -54,12 +54,12 @@ public class MemoryRetriever {
 
         // 2) 关键词维度：facts 表搜索
         if (query != null && !query.trim().isEmpty()) {
-            String q = query.toLowerCase();
+            String q = query.toLowerCase(java.util.Locale.ROOT);
             List<MemoryStore.Fact> facts = store.getAllFacts();
             int matched = 0;
             for (MemoryStore.Fact f : facts) {
                 if (f.content == null) continue;
-                if (f.content.toLowerCase().contains(q)) {
+                if (f.content.toLowerCase(java.util.Locale.ROOT).contains(q)) {
                     MemoryEntry e = new MemoryEntry();
                     e.id = f.id;
                     e.content = f.content;

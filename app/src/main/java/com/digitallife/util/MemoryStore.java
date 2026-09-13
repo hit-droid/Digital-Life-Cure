@@ -283,7 +283,7 @@ public class MemoryStore {
         java.util.PriorityQueue<ScoredFact> heap = new java.util.PriorityQueue<>();
         for (Fact f : all) {
             int hits = 0;
-            String lower = f.content == null ? "" : f.content.toLowerCase();
+            String lower = f.content == null ? "" : f.content.toLowerCase(java.util.Locale.ROOT);
             for (String k : keywords) {
                 if (k.isEmpty()) continue;
                 if (lower.contains(k)) hits++;
@@ -309,7 +309,7 @@ public class MemoryStore {
      */
     private static List<String> extractKeywords(String text) {
         ArrayList<String> kws = new ArrayList<>();
-        String lower = text.toLowerCase();
+        String lower = text.toLowerCase(java.util.Locale.ROOT);
         // 英文单词：连续 [a-z0-9] ≥3
         java.util.regex.Matcher en = java.util.regex.Pattern.compile("[a-z0-9]{3,}").matcher(lower);
         while (en.find()) {

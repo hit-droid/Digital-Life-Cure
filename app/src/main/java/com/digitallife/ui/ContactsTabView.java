@@ -116,7 +116,7 @@ public class ContactsTabView extends LinearLayout {
         avatar.setTypeface(Typeface.DEFAULT_BOLD);
         avatar.setTextColor(Color.WHITE);
         avatar.setGravity(Gravity.CENTER);
-        avatar.setText(name.length() > 0 ? name.substring(0, 1).toUpperCase() : "?");
+        avatar.setText(name.length() > 0 ? name.substring(0, 1).toUpperCase(java.util.Locale.ROOT) : "?");
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
         g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         g.setCornerRadius(UiKit.dp(activity, 12));
