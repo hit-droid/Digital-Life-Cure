@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.112.0 (2026-09-13)
+
+### DeepSeek Harness（一切皆插件）
+
+对话大脑改为 DeepSeek Harness 形态，对齐 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的插件树 / 会话日志 / agent-loop。
+
+- **插件内核**：`HarnessContext` 贡献服务、类型化事件与可逆副作用；`chat` profile 挂载 session / system-prompt / tools / agent-loop / guard。
+- **轮次流程**：`turn/start` → `agent/pre-step` → `step/start` → 流式请求 → `tool/call` 经 `tools/pre-execute|execute|post-execute` → 欠下一步则续 step（上限 6）→ `turn/end`。
+- **模型可见即已记录**：`SessionLog.deriveMessages()` 从仅追加事件投影模型历史；取消与失败写入 `assistant/attempt`。
+- **能力 seam**：工具禁用走 guard 的 `tools/pre-execute` waterfall；控制台展示插件树与会话事件。
+
 ## v1.24.0 (2026-08-30)
 
 ### 智能体升级（7 大模块全量升级）
