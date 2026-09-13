@@ -242,8 +242,13 @@ public class TaskScheduler {
     private static void scheduleAlarm(Context ctx, Task t) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
-        // 非精确闹钟：不需要 SCHEDULE_EXACT_ALARM 权限，允许 Doze 中唤醒
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t.triggerAtMs, pendingIntent(ctx, t));
+        // 非精确闹钟：不需要 SCHEDULE_EXACT_ALARM 权限，允许 Doze 中唤醒。
+        // setAndAllowWhileIdle 需 API 23，低版本退回 set()，否则 minSdk 21 设备会 NoSuchMethodError
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t.triggerAtMs, pendingIntent(ctx, t));
+        } else {
+            am.set(AlarmManager.RTC_WAKEUP, t.triggerAtMs, pendingIntent(ctx, t));
+        }
     }
 
     private static void cancelAlarm(Context ctx, Task t) {

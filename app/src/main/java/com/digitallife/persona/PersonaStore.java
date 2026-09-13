@@ -158,7 +158,12 @@ public class PersonaStore {
         // 默认角色不可删除
         Persona p = get(id);
         if (p == null || p.isDefault) return;
-        personas.removeIf(x -> x.id.equals(id));
+        // Collection#removeIf 需 API 24，改用迭代器兼容 minSdk 21
+        java.util.Iterator<Persona> it = personas.iterator();
+        while (it.hasNext()) {
+            Persona x = it.next();
+            if (x != null && x.id != null && x.id.equals(id)) it.remove();
+        }
         if (id.equals(activeId)) {
             activeId = personas.isEmpty() ? null : personas.get(0).id;
         }

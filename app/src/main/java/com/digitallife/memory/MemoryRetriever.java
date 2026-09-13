@@ -93,7 +93,8 @@ public class MemoryRetriever {
         }
 
         // 4) 排序 + 去重（按 content）
-        all.sort(new Comparator<ScoredEntry>() {
+        // List#sort 需 API 24，改用 Collections.sort 兼容 minSdk 21
+        java.util.Collections.sort(all, new Comparator<ScoredEntry>() {
             @Override
             public int compare(ScoredEntry a, ScoredEntry b) {
                 return Double.compare(b.score, a.score);
