@@ -84,7 +84,7 @@ public final class DeepSeekHarness {
         return ctx.get("agentLoop");
     }
 
-    public void bind(LLMClient llm, Tools host, String systemPrompt) {
+    public void bind(LlmAdapter llm, Tools host, String systemPrompt) {
         ToolPipeline pipeline = tools();
         if (pipeline != null) pipeline.setHost(host);
         PromptAssembler pa = prompt();
@@ -123,7 +123,7 @@ public final class DeepSeekHarness {
         }
     }
 
-    public AgentHandle startTurn(LLMClient llm, Tools host, String systemPrompt,
+    public AgentHandle startTurn(LlmAdapter llm, Tools host, String systemPrompt,
                                  List<LLMClient.ChatMessage> history,
                                  AgentHandle.Listener listener) {
         cancel();

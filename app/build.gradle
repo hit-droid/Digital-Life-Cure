@@ -56,7 +56,13 @@ android {
         // Keep the optional 4096px source textures out of the runtime APK.
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!huohuo.4096'
     }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

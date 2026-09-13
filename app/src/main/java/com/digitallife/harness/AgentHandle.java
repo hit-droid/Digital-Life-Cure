@@ -24,7 +24,7 @@ public final class AgentHandle {
     public final PromptAssembler prompt;
     public final ToolPipeline tools;
     public Listener listener;
-    public LLMClient llm;
+    public LlmAdapter llm;
     public volatile boolean cancelled;
     public volatile boolean retired;
     public volatile boolean running;

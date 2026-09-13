@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
  * 支持：普通对话 / 流式输出 / 工具调用 / 结构化 JSON 输出。
  * 可对接 DeepSeek、OpenAI、本地 llama.cpp 等任何 OpenAI 兼容服务。
  */
-public class LLMClient {
+public class LLMClient implements com.digitallife.harness.LlmAdapter {
 
     public interface StreamListener {
         void onDelta(String text);
