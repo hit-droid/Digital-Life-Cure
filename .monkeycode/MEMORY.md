@@ -232,6 +232,20 @@ Entries discovered by the Agent during task execution should follow this format:
   - **决策纪律：不确定的、或不知道用户想要什么样的，宁可去 GitHub 搜索参考实现，也不要私自拍脑袋决定**——"deepseek harness" 这类用户给的参照目标，先去 GitHub 找真实项目读架构，再照着落地，不要自己臆想形态
   - 用户反感：自我贬低式长篇检讨、答非所问、空谈不落地、为完成任务而乱做
 
+[Project Knowledge Summary]
+- Date: 2026-09-19
+- Context: Discovered by Agent while performing v1.115.0 DeepSeek Harness 完善（Profile/生命周期/提示词分段）
+- Category: Operations & Deployment
+- Instructions:
+  - v1.115.0 已发布：versionCode 118 / versionName 1.115.0、Release id（tag v1.115.0）、APK app-debug.apk 9,954,803B、target 36e6cb7；构建 commit 9c83d80（功能）、36e6cb7（CI 修复）
+  - 容器重启会同时清空 JDK 与 /opt/android-sdk（不止 /tmp/opencode）。重装：`apt-get install -y openjdk-17-jdk-headless`（装到 /usr/lib/jvm/java-17-openjdk-amd64）；SDK 用 commandlinetools-linux-11076708 + sdkmanager 装 platform-tools/platforms;android-34/build-tools;34.0.0/ndk;26.1.10909125
+  - 构建脚本 local-build.sh / verify.sh 已加 JDK 回退：优先 /tmp/opencode/toolchain，缺失时用 /usr/lib/jvm/java-17-openjdk-amd64
+  - 首次编译需下 Gradle 8.7（12 分钟）+ Robolectric android-all jar，约 15 分钟；之后增量编译约 40 秒
+  - 本地 assembleDebug 需 `keytool -genkeypair -keystore app/release-key.p12 -storetype PKCS12 -storepass android -keypass android -alias maidenkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"`（p12 与 local.properties 均被 gitignore）
+  - git config user.email 会被重置为 Panyuxuan37@outlook.com，push 触发 GH007 隐私拒绝；须 `git config user.email hit-droid@users.noreply.github.com` 再 `git commit --amend --reset-author`
+  - CI 的 `android-actions/setup-android@v3` 于 2026-09-19 起故障（9-13 仍可用），已改为使用 runner 预装 ANDROID_SDK_ROOT + sdkmanager 补装组件
+  - Harness 完善内容：Profile（chat 11 插件 / isolated 8 插件）、Plugin.deactivate + unmount/dispose、AgentRegistry（ctx.agents）、Persona/Memory/Skill/Clock/Compress 插件、ContextCompressor 纯消息投影（6k 字符预算）、GuardPlugin 接 tools/post-execute 审计；单测 110 → 122
+
 [Technical Learnings]
 - Date: 2026-09-05
 - Context: v1.111.0 多智能体补丁两次 CI 失败教训
