@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.116.0 (2026-09-19)
+
+### 修复 Live2D 原生崩溃：模型文件缺失时空指针（SIGSEGV at 0x0）
+
+真机日志出现 `libmaidendungeon.so` 原生崩溃：`Signal: SIGSEGV (11) / Fault address: 0x0`，发生在启动/切换某个模型时。
+
+- **根因**：`LAppModel::LoadAssets()` 里 `CreateBuffer()` 拿到的 `buffer` 未判空。模型文件缺失时 Java 侧 `loadFile` 返回 `null`、C++ `LoadFileAsBytesFromJava` 返回 `NULL`，随即被 `new CubismModelSettingJson(buffer, size)` 当 JSON 解析 → 空指针解引用，整个进程段错误退出。
+- **完整防御式修复**（模型坏掉时只跳过该模型，不再拖垮 App）：
+  - `LoadAssets()`：buffer 判空 + 解析结果判空，失败置 `_loadFailed` 并打日志（含缺失文件路径）
+  - `SetupModel()`：moc / expression / physics / pose / userdata / motion 六处 `CreateBuffer` 全部判空；moc 缺失时清理 `_modelSetting` 防泄漏
+  - `PreloadMotionGroup()` / `StartMotion()`：动作数据缺失跳过，不再对 `NULL` 调用 `SetFadeInTime` 等
+  - `~LAppModel()`：`_modelSetting` 判空后再访问（此前无条件解引用，`LoadAssets` 提前返回时析构必崩）
+  - `SetupTextures()`：`_modelSetting` 与 renderer 双重判空
+  - `LAppLive2DManager::ChangeScene()`：加载失败即移除半初始化模型；`OnUpdate()` / `OnDrag()` / `OnTap()` 每帧路径全部补空模型守卫
+- 新增 `LAppModel::IsLoadFailed()` 供调用方判断是否跳过该模型。
+
 ## v1.115.0 (2026-09-19)
 
 ### DeepSeek Harness 完善：Profile 组装、可卸载插件、提示词分段

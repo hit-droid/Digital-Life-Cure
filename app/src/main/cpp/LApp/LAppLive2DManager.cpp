@@ -92,6 +92,10 @@ void LAppLive2DManager::OnDrag(csmFloat32 x, csmFloat32 y) const
     for (csmUint32 i = 0; i < _models.GetSize(); i++)
     {
         LAppModel* model = GetModel(i);
+        if (model == NULL || model->GetModel() == NULL || model->GetModelSetting() == NULL)
+        {
+            continue;
+        }
 
         model->SetDragging(x, y);
     }
@@ -106,7 +110,7 @@ void LAppLive2DManager::OnTap(csmFloat32 x, csmFloat32 y)
 
     for (csmUint32 i = 0; i < _models.GetSize(); i++)
     {
-        if (_models[i]->GetModel() == NULL || !_models[i]->GetModelSetting()) {
+        if (_models[i] == NULL || _models[i]->GetModel() == NULL || !_models[i]->GetModelSetting()) {
             continue;
         }
         const csmBool hitHead = _models[i]->HitTest(HitAreaNameHead, x, y);
@@ -152,6 +156,10 @@ void LAppLive2DManager::OnUpdate() const
     for (csmUint32 i = 0; i < modelCount; ++i)
     {
         LAppModel* model = GetModel(i);
+        if (model == NULL || model->GetModel() == NULL || model->GetModelSetting() == NULL)
+        {
+            continue;
+        }
         if (model->GetModel()->GetCanvasWidth() > 1.0f && width < height)
         {
             // 横に長いモデルを縦長ウィンドウに表示する際モデルの横サイズでscaleを算出する
@@ -231,8 +239,18 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
     }
 
     ReleaseAllModel();
-    _models.PushBack(new LAppModel());
-    _models[0]->LoadAssets(modelPath.c_str(), modelJsonName.c_str());
+    LAppModel* loadedModel = new LAppModel();
+    _models.PushBack(loadedModel);
+    loadedModel->LoadAssets(modelPath.c_str(), modelJsonName.c_str());
+
+    // 模型定义/必需资源缺失：移除这个半初始化的模型，避免后续 Update/Draw 解引用空指针
+    if (loadedModel->IsLoadFailed() || loadedModel->GetModel() == NULL)
+    {
+        LAppPal::PrintLog("[APP]model load failed, skip scene: %s%s",
+                          modelPath.c_str(), modelJsonName.c_str());
+        ReleaseAllModel();
+        return;
+    }
 
     /*
      * モデル半透明表示を行うサンプルを提示する。
