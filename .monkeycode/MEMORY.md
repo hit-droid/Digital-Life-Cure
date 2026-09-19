@@ -234,6 +234,20 @@ Entries discovered by the Agent during task execution should follow this format:
 
 [Project Knowledge Summary]
 - Date: 2026-09-19
+- Context: Discovered by Agent while performing v1.116.0 修复 Live2D 原生崩溃
+- Category: Troubleshooting & Debugging
+- Instructions:
+  - v1.116.0 已发布：versionCode 119 / versionName 1.116.0、Release v1.116.0、APK 9,957,252B、commit 785ed11
+  - 崩溃现象：真机日志 `libmaidendungeon.so` SIGSEGV (11) / Fault address 0x0，发生在启动或切换某个模型时
+  - 根因：`LAppModel::LoadAssets()` 中 `CreateBuffer()` 返回值未判空。模型文件缺失时 Java 侧 `Live2DNative.loadFile` 返回 null，C++ `JniBridgeC::LoadFileAsBytesFromJava` 返回 NULL，随即 `new CubismModelSettingJson(buffer, size)` 把 NULL 当 JSON 解析 → 空指针解引用，整个进程段错误退出
+  - 修复模式：native 层所有 `CreateBuffer` 后必须判 `buffer == NULL || size <= 0`；`~LAppModel()` 访问 `_modelSetting` 前必须判空（LoadAssets 提前 return 时析构必崩）；`OnUpdate/OnDrag/OnTap` 每帧路径都要守卫空模型
+  - 定位手法：崩溃 backtrace 只有 libmaidendungeon.so 两个栈帧时，直接搜 native 侧未判空的可疑解引用；`Fault address: 0x0` 基本等价于空指针解引用
+  - C++ 改动后先用 `./gradlew :app:externalNativeBuildDebug` 单独验证 native 编译（约 40 秒），比全量快很多
+  - 环境坑：`csmTrue/csmFalse` 在 LAppModel.cpp 这个翻译单元不可用（缺 using + 宏名不同），直接用 `true/false`
+  - Edit 工具陷阱：编辑单行成员声明时，若 oldString 含行尾注释，新内容会被拼进注释行导致成员"消失"（v1.116.0 的 `_eyeBlinkIds` 就被吞掉，编译报 undeclared）；改完要用 grep 确认成员声明仍独立成行
+
+[Project Knowledge Summary]
+- Date: 2026-09-19
 - Context: Discovered by Agent while performing v1.115.0 DeepSeek Harness 完善（Profile/生命周期/提示词分段）
 - Category: Operations & Deployment
 - Instructions:
