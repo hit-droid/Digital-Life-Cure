@@ -68,6 +68,7 @@ LAppModel::LAppModel()
     : CubismUserModel()
     , _modelSetting(NULL)
     , _userTimeSeconds(0.0f)
+    , _loadFailed(false)
 {
     if (DebugLogEnable)
     {
@@ -89,12 +90,17 @@ LAppModel::~LAppModel()
     ReleaseMotions();
     ReleaseExpressions();
 
-    for (csmInt32 i = 0; i < _modelSetting->GetMotionGroupCount(); i++)
+    // _modelSetting 可能为 NULL（模型文件缺失时 SetupModel 提前返回），必须判空
+    if (_modelSetting != NULL)
     {
-        const csmChar* group = _modelSetting->GetMotionGroupName(i);
-        ReleaseMotionGroup(group);
+        for (csmInt32 i = 0; i < _modelSetting->GetMotionGroupCount(); i++)
+        {
+            const csmChar* group = _modelSetting->GetMotionGroupName(i);
+            ReleaseMotionGroup(group);
+        }
+        delete _modelSetting;
+        _modelSetting = NULL;
     }
-    delete _modelSetting;
 }
 
 void LAppModel::LoadAssets(const csmChar* dir, const csmChar* fileName)
@@ -110,14 +116,34 @@ void LAppModel::LoadAssets(const csmChar* dir, const csmChar* fileName)
     const csmString path = csmString(dir) + fileName;
 
     csmByte* buffer = CreateBuffer(path.GetRawString(), &size);
+    // 模型定义文件缺失时必须提前返回：buffer 为 NULL 时解析会空指针解引用（SIGSEGV at 0x0）
+    if (buffer == NULL || size <= 0)
+    {
+        LAppPal::PrintLog("[APP]model setting missing, skip model: %s", path.GetRawString());
+        _loadFailed = true;
+        DeleteBuffer(buffer, path.GetRawString());
+        return;
+    }
     ICubismModelSetting* setting = new CubismModelSettingJson(buffer, size);
     DeleteBuffer(buffer, path.GetRawString());
 
+    if (setting == NULL)
+    {
+        LAppPal::PrintLog("[APP]failed to parse model setting: %s", path.GetRawString());
+        _loadFailed = true;
+        return;
+    }
+
     SetupModel(setting);
 
-    if (_model == NULL)
+    if (_model == NULL || _modelSetting == NULL)
     {
-        LAppPal::PrintLog("Failed to LoadAssets().");
+        LAppPal::PrintLog("[APP]Failed to LoadAssets(): %s", path.GetRawString());
+        _loadFailed = true;
+        if (_modelSetting == NULL)
+        {
+            delete setting;
+        }
         return;
     }
 
@@ -150,6 +176,14 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         }
 
         buffer = CreateBuffer(path.GetRawString(), &size);
+        if (buffer == NULL || size <= 0)
+        {
+            LAppPal::PrintLog("[APP]model moc missing: %s", path.GetRawString());
+            delete _modelSetting;
+            _modelSetting = NULL;
+            _updating = false;
+            return;
+        }
         LoadModel(buffer, size);
         DeleteBuffer(buffer, path.GetRawString());
 
@@ -171,7 +205,15 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
             path = _modelHomeDir + path;
 
             buffer = CreateBuffer(path.GetRawString(), &size);
-            ACubismMotion* motion = LoadExpression(buffer, size, name.GetRawString());
+            ACubismMotion* motion = NULL;
+            if (buffer != NULL && size > 0)
+            {
+                motion = LoadExpression(buffer, size, name.GetRawString());
+            }
+            else
+            {
+                LAppPal::PrintLog("[APP]expression missing: %s", path.GetRawString());
+            }
 
             if (_expressions[name] != NULL)
             {
@@ -191,7 +233,14 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         path = _modelHomeDir + path;
 
         buffer = CreateBuffer(path.GetRawString(), &size);
-        LoadPhysics(buffer, size);
+        if (buffer != NULL && size > 0)
+        {
+            LoadPhysics(buffer, size);
+        }
+        else
+        {
+            LAppPal::PrintLog("[APP]physics missing: %s", path.GetRawString());
+        }
         DeleteBuffer(buffer, path.GetRawString());
     }
 
@@ -202,7 +251,14 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         path = _modelHomeDir + path;
 
         buffer = CreateBuffer(path.GetRawString(), &size);
-        LoadPose(buffer, size);
+        if (buffer != NULL && size > 0)
+        {
+            LoadPose(buffer, size);
+        }
+        else
+        {
+            LAppPal::PrintLog("[APP]pose missing: %s", path.GetRawString());
+        }
         DeleteBuffer(buffer, path.GetRawString());
     }
 
@@ -235,7 +291,14 @@ void LAppModel::SetupModel(ICubismModelSetting* setting)
         csmString path = _modelSetting->GetUserDataFile();
         path = _modelHomeDir + path;
         buffer = CreateBuffer(path.GetRawString(), &size);
-        LoadUserData(buffer, size);
+        if (buffer != NULL && size > 0)
+        {
+            LoadUserData(buffer, size);
+        }
+        else
+        {
+            LAppPal::PrintLog("[APP]userdata missing: %s", path.GetRawString());
+        }
         DeleteBuffer(buffer, path.GetRawString());
     }
 
@@ -295,7 +358,21 @@ void LAppModel::PreloadMotionGroup(const csmChar* group)
         csmByte* buffer;
         csmSizeInt size;
         buffer = CreateBuffer(path.GetRawString(), &size);
-        CubismMotion* tmpMotion = static_cast<CubismMotion*>(LoadMotion(buffer, size, name.GetRawString()));
+        CubismMotion* tmpMotion = NULL;
+        if (buffer != NULL && size > 0)
+        {
+            tmpMotion = static_cast<CubismMotion*>(LoadMotion(buffer, size, name.GetRawString()));
+        }
+        else
+        {
+            LAppPal::PrintLog("[APP]motion missing: %s", path.GetRawString());
+        }
+        DeleteBuffer(buffer, path.GetRawString());
+
+        if (tmpMotion == NULL)
+        {
+            continue;
+        }
 
         csmFloat32 fadeTime = _modelSetting->GetMotionFadeInTimeValue(group, i);
         if (fadeTime >= 0.0f)
@@ -315,8 +392,6 @@ void LAppModel::PreloadMotionGroup(const csmChar* group)
             ACubismMotion::Delete(_motions[name]);
         }
         _motions[name] = tmpMotion;
-
-        DeleteBuffer(buffer, path.GetRawString());
     }
 }
 
@@ -525,7 +600,19 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
         csmByte* buffer;
         csmSizeInt size;
         buffer = CreateBuffer(path.GetRawString(), &size);
+        if (buffer == NULL || size <= 0)
+        {
+            LAppPal::PrintLog("[APP]motion missing on demand: %s", path.GetRawString());
+            DeleteBuffer(buffer, path.GetRawString());
+            return InvalidMotionQueueEntryHandleValue;
+        }
         motion = static_cast<CubismMotion*>(LoadMotion(buffer, size, NULL, onFinishedMotionHandler));
+        DeleteBuffer(buffer, path.GetRawString());
+        if (motion == NULL)
+        {
+            LAppPal::PrintLog("[APP]failed to load motion: %s", path.GetRawString());
+            return InvalidMotionQueueEntryHandleValue;
+        }
         csmFloat32 fadeTime = _modelSetting->GetMotionFadeInTimeValue(group, no);
         if (fadeTime >= 0.0f)
         {
@@ -539,8 +626,6 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
         }
         motion->SetEffectIds(_eyeBlinkIds, _lipSyncIds);
         autoDelete = true; // 終了時にメモリから削除
-
-        DeleteBuffer(buffer, path.GetRawString());
     }
     else
     {
@@ -676,6 +761,19 @@ void LAppModel::ReloadRenderer()
 
 void LAppModel::SetupTextures()
 {
+    if (_modelSetting == NULL)
+    {
+        return;
+    }
+
+    Rendering::CubismRenderer_OpenGLES2* renderer =
+        GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
+    if (renderer == NULL)
+    {
+        LAppPal::PrintLog("[APP]renderer not ready, skip textures");
+        return;
+    }
+
     for (csmInt32 modelTextureNumber = 0; modelTextureNumber < _modelSetting->GetTextureCount(); modelTextureNumber++)
     {
         // テクスチャ名が空文字だった場合はロード・バインド処理をスキップ
@@ -697,13 +795,13 @@ void LAppModel::SetupTextures()
         const csmInt32 glTextueNumber = texture->id;
 
         //OpenGL
-        GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->BindTexture(modelTextureNumber, glTextueNumber);
+        renderer->BindTexture(modelTextureNumber, glTextueNumber);
     }
 
 #ifdef PREMULTIPLIED_ALPHA_ENABLE
-    GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->IsPremultipliedAlpha(true);
+    renderer->IsPremultipliedAlpha(true);
 #else
-    GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->IsPremultipliedAlpha(false);
+    renderer->IsPremultipliedAlpha(false);
 #endif
 }
 

@@ -139,6 +139,9 @@ public:
 
     Csm::ICubismModelSetting* GetModelSetting() const { return _modelSetting; }
 
+    /** 模型定义或必需资源缺失导致加载失败时返回 true（调用方可据此跳过此模型） */
+    Csm::csmBool IsLoadFailed() const { return _loadFailed; }
+
 protected:
     /**
      *  @brief  モデルを描画する処理。モデルを描画する空間のView-Projection行列を渡す。
@@ -195,6 +198,7 @@ private:
     Csm::ICubismModelSetting* _modelSetting; ///< モデルセッティング情報
     Csm::csmString _modelHomeDir; ///< モデルセッティングが置かれたディレクトリ
     Csm::csmFloat32 _userTimeSeconds; ///< デルタ時間の積算値[秒]
+    Csm::csmBool _loadFailed; ///< モデル定義/必須ファイル欠落で読み込みに失敗したか
     Csm::csmVector<Csm::CubismIdHandle> _eyeBlinkIds; ///< モデルに設定されたまばたき機能用パラメータID
     Csm::csmVector<Csm::CubismIdHandle> _lipSyncIds; ///< モデルに設定されたリップシンク機能用パラメータID
     Csm::csmMap<Csm::csmString, Csm::ACubismMotion*>   _motions; ///< 読み込まれているモーションのリスト
