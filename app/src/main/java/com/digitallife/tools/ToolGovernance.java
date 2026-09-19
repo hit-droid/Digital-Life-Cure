@@ -60,7 +60,7 @@ public final class ToolGovernance {
     }
 
     /** 写一条使用日志；失败不影响工具调用本身 */
-    static void record(Context ctx, ToolPipeline.Call call) {
+    public static void record(Context ctx, ToolPipeline.Call call) {
         try {
             ToolUsageLog log = ToolUsageLog.getInstance(ctx);
             ToolUsageLog.Entry e = new ToolUsageLog.Entry();

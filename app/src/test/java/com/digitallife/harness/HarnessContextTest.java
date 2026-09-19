@@ -1,6 +1,7 @@
 package com.digitallife.harness;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -85,6 +86,31 @@ public class HarnessContextTest {
         assertNotNull(h.prompt());
         assertNotNull(h.tools());
         assertNotNull(h.loop());
-        assertEquals(5, h.pluginIds().size());
+        assertNotNull(h.agents());
+        assertEquals(Profile.CHAT, h.profileName());
+        assertEquals(11, h.pluginIds().size());
+        assertTrue(h.pluginIds().contains("dsh-compress"));
+        assertTrue(h.pluginIds().contains("dsh-persona"));
+        assertTrue(h.pluginIds().contains("dsh-clock"));
+    }
+
+    @Test
+    public void isolatedProfileOmitsChatOnlyPlugins() {
+        DeepSeekHarness h = DeepSeekHarness.bootIsolated(null);
+        assertEquals(Profile.ISOLATED, h.profileName());
+        assertEquals(8, h.pluginIds().size());
+        assertFalse(h.pluginIds().contains("dsh-persona"));
+        assertFalse(h.pluginIds().contains("dsh-memory"));
+        assertFalse(h.pluginIds().contains("dsh-skills"));
+        assertTrue(h.pluginIds().contains("dsh-compress"));
+        assertTrue(h.pluginIds().contains("dsh-agents"));
+    }
+
+    @Test
+    public void unmountRemovesPluginId() {
+        DeepSeekHarness h = DeepSeekHarness.boot(null);
+        assertTrue(h.unmount("dsh-skills"));
+        assertFalse(h.pluginIds().contains("dsh-skills"));
+        assertFalse(h.unmount("no-such-plugin"));
     }
 }

@@ -31,6 +31,14 @@ public final class PromptAssembler {
         sections.add(new Section(id, text));
     }
 
+    public synchronized String section(String id) {
+        if (id == null) return "";
+        for (Section s : sections) {
+            if (id.equals(s.id)) return s.text;
+        }
+        return "";
+    }
+
     public synchronized void setToolSchemas(JSONArray schemas) {
         this.toolSchemas = schemas != null ? schemas : new JSONArray();
     }

@@ -86,6 +86,15 @@ public final class AgentLoop {
         }
 
         List<LLMClient.ChatMessage> msgs = log.deriveMessages();
+        ContextCompressor compressor = ctx.get("compressor");
+        if (compressor != null) msgs = compressor.apply(msgs);
+        JSONObject reqHeader = new JSONObject();
+        try {
+            reqHeader.put("index", stepIndex);
+            reqHeader.put("messages", msgs.size());
+        } catch (Exception ignored) {
+        }
+        log.append(SessionEvent.REQUEST_HEADER, reqHeader);
         JSONObject extra = new JSONObject();
         try {
             extra.put("system", agent.prompt.render());
@@ -166,6 +175,8 @@ public final class AgentLoop {
 
     private void finishTurn(AgentHandle agent, boolean completed) {
         agent.running = false;
+        AgentRegistry reg = ctx.get("agents");
+        if (reg != null) reg.unregister(agent.id);
         if (agent.retired) return;
         ctx.events().emit(EVENT_TURN_STOPPING, agent);
         JSONObject end = new JSONObject();
