@@ -4,7 +4,11 @@
 #   ./tools/local-build.sh assembleDebug  # 出 APK
 #   ./tools/local-build.sh test           # 跑单测
 set -e
-export JAVA_HOME=/tmp/opencode/toolchain/jdk-17.0.20.1+1
+if [ -x /tmp/opencode/toolchain/jdk-17.0.20.1+1/bin/java ]; then
+  export JAVA_HOME=/tmp/opencode/toolchain/jdk-17.0.20.1+1
+else
+  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+fi
 export ANDROID_HOME=/opt/android-sdk
 export PATH="$JAVA_HOME/bin:$PATH"
 TASK="${1:-:app:compileDebugJavaWithJavac}"

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.115.0 (2026-09-19)
+
+### DeepSeek Harness 完善：Profile 组装、可卸载插件、提示词分段
+
+对齐 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的「everything is a plugin」：没有特权核心，能力由有序 profile 挂载，卸载时副作用一并撤销。
+
+- **Profile 组装**：`chat` 11 插件（session / prompt / tools / agent-loop / agents / persona / memory / skills / clock / compress / guard）；`isolated` 8 插件给子智能体与护理大脑。
+- **插件生命周期**：`Plugin.deactivate` + `unmount(id)`；Clock / Guard 的 waterfall 登记为可逆 effect。
+- **`ctx.agents`**：`AgentRegistry` 跟踪在途句柄，turn 结束或取消时注销。
+- **提示词分段**：Persona / Memory / Skill / Clock 各自织进 `PromptAssembler` 段；对话页只在模型小房间覆盖 persona。
+- **上下文压缩 seam**：`ContextCompressor` 作为纯消息投影，超 6k 字符从尾部保留并插入截断说明；循环在 `deriveMessages` 后应用，并落 `request/header`。
+- **Guard 审计回接**：对话循环的 `tools/post-execute` 写 `ToolUsageLog`，与 AICore 共用同一套记录。
+
 ## v1.114.0 (2026-09-13)
 
 ### 真机前自动化测试体系（Robolectric）+ 低版本兼容修复

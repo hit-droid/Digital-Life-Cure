@@ -1096,7 +1096,7 @@ public class ChatActivity extends Activity {
         if (harness == null) {
             harness = com.digitallife.harness.DeepSeekHarness.boot(getApplicationContext());
         }
-        harness.startTurn(llm, chatTools, chatSystemPrompt(), chatLiveMsgs,
+        harness.startTurn(llm, chatTools, chatPromptOverlay(), chatLiveMsgs,
                 new com.digitallife.harness.AgentHandle.Listener() {
                     @Override
                     public void onDelta(String t) {
@@ -1225,18 +1225,18 @@ public class ChatActivity extends Activity {
         return true;
     }
 
-    private String chatSystemPrompt() {
-        Settings s = new Settings(this);
-        String persona = ChatStore.TYPE_MODEL.equals(type) && modelName != null
-                ? modelName : s.getPetName();
-        StringBuilder sb = new StringBuilder();
-        sb.append("你是「").append(persona).append("」，一个住在用户手机里的 AI 二次元少女，是用户亲密的朋友。\n");
-        sb.append("你活泼可爱，有一点小傲娇，关心用户但绝不啰嗦。\n");
-        sb.append("说话简短自然，一般不超过 80 字，用口语化的二次元语气，亲近但不腻。\n");
-        sb.append("当前时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
-                .format(new Date())).append("\n");
-        sb.append("直接以纯文本回复，不要输出 JSON 或任何标记。");
-        return sb.toString();
+    /**
+     * 普通对话的人设由 PersonaPlugin 织进 prompt；模型小房间才覆盖 persona 段。
+     * 时间由 ClockPlugin 每步刷新，不在这里写。
+     */
+    private String chatPromptOverlay() {
+        if (!ChatStore.TYPE_MODEL.equals(type) || modelName == null || modelName.isEmpty()) {
+            return null;
+        }
+        return "你是「" + modelName + "」，一个住在用户手机里的 AI 二次元少女，是用户亲密的朋友。\n"
+                + "你活泼可爱，有一点小傲娇，关心用户但绝不啰嗦。\n"
+                + "说话简短自然，一般不超过 80 字，用口语化的二次元语气，亲近但不腻。\n"
+                + "直接以纯文本回复，不要输出 JSON 或任何标记。";
     }
 
     /** 切换模型后立即让本会话使用新配置 */

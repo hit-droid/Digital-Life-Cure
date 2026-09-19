@@ -83,7 +83,7 @@ public class AgentConsoleActivity extends Activity {
         topBar.addView(title, tlp);
 
         TextView stat = new TextView(this);
-        stat.setText("v1.112.0");
+        stat.setText("v1.115.0");
         stat.setTextSize(12f);
         stat.setTextColor(android.graphics.Color.WHITE);
         topBar.addView(stat);
@@ -237,6 +237,7 @@ public class AgentConsoleActivity extends Activity {
                 act.append("  未启动（进入对话页后加载）\n");
             } else {
                 act.append("  状态: ").append(dsh.isBusy() ? "轮次进行中" : "待机").append("\n");
+                act.append("  profile: ").append(dsh.profileName()).append("\n");
                 java.util.List<String> ids = dsh.pluginIds();
                 act.append("  插件: ").append(ids.size()).append(" 个\n");
                 for (String id : ids) {

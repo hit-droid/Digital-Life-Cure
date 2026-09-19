@@ -102,7 +102,9 @@ public class AgentLoopTest {
         assertTrue(hasType(types, SessionEvent.ASSISTANT_MESSAGE));
         assertTrue(hasType(types, SessionEvent.STEP_END));
         assertTrue(hasType(types, SessionEvent.TURN_END));
+        assertTrue(hasType(types, SessionEvent.REQUEST_HEADER));
         assertFalse(harness.isBusy());
+        assertEquals(0, harness.agents().size());
     }
 
     @Test
@@ -126,7 +128,10 @@ public class AgentLoopTest {
             assertFalse("system 不应混进消息链", "system".equals(m.role));
         }
         assertNotNull(llm.extras.get(0));
-        assertEquals("人设", llm.extras.get(0).optString("system"));
+        assertTrue("人设必须出现在 extra.system",
+                llm.extras.get(0).optString("system").contains("人设"));
+        assertTrue("ClockPlugin 必须织进当前时间",
+                llm.extras.get(0).optString("system").contains("当前时间："));
     }
 
     @Test
@@ -264,7 +269,8 @@ public class AgentLoopTest {
     public void promptSectionIsRendered() {
         llm.enqueue(ScriptedLlm.text("好"));
         start(history("user", "hi"));
-        assertEquals("人设", harness.prompt().render());
+        assertTrue(harness.prompt().render().contains("人设"));
+        assertTrue(harness.prompt().section("clock").contains("当前时间："));
     }
 
     @Test
@@ -272,6 +278,22 @@ public class AgentLoopTest {
         llm.enqueue(ScriptedLlm.text("普通回答"));
         start(history("user", "hi"));
         assertFalse(harness.endedOnTool());
+    }
+
+    @Test
+    public void compressorDropsOldMessagesFromWireHistory() {
+        String blob = new String(new char[800]).replace('\0', 'x');
+        List<LLMClient.ChatMessage> hist = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            hist.add(new LLMClient.ChatMessage("user", blob + i));
+            hist.add(new LLMClient.ChatMessage("assistant", blob + "a" + i));
+        }
+        llm.enqueue(ScriptedLlm.text("收"));
+        start(hist);
+
+        List<LLMClient.ChatMessage> sent = llm.requests.get(0);
+        assertTrue("压缩后条数必须小于原文", sent.size() < hist.size());
+        assertTrue(sent.get(0).content.contains("已省略更早的"));
     }
 
     @Test

@@ -4,11 +4,6 @@ import android.content.Context;
 
 import com.digitallife.brain.LLMClient;
 import com.digitallife.brain.Tools;
-import com.digitallife.harness.plugin.AgentLoopPlugin;
-import com.digitallife.harness.plugin.GuardPlugin;
-import com.digitallife.harness.plugin.SessionPlugin;
-import com.digitallife.harness.plugin.SystemPromptPlugin;
-import com.digitallife.harness.plugin.ToolsPlugin;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,7 +13,7 @@ import java.util.List;
 
 public final class DeepSeekHarness {
 
-    public static final String PROFILE_CHAT = "chat";
+    public static final String PROFILE_CHAT = Profile.CHAT;
     public static final int MAX_STEPS = 6;
 
     private static DeepSeekHarness current;
@@ -27,36 +22,37 @@ public final class DeepSeekHarness {
     private final List<Plugin> plugins = new ArrayList<>();
     private AgentHandle live;
     private int agentSeq;
+    private String profileName = Profile.CHAT;
+    private boolean activated;
 
     public static DeepSeekHarness boot(Context app) {
-        DeepSeekHarness h = new DeepSeekHarness();
-        h.mount(new SessionPlugin());
-        h.mount(new SystemPromptPlugin());
-        h.mount(new ToolsPlugin());
-        h.mount(new AgentLoopPlugin());
-        h.mount(new GuardPlugin(app));
-        h.activateAll();
-        current = h;
-        return h;
+        return boot(Profile.chat(app), true);
     }
 
     /**
-     * 挂载一棵不注册为 current 的独立 plugin 树（子智能体用）。
-     * 子智能体有自己的 session log，但不应覆盖主对话在控制台里的引用。
+     * 挂载一棵不注册为 current 的独立 plugin 树（子智能体 / 护理大脑用）。
      */
     public static DeepSeekHarness bootIsolated(Context app) {
+        return boot(Profile.isolated(app), false);
+    }
+
+    public static DeepSeekHarness boot(Profile profile, boolean registerCurrent) {
         DeepSeekHarness h = new DeepSeekHarness();
-        h.mount(new SessionPlugin());
-        h.mount(new SystemPromptPlugin());
-        h.mount(new ToolsPlugin());
-        h.mount(new AgentLoopPlugin());
-        h.mount(new GuardPlugin(app));
+        if (profile != null) {
+            h.profileName = profile.name;
+            for (Plugin p : profile.plugins()) h.mount(p);
+        }
         h.activateAll();
+        if (registerCurrent) current = h;
         return h;
     }
 
     public static DeepSeekHarness current() {
         return current;
+    }
+
+    public String profileName() {
+        return profileName;
     }
 
     public List<String> pluginIds() {
@@ -70,13 +66,31 @@ public final class DeepSeekHarness {
     }
 
     public void mount(Plugin plugin) {
-        if (plugin != null) plugins.add(plugin);
+        if (plugin == null) return;
+        plugins.add(plugin);
+        if (activated) plugin.activate(ctx);
+    }
+
+    public boolean unmount(String id) {
+        if (id == null) return false;
+        for (int i = plugins.size() - 1; i >= 0; i--) {
+            Plugin p = plugins.get(i);
+            if (!id.equals(p.id())) continue;
+            try {
+                p.deactivate(ctx);
+            } catch (Exception ignored) {
+            }
+            plugins.remove(i);
+            return true;
+        }
+        return false;
     }
 
     public void activateAll() {
         for (Plugin p : plugins) {
             p.activate(ctx);
         }
+        activated = true;
     }
 
     public AgentHandle liveAgent() {
@@ -99,12 +113,25 @@ public final class DeepSeekHarness {
         return ctx.get("agentLoop");
     }
 
+    public AgentRegistry agents() {
+        return ctx.get("agents");
+    }
+
     public void bind(LlmAdapter llm, Tools host, String systemPrompt) {
         ToolPipeline pipeline = tools();
         if (pipeline != null) pipeline.setHost(host);
         PromptAssembler pa = prompt();
         if (pa != null) {
-            pa.setSection("persona", systemPrompt);
+            for (Plugin p : plugins) {
+                String id = p.id();
+                if ("dsh-persona".equals(id) || "dsh-memory".equals(id)
+                        || "dsh-skills".equals(id)) {
+                    p.activate(ctx);
+                }
+            }
+            if (systemPrompt != null && !systemPrompt.isEmpty()) {
+                pa.setSection("persona", systemPrompt);
+            }
             pa.setToolSchemas(host != null ? host.toJsonArray() : new JSONArray());
         }
         if (live != null) live.llm = llm;
@@ -159,6 +186,8 @@ public final class DeepSeekHarness {
         live.listener = listener;
         live.maxSteps = maxSteps > 0 ? maxSteps : MAX_STEPS;
         live.running = true;
+        AgentRegistry reg = agents();
+        if (reg != null) reg.register(live);
         AgentLoop loop = loop();
         if (loop != null) loop.runTurn(live, null);
         return live;
@@ -169,6 +198,8 @@ public final class DeepSeekHarness {
         live.cancelled = true;
         live.retired = true;
         live.running = false;
+        AgentRegistry reg = agents();
+        if (reg != null) reg.unregister(live.id);
         if (live.llm != null) {
             try {
                 live.llm.cancel();
@@ -199,7 +230,16 @@ public final class DeepSeekHarness {
 
     public void dispose() {
         cancel();
+        for (int i = plugins.size() - 1; i >= 0; i--) {
+            try {
+                plugins.get(i).deactivate(ctx);
+            } catch (Exception ignored) {
+            }
+        }
+        plugins.clear();
         ctx.dispose();
         live = null;
+        if (current == this) current = null;
+        activated = false;
     }
 }
