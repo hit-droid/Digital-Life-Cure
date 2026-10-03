@@ -49,7 +49,7 @@ public class PetOverlayView extends FrameLayout {
     private final LinearLayout bubbleContainer;
     private final TextView bubbleView;
     private final View bubbleTail;
-    /** v1.132.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
+    /** v1.133.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
     private final TextView statusView;
     private final EditText chatInput;
     /** 状态胶囊的数据来源；未接线时为 null，胶囊不显示 */
@@ -116,7 +116,7 @@ public class PetOverlayView extends FrameLayout {
         bcp.topMargin = dp(6);
         addView(bubbleContainer, bcp);
 
-        // v1.132.0：状态胶囊（Issue #27 第 1 条）。
+        // v1.133.0：状态胶囊（Issue #27 第 1 条）。
         // 在 chatInput 之前 addView：弹出输入框时它自然盖住胶囊，
         // 输入时也不需要看状态，省掉一套互斥逻辑。
         statusView = new TextView(context);
@@ -200,7 +200,7 @@ public class PetOverlayView extends FrameLayout {
         startStatusTicker();
     }
 
-    // ==================== v1.132.0：状态胶囊（Issue #27 第 1 条） ====================
+    // ==================== v1.133.0：状态胶囊（Issue #27 第 1 条） ====================
 
     /** 状态刷新间隔；情绪是慢变量（AICore 里按 tick 衰减），5 秒足够 */
     private static final long STATUS_REFRESH_MS = 5000L;
