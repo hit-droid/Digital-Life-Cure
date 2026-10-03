@@ -49,7 +49,7 @@ public class PetOverlayView extends FrameLayout {
     private final LinearLayout bubbleContainer;
     private final TextView bubbleView;
     private final View bubbleTail;
-    /** v1.132.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
+    /** v1.133.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
     private final TextView statusView;
     private final EditText chatInput;
     /** 状态胶囊的数据来源；未接线时为 null，胶囊不显示 */
@@ -116,7 +116,7 @@ public class PetOverlayView extends FrameLayout {
         bcp.topMargin = dp(6);
         addView(bubbleContainer, bcp);
 
-        // v1.132.0：状态胶囊（Issue #27 第 1 条）。
+        // v1.133.0：状态胶囊（Issue #27 第 1 条）。
         // 在 chatInput 之前 addView：弹出输入框时它自然盖住胶囊，
         // 输入时也不需要看状态，省掉一套互斥逻辑。
         statusView = new TextView(context);
@@ -182,7 +182,7 @@ public class PetOverlayView extends FrameLayout {
 
             @Override
             public void onLongPress(MotionEvent e) {
-                // v1.133.0（Issue #27 第 2 条）：长按拉起快捷菜单。
+                // v1.135.0（Issue #27 第 2 条）：长按拉起快捷菜单。
                 // 之前这里是空实现，listener.onLongPress() 从来没被调用过，
                 // PetService 那一侧等于死代码；补上这句，菜单才弹得出来。
                 if (listener != null) listener.onLongPress();
@@ -203,7 +203,7 @@ public class PetOverlayView extends FrameLayout {
         startStatusTicker();
     }
 
-    // ==================== v1.132.0：状态胶囊（Issue #27 第 1 条） ====================
+    // ==================== v1.133.0：状态胶囊（Issue #27 第 1 条） ====================
 
     /** 状态刷新间隔；情绪是慢变量（AICore 里按 tick 衰减），5 秒足够 */
     private static final long STATUS_REFRESH_MS = 5000L;
@@ -281,7 +281,7 @@ public class PetOverlayView extends FrameLayout {
         return bg;
     }
 
-    // ==================== v1.133.0：长按快捷菜单（Issue #27 第 2 条） ====================
+    // ==================== v1.135.0：长按快捷菜单（Issue #27 第 2 条） ====================
 
     /** 菜单项点击回调：回传 {@link PetQuickMenu} 里的索引 */
     public interface MenuCallback {
@@ -657,7 +657,7 @@ public class PetOverlayView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // v1.133.0：菜单期间不参与手势（拖拽 / 长按），全交给菜单层，避免边点菜单边拖窗口
+        // v1.135.0：菜单期间不参与手势（拖拽 / 长按），全交给菜单层，避免边点菜单边拖窗口
         if (isQuickMenuShowing()) return false;
         // 点击气泡区域：直接关闭气泡，不触发人偶交互
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isTouchInBubble(event.getRawX(), event.getRawY())) {
@@ -695,7 +695,7 @@ public class PetOverlayView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
-        // v1.133.0：菜单开着时一律放行。菜单居中显示、正好落在人偶区域里，
+        // v1.135.0：菜单开着时一律放行。菜单居中显示、正好落在人偶区域里，
         // 不放行就会被下面的拦截逻辑吃掉，菜单点不动。
         if (isQuickMenuShowing()) return false;
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {

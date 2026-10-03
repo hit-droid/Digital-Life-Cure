@@ -89,9 +89,9 @@ public class PetService extends Service implements AICore.Output,
     private volatile boolean touching = false;
     private boolean vitalsTicking = false;
     private long lastDragTime = 0;
-    /** v1.133.0（Issue #27）：长按菜单里的「锁定位置」状态；锁拖拽，不锁点击 */
+    /** v1.135.0（Issue #27）：长按菜单里的「锁定位置」状态；锁拖拽，不锁点击 */
     private boolean positionLocked = false;
-    /** v1.133.0：手动换表情的当前表情，菜单里点一次切下一个 */
+    /** v1.135.0：手动换表情的当前表情，菜单里点一次切下一个 */
     private String currentExpression = "F01";
 
     private final STTEngine.Listener sttListener = new STTEngine.Listener() {
@@ -189,21 +189,7 @@ public class PetService extends Service implements AICore.Output,
         int overlayH = (int) (size.y * 0.57f * scale);
 
         overlayView = new PetOverlayView(this, this);
-        // v1.133.0（Issue #27 第 1 条收尾）：状态胶囊接线。
-        // 只读情绪的三个标量，不碰 brain 的任何逻辑。aiCore 在下面才 new，
-        // 但 provider 是每 5 秒延迟取一次数，且 PetOverlayView 侧对取数异常有兜底。
         positionLocked = settings.isPetLocked();
-        overlayView.setStatusProvider(new PetOverlayView.StatusProvider() {
-            @Override public float intimacy() {
-                return aiCore == null ? 0f : aiCore.getEmotion().getIntimacy();
-            }
-            @Override public float energy() {
-                return aiCore == null ? 0f : aiCore.getEmotion().getEnergy();
-            }
-            @Override public String dominant() {
-                return aiCore == null ? null : aiCore.getEmotion().dominant();
-            }
-        });
         Live2DNative.init(this);
         // 恢复上次导入的模型到 C++ 动态模型列表
         ModelManager.registerImportedModels(this);
@@ -494,7 +480,7 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onLongPress() {
-        // v1.133.0（Issue #27 第 2 条）：长按不再直接跳设置，改为弹快捷菜单
+        // v1.135.0（Issue #27 第 2 条）：长按不再直接跳设置，改为弹快捷菜单
         if (overlayView == null) return;
         noteUserInteraction();
         overlayView.showQuickMenu(PetQuickMenu.items(positionLocked), new PetOverlayView.MenuCallback() {
@@ -593,7 +579,7 @@ public class PetService extends Service implements AICore.Output,
                 gl.setParamTarget("ParamBodyAngleX", 0f);
             }
             // v1.132.0：松手吸附到最近的左/右边缘。
-            // v1.133.0：菜单刚弹出时不要吸附，否则长按出菜单的瞬间窗口会跳一下；
+            // v1.135.0：菜单刚弹出时不要吸附，否则长按出菜单的瞬间窗口会跳一下；
             // 锁了位置也不能吸附，否则「锁定」形同虚设
             if (!positionLocked && !overlayView.isQuickMenuShowing()) snapToEdgeIfNeeded();
         }
@@ -623,7 +609,7 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onDragged(float dx, float dy) {
-        if (positionLocked) return; // v1.133.0：锁定位置时不再跟随手指（点击/长按照常，菜单里能解锁）
+        if (positionLocked) return; // v1.135.0：锁定位置时不再跟随手指（点击/长按照常，菜单里能解锁）
         overlayParams.x += dx;
         overlayParams.y += dy;
         if (overlayParams.x < 0) overlayParams.x = 0;
