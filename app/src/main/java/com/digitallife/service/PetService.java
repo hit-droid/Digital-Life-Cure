@@ -259,6 +259,27 @@ public class PetService extends Service implements AICore.Output,
         aiCore.start();
         memory = aiCore.getMemory();
 
+        // v1.134.0：接线桌宠状态胶囊的数据源（Issue #27 第 1 条收尾）。
+        // 此前 statusProvider 恒为 null，胶囊虽已建好却永远隐藏（PR #29 留下的半成品）。
+        // 这里只读地把 AICore 的情绪标量喂给 ui/pet/PetStatusText —— ui/ 不反向依赖 brain/，
+        // 因此走 PetOverlayView 定义的 StatusProvider 接口。
+        overlayView.setStatusProvider(new PetOverlayView.StatusProvider() {
+            @Override
+            public float intimacy() {
+                return aiCore == null ? 0f : aiCore.getEmotion().getIntimacy();
+            }
+
+            @Override
+            public float energy() {
+                return aiCore == null ? 0f : aiCore.getEmotion().getEnergy();
+            }
+
+            @Override
+            public String dominant() {
+                return aiCore == null ? null : aiCore.getEmotion().dominant();
+            }
+        });
+
         // v1.120.0：启动长期记忆自动提取（每 6 小时从近期对话沉淀 facts）
         memoryExtractor = new com.digitallife.memory.MemoryExtractor(this);
         memoryExtractor.schedulePeriodic();
