@@ -163,7 +163,8 @@ public class ChatActivity extends Activity {
                 getColorCompat(R.color.code_text),
                 getColorCompat(R.color.operit_text_secondary),
                 getColorCompat(R.color.operit_text_primary),
-                getColorCompat(R.color.operit_accent));
+                getColorCompat(R.color.operit_accent),
+                getColorCompat(R.color.operit_divider));
         restoreHistory();
     }
 
