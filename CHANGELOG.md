@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.126.0 (2026-10-03)
+
+### 多智能体深化：补齐 `writer` / `critic` 子智能体
+
+v1.124.0 加了 `delegate_pipeline`（有序依赖链），但内置子智能体只有 `researcher` / `secretary` —— 最常见的「**研究 → 写稿 → 审校**」链条缺最后两环，主智能体只能让 researcher 兼任写作与审校，角色提示词不对口、效果打折。
+
+本版补齐两个**只读型**角色（`SubagentPresets`）：
+
+- **`writer`（撰稿人）**：把素材/结论组织成结构清晰的中文稿件；不编事实、保留来源、缺口标「待补充」；白名单 `skill_summary`/`load_skill`/`memory_search`/`memory_recall`；
+- **`critic`（审校员）**：先列问题清单（事实 / 依据 / 逻辑 / 表达）再给修订稿；不编事实、拿不准标「待核实」；白名单 `memory_search`/`memory_recall`。
+
+两者都无 `delegate_task`（保持「子智能体不可递归委派」）、无写操作 / 联网工具、步数受限。
+
+现在一条 `delegate_pipeline` 即可完成「researcher 调研 → writer 成稿 → critic 审校」。单测 258 → 259。
+
 ## v1.125.0 (2026-10-03)
 
 ### 表格单元格支持行内 Markdown（剥离标记后再算列宽）
