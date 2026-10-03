@@ -22,6 +22,7 @@ import com.digitallife.R;
 import com.digitallife.render.Pose;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.ui.pet.PetStatusText;
+import com.digitallife.ui.pet.PetTouchReaction;
 
 /**
  * 悬浮窗 Live2D 视图 + 桌面聊天输入框。
@@ -34,6 +35,8 @@ public class PetOverlayView extends FrameLayout {
     public interface Listener {
         void onModelReady();
         void onTap();
+        /** v1.137.0（Issue #37）：人偶分区单击（Head/Body），供差异化气泡与情绪增量；与 onTap() 互不影响 */
+        void onTapZone(String zone);
         void onDoubleTap();
         void onLongPress();
         void onDrag(float dx, float dy);
@@ -614,8 +617,21 @@ public class PetOverlayView extends FrameLayout {
 
     private void handleModelTap(float x, float y) {
         if (!live2DReady) return;
-        // 点击身体：从 TapBody 组随机播放真实动作，不再固定第一个
-        live2DView.startMotion("TapBody", rnd.nextInt(6), 3);
+        // v1.137.0（Issue #37）：触摸分区。分区来源是 Java 近似（原生 HitArea 在悬浮窗里收不到触摸，
+        // 见 PetTouchReaction 注释），按人偶区域纵向位置切「上 38% 头 / 其余身子」。
+        final String zone = PetTouchReaction.zoneFor(x, y,
+                modelRect.left, modelRect.top, modelRect.right, modelRect.bottom);
+        final PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
+        // 视觉：摸头害羞、戳身惊讶；未知分区不改表情，保留原有「随机 TapBody」手感
+        if (reaction.expression != null) {
+            setExpression(reaction.expression);
+        }
+        if (reaction.motionGroup != null) {
+            int index = reaction.motionIndex >= 0 ? reaction.motionIndex : rnd.nextInt(6);
+            live2DView.startMotion(reaction.motionGroup, index, 3);
+        }
+        // 气泡与情绪增量交给 PetService（那里才有 aiCore）；onTap() 语义不变
+        if (listener != null) listener.onTapZone(zone);
     }
 
     public Pose getPose() {
