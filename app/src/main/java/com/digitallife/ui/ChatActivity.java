@@ -30,13 +30,16 @@ import com.digitallife.R;
 import com.digitallife.brain.LLMClient;
 import com.digitallife.care.CareAI;
 import com.digitallife.service.PetService;
+import com.digitallife.ui.chat.ChatTextOps;
+import com.digitallife.ui.chat.FailoverPolicy;
+import com.digitallife.ui.chat.HistoryBudget;
+import com.digitallife.ui.chat.SuggestionEngine;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.ChatStore;
 import com.digitallife.util.Settings;
 
 import org.json.JSONObject;
-import org.json.JSONArray;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -502,7 +505,8 @@ public class ChatActivity extends Activity {
             } else if ("tool".equals(m.role)) {
                 markLastToolResult(null, null, m.content);
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
-                appendToolBubble(parseToolName(m.toolCalls), parseToolArgs(m.toolCalls));
+                appendToolBubble(ChatTextOps.parseToolName(m.toolCalls),
+                        ChatTextOps.parseToolArgs(m.toolCalls));
             } else if (m.content != null && !m.content.isEmpty()) {
                 appendAiBubble(m.content);
             }
@@ -699,7 +703,7 @@ public class ChatActivity extends Activity {
         }
         if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
             // 中断回复：末尾附加「⏹ 已中断」角标，并随消息一起持久化
-            String finalText = curAssistantText + INTERRUPT_MARK;
+            String finalText = curAssistantText + ChatTextOps.INTERRUPT_MARK;
             chatStore.addMessage(sessionKey, "assistant", finalText,
                     null, null, System.currentTimeMillis());
             markInterrupted(curAssistantBubble);
@@ -811,8 +815,7 @@ public class ChatActivity extends Activity {
         List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 10);
 
         // v1.34.0：历史指纹（条数 + 末条时间戳），未变则复用缓存建议
-        String fingerprint = hist.size() + "_"
-                + (hist.isEmpty() ? 0 : hist.get(hist.size() - 1).timestamp);
+        String fingerprint = SuggestionEngine.fingerprint(hist);
         if (fingerprint.equals(cachedSuggestionKey) && cachedSuggestions != null) {
             renderSuggestions(cachedSuggestions);
             return;
@@ -820,32 +823,17 @@ public class ChatActivity extends Activity {
 
         if (hist.isEmpty()) {
             // 冷启动：用 settings 里的 petName 生成首次建议
-            String petName = new Settings(this).getPetName();
-            String[] cold = new String[]{
-                    "和" + petName + "聊聊天",
-                    "问问" + petName + "今天心情",
-                    "让" + petName + "讲个笑话"
-            };
+            String[] cold = SuggestionEngine.coldStart(new Settings(this).getPetName());
             cachedSuggestionKey = fingerprint;
             cachedSuggestions = cold;
             renderSuggestions(cold);
             return;
         }
 
-        StringBuilder context = new StringBuilder();
-        context.append("你是「").append(new Settings(this).getPetName()).append("」。\n");
-        context.append("基于以下最近的对话，为用户生成 3 条他可能想问的简短问题（每条 ≤12 字）。\n");
-        context.append("要求：贴合上下文、自然、口语化。\n");
-        context.append("输出 JSON 数组：[\"...\",\"...\",\"...\"]。只输出 JSON。\n\n");
-        for (ChatStore.StoredMsg m : hist) {
-            String role = m.role == null ? "user" : m.role;
-            String content = m.content == null ? "" : m.content;
-            if (content.length() > 80) content = content.substring(0, 80) + "…";
-            context.append(role).append(": ").append(content).append("\n");
-        }
+        String context = SuggestionEngine.buildPrompt(new Settings(this).getPetName(), hist);
 
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
-        msgs.add(new LLMClient.ChatMessage("user", context.toString()));
+        msgs.add(new LLMClient.ChatMessage("user", context));
         JSONObject extra = new JSONObject();
         try {
             extra.put("system", "你只输出 JSON 数组，不要任何解释。");
@@ -856,7 +844,7 @@ public class ChatActivity extends Activity {
                 handler.post(() -> hideSuggestions());   // v1.33.0
                 return;
             }
-            String[] suggestions = parseSuggestions(text);
+            String[] suggestions = SuggestionEngine.parse(text);
             handler.post(() -> {
                 if (suggestions == null) {
                     hideSuggestions();   // v1.33.0
@@ -868,33 +856,6 @@ public class ChatActivity extends Activity {
                 }
             });
         });
-    }
-
-    private String[] parseSuggestions(String text) {
-        if (text == null) return null;
-        String t = text.trim();
-        // 去除 markdown 代码块包裹
-        if (t.startsWith("```")) {
-            int firstNewline = t.indexOf('\n');
-            if (firstNewline > 0) t = t.substring(firstNewline + 1);
-            int lastFence = t.lastIndexOf("```");
-            if (lastFence > 0) t = t.substring(0, lastFence);
-            t = t.trim();
-        }
-        try {
-            JSONArray arr = new JSONArray(t);
-            if (arr.length() == 0) return null;
-            String[] out = new String[Math.min(3, arr.length())];
-            for (int i = 0; i < out.length; i++) {
-                String s = arr.optString(i, "").trim();
-                if (s.isEmpty()) return null;
-                if (s.length() > 20) s = s.substring(0, 20);
-                out[i] = s;
-            }
-            return out;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private void renderSuggestions(String[] suggestions) {
@@ -1016,45 +977,6 @@ public class ChatActivity extends Activity {
         return a + "\u0000" + (task == null ? "" : task);
     }
 
-    /** 上下文字符预算（约 6k 字符 ≈ 2~3k token），超出则丢弃较早消息 */
-    private static final int CTX_BUDGET_CHARS = 6000;
-    /** 无论多长，至少保留最近这么多条原文 */
-    private static final int CTX_KEEP_RECENT = 6;
-
-    /**
-     * v1.30.0：按字符预算裁剪历史。
-     * 策略：从最新往回累加，超出预算就停；至少保留 CTX_KEEP_RECENT 条。
-     * 若发生丢弃，在最早保留的一条前插入一条说明，让模型知道上下文被截断。
-     */
-    private List<ChatStore.StoredMsg> trimHistoryForBudget(List<ChatStore.StoredMsg> full) {
-        if (full == null || full.isEmpty()) return full;
-        int total = 0;
-        for (ChatStore.StoredMsg m : full) {
-            total += m.content == null ? 0 : m.content.length();
-        }
-        if (total <= CTX_BUDGET_CHARS) return full; // 预算内，原样返回
-
-        // 从最新往回选
-        ArrayList<ChatStore.StoredMsg> kept = new ArrayList<>();
-        int used = 0;
-        for (int i = full.size() - 1; i >= 0; i--) {
-            ChatStore.StoredMsg m = full.get(i);
-            int len = m.content == null ? 0 : m.content.length();
-            if (kept.size() >= CTX_KEEP_RECENT && used + len > CTX_BUDGET_CHARS) break;
-            kept.add(0, m);
-            used += len;
-        }
-        int dropped = full.size() - kept.size();
-        if (dropped > 0) {
-            // 插入一条截断说明（role=system 由调用方按 user 兼容处理）
-            ChatStore.StoredMsg note = new ChatStore.StoredMsg("system",
-                    "（为控制长度，已省略更早的 " + dropped + " 条对话）",
-                    null, null, System.currentTimeMillis());
-            kept.add(0, note);
-        }
-        return kept;
-    }
-
     private void sendChatMessage(String text, String attachContext) {
         // v1.42.0：记录原文，失败时可一键重试
         lastUserText = text;
@@ -1074,7 +996,7 @@ public class ChatActivity extends Activity {
         }
         List<LLMClient.ChatMessage> msgs = new ArrayList<>();
         // v1.30.0：上下文预算裁剪，避免长对话撑爆 token
-        List<ChatStore.StoredMsg> hist = trimHistoryForBudget(
+        List<ChatStore.StoredMsg> hist = HistoryBudget.trim(
                 chatStore.getMessages(sessionKey, 40));
         boolean found = false;
         for (ChatStore.StoredMsg m : hist) {
@@ -1219,18 +1141,6 @@ public class ChatActivity extends Activity {
                 });
     }
 
-    /** 错误是否值得换配置重试：网络层错误、鉴权/限流/服务端错误值得；400/404 等请求问题换了也一样 */
-    private boolean isFailoverable(String error) {
-        if (error == null) return false;
-        String e = error.toLowerCase(java.util.Locale.ROOT);
-        if (e.contains("http 4")) {
-            return e.contains("401") || e.contains("403") || e.contains("408")
-                    || e.contains("409") || e.contains("429");
-        }
-        // HTTP 5xx 或无 HTTP 码的网络错误（连接失败、超时、DNS 等）都值得切换
-        return true;
-    }
-
     /**
      * 参考 OpenMinis 的模型组设计：当前对话配置失败时，自动切换到同 scope 的
      * 下一个可用配置并重发本条消息。每个配置每次发送最多尝试一次，全部失败才报错。
@@ -1238,7 +1148,7 @@ public class ChatActivity extends Activity {
     private boolean tryModelFailover(String error) {
         if (isCare) return false; // 护理大脑由 CareAI 自行管理密钥池
         if (lastUserText == null || lastUserText.isEmpty()) return false;
-        if (!isFailoverable(error)) return false;
+        if (!FailoverPolicy.isFailoverable(error)) return false;
         ApiManager am = new ApiManager(this);
         ApiProfile cur = am.getCurrent(ApiManager.SCOPE_CHAT);
         if (cur != null) failoverTriedIds.add(cur.id);
@@ -1453,36 +1363,13 @@ public class ChatActivity extends Activity {
         lastTsLabel = now;
         TextView t = new TextView(this);
         // v1.38.0：智能时间分割线（今天 / 昨天 / 更早）
-        t.setText(formatDividerTime(now));
+        t.setText(ChatTextOps.formatDividerTime(now, now, Locale.getDefault()));
         t.setTextSize(10f);
         t.setTextColor(getColorCompat(R.color.operit_text_hint));
         t.setGravity(Gravity.CENTER);
         t.setPadding(0, dp(8), 0, dp(6));
         listContainer.addView(t, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    }
-
-    /**
-     * v1.38.0：时间分割线文案。
-     * 今天 → HH:mm；昨天 → 昨天 HH:mm；今年更早 → M月d日 HH:mm；跨年 → yyyy/M/d HH:mm
-     */
-    private String formatDividerTime(long ts) {
-        java.util.Calendar target = java.util.Calendar.getInstance();
-        target.setTimeInMillis(ts);
-        java.util.Calendar now = java.util.Calendar.getInstance();
-
-        boolean sameYear = target.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR);
-        int dayDiff = sameYear
-                ? target.get(java.util.Calendar.DAY_OF_YEAR) - now.get(java.util.Calendar.DAY_OF_YEAR)
-                : 999;
-
-        String hm = new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(ts));
-        if (dayDiff == 0) return hm;
-        if (dayDiff == -1) return "昨天 " + hm;
-        if (sameYear) {
-            return new SimpleDateFormat("M月d日 HH:mm", Locale.getDefault()).format(new Date(ts));
-        }
-        return new SimpleDateFormat("yyyy/M/d HH:mm", Locale.getDefault()).format(new Date(ts));
     }
 
     private TextView newTextViewBubble() {
@@ -1512,8 +1399,6 @@ public class ChatActivity extends Activity {
     /** v1.35.0：工具结果超过此长度默认折叠；折叠时摘要长度 */
     private static final int TOOL_COLLAPSE_CHARS = 300;
     private static final int TOOL_BRIEF_CHARS = 150;
-    /** 中断标记：用户手动停止回复时附加到消息文本末尾 */
-    private static final String INTERRUPT_MARK = "  ⏹ 已中断";
 
     /**
      * v1.28.0：对已完成的气泡应用长消息折叠。
@@ -1832,7 +1717,7 @@ public class ChatActivity extends Activity {
         b.setOnLongClickListener(v -> {
             String txt = b.getText() == null ? "" : b.getText().toString();
             // v1.28.0：去掉折叠提示尾巴，避免复制/朗读带出「▸ 展开全文」
-            txt = stripCollapseHint(txt);
+            txt = ChatTextOps.stripCollapseHint(txt);
             final String clean = txt;
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
@@ -2091,31 +1976,16 @@ public class ChatActivity extends Activity {
         });
     }
 
-    /** 移除折叠提示后缀（▸ 展开全文 / ▾ 收起）与中断角标（⏹ 已中断） */
-    private String stripCollapseHint(String text) {
-        if (text == null) return "";
-        String t = text;
-        int i = t.lastIndexOf("\n\n▸ 展开全文");
-        if (i >= 0) t = t.substring(0, i);
-        i = t.lastIndexOf("\n\n▾ 收起");
-        if (i >= 0) t = t.substring(0, i);
-        // 复制/朗读时不带出中断角标
-        if (t.endsWith(INTERRUPT_MARK)) {
-            t = t.substring(0, t.length() - INTERRUPT_MARK.length());
-        }
-        return t;
-    }
-
     /** 中断时给气泡追加「⏹ 已中断」角标（次要色小字）；同步 setText，保证随后的折叠 post 读到含角标的行数 */
     private void markInterrupted(TextView bubble) {
         if (bubble == null) return;
         CharSequence cur = bubble.getText();
         if (cur == null || cur.length() == 0) return;
-        if (cur.toString().endsWith(INTERRUPT_MARK)) return;
+        if (cur.toString().endsWith(ChatTextOps.INTERRUPT_MARK)) return;
         // 用 SpannableStringBuilder 保留原有 span（代码块复制链接、Markdown 样式等）
         android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder(cur);
         int start = ssb.length();
-        ssb.append(INTERRUPT_MARK);
+        ssb.append(ChatTextOps.INTERRUPT_MARK);
         ssb.setSpan(new android.text.style.ForegroundColorSpan(
                         getColorCompat(R.color.text_secondary)),
                 start, ssb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -2237,7 +2107,7 @@ public class ChatActivity extends Activity {
         b.setPadding(dp(12), dp(8), dp(12), dp(8));
         b.setElevation(dp(1));
         b.setBackgroundResource(R.drawable.bg_tool);
-        String pretty = prettyJson(argsText);
+        String pretty = ChatTextOps.prettyJson(argsText);
         String head = "🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
                 + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty);
         String statusLine = "\n\n状态：执行中 🔄";
@@ -2360,18 +2230,6 @@ public class ChatActivity extends Activity {
         }
     }
 
-    /** 把工具参数 JSON 美化排版后完整展示 */
-    private String prettyJson(String s) {
-        if (s == null || s.isEmpty()) return "";
-        String t = s.trim();
-        try {
-            if (t.startsWith("{")) return new JSONObject(t).toString(2);
-            if (t.startsWith("[")) return new org.json.JSONArray(t).toString(2);
-        } catch (Exception ignored) {
-        }
-        return s;
-    }
-
     private void renderThinkingDot() {
         hideThinkingDot();
         thinkingStage = 0;
@@ -2405,35 +2263,6 @@ public class ChatActivity extends Activity {
             View v = listContainer.getChildAt(i);
             if ("thinking".equals(v.getTag())) listContainer.removeViewAt(i);
         }
-    }
-
-    private String parseToolName(String toolCallsJson) {
-        try {
-            org.json.JSONArray arr = new org.json.JSONArray(toolCallsJson);
-            if (arr.length() > 0) {
-                JSONObject call = arr.optJSONObject(0);
-                if (call != null && call.optJSONObject("function") != null) {
-                    String n = call.optJSONObject("function").optString("name", "");
-                    if (!n.isEmpty()) return n;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return "tool";
-    }
-
-    private String parseToolArgs(String toolCallsJson) {
-        try {
-            org.json.JSONArray arr = new org.json.JSONArray(toolCallsJson);
-            if (arr.length() > 0) {
-                JSONObject call = arr.optJSONObject(0);
-                if (call != null && call.optJSONObject("function") != null) {
-                    return call.optJSONObject("function").optString("arguments", "");
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
     }
 
     // ==================== 其他 ====================
@@ -2543,8 +2372,8 @@ public class ChatActivity extends Activity {
                 sb.append("```\n").append(m.content == null ? "" : m.content).append("\n```\n\n");
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
                 sb.append("## AI 调用工具 · ").append(time).append("\n\n");
-                sb.append("**工具**：").append(parseToolName(m.toolCalls)).append("\n\n");
-                sb.append("**参数**：\n```json\n").append(parseToolArgs(m.toolCalls)).append("\n```\n\n");
+                sb.append("**工具**：").append(ChatTextOps.parseToolName(m.toolCalls)).append("\n\n");
+                sb.append("**参数**：\n```json\n").append(ChatTextOps.parseToolArgs(m.toolCalls)).append("\n```\n\n");
             } else {
                 sb.append("## AI · ").append(time).append("\n\n");
                 sb.append(m.content == null ? "" : m.content).append("\n\n");
@@ -2571,8 +2400,8 @@ public class ChatActivity extends Activity {
             } else if ("tool".equals(m.role)) {
                 sb.append("[").append(time).append("] 工具结果：\n").append(m.content == null ? "" : m.content).append("\n\n");
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
-                sb.append("[").append(time).append("] AI 调用工具：").append(parseToolName(m.toolCalls)).append("\n");
-                sb.append("参数：").append(parseToolArgs(m.toolCalls)).append("\n\n");
+                sb.append("[").append(time).append("] AI 调用工具：").append(ChatTextOps.parseToolName(m.toolCalls)).append("\n");
+                sb.append("参数：").append(ChatTextOps.parseToolArgs(m.toolCalls)).append("\n\n");
             } else {
                 sb.append("[").append(time).append("] AI：\n").append(m.content == null ? "" : m.content).append("\n\n");
             }
