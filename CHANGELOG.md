@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.139.0 (2026-10-03)
+
+形象管理页补上「从本地文件导入模型」（PR #46，Closes #45）。
+
+### 从本地文件导入模型
+
+**问题**：形象切换本身早已完整（导入 / 切换 / 设默认 / 删除 / 启动恢复，形象管理页与 AI 工具都有），但普通用户没有「添加模型」的入口——`ModelManager.importFromUri` **自诞生起就是死代码**，全仓库无人调用；唯一路径是把模型 zip 发到护理大脑对话里让 AI 装。开箱又只有内置 `huohuo` 一个模型，想换形象无从下手。
+
+- **`care/CareModelsActivity`**：顶栏新增「导入」按钮 → SAF `ACTION_OPEN_DOCUMENT`（MIME 限 `application/zip` / `application/x-zip-compressed`，`*/*` 兜底）→ `onActivityResult` → 后台解压注册；结果用 `AlertDialog` 展示完整多行信息（含自动补动作提示，Toast 会截断）。
+- **桌宠未启动也能导入**：先调一次幂等的 `Live2DNative.init` 保证 `files/models` 已就绪；解压与 `nativeAddModelDir` 注册都不依赖 GL，下次启动 `PetService` 自动加载。此前 `importFromUri` 若在桌宠未启动时被调用会直接报「模型目录未初始化」。
+- **桌宠运行中**时再全量 `registerImportedModels` 对齐；`nativeAddModelDir` 已按目录名去重（`LAppLive2DManager.cpp`），覆盖导入同名目录不会产生重复条目。
+- 空态文案从「可在护理大脑对话中发送 zip」改为指向新入口。
+
+### 验证
+
+单测 394（无新增——导入路径依赖 `Live2DNative`，JVM 加载不了 native 库，无法本地单测）。本地 `verify.sh --quick` 三关通过（compile / test / lint，lint 0 error）。
+
 ## v1.138.0 (2026-10-03)
 
 本轮合并两个 PR：workbuddy 的 #39（Markdown 行级渲染补短板，Closes #36）与 trae 的 #42（应用内更新检查，Closes #41），由发布负责人 trae 统一 bump 发版。
