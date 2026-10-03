@@ -1,8 +1,10 @@
 package com.digitallife.care;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -32,9 +34,12 @@ import java.util.List;
 /**
  * 护理大脑模型管理面板。
  * 列出所有已安装的 Live2D 模型（内置 + 已导入），展示动作/资源状态，
- * 支持查看详情、立即切换、设为默认、删除、播放动作。
+ * 支持从本地导入、查看详情、立即切换、设为默认、删除、播放动作。
  */
 public class CareModelsActivity extends Activity {
+
+    /** 从本地文件选择模型 zip 的请求码 */
+    private static final int REQ_IMPORT = 5001;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private LinearLayout listContainer;
@@ -94,6 +99,23 @@ public class CareModelsActivity extends Activity {
         btnRefresh.setOnClickListener(v -> refreshList());
         topBar.addView(btnRefresh, rlp);
 
+        // 从本地文件导入模型：此前只能把 zip 发到护理大脑对话里让 AI 装，
+        // 普通用户在形象管理页没有入口（ModelManager.importFromUri 一直是死代码）。
+        Button btnImport = new Button(this);
+        btnImport.setHapticFeedbackEnabled(true);   // 自动生成：haptic
+        btnImport.setContentDescription("从文件导入模型");   // 自动生成：a11y
+        btnImport.setText("导入");
+        btnImport.setTextSize(13f);
+        btnImport.setTextColor(getColorCompat(R.color.operit_text_primary));
+        btnImport.setAllCaps(false);
+        btnImport.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnImport.setPadding(dp(12), dp(4), dp(12), dp(4));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
+        ilp.setMargins(dp(4), 0, dp(4), 0);
+        btnImport.setOnClickListener(v -> pickModelZip());
+        topBar.addView(btnImport, ilp);
+
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -139,7 +161,7 @@ public class CareModelsActivity extends Activity {
 
         if (count <= 0) {
             TextView empty = new TextView(this);
-            empty.setText("暂无可用模型。\n可在护理大脑对话中发送模型 zip 压缩包完成安装。");
+            empty.setText("暂无可用模型。\n点右上角「导入」选择模型 zip，或在护理大脑对话中发送 zip 安装。");
             empty.setTextSize(13f);
             empty.setTextColor(getColorCompat(R.color.operit_text_secondary));
             empty.setPadding(dp(8), dp(20), dp(8), dp(20));
@@ -271,6 +293,57 @@ public class CareModelsActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    // ============ 从本地文件导入模型 ============
+
+    private void pickModelZip() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES,
+                    new String[]{"application/zip", "application/x-zip-compressed"});
+            startActivityForResult(i, REQ_IMPORT);
+        } catch (Exception e) {
+            toast("无法打开文件选择器");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IMPORT && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            importModel(data.getData());
+        }
+    }
+
+    /**
+     * 后台解压 + 注册模型，完成后刷新列表。
+     * 桌宠未启动也能导入：解压与注册都不依赖 GL，下次启动 PetService 会自动加载。
+     */
+    private void importModel(final Uri uri) {
+        toast("正在导入模型…");
+        final android.content.Context app = getApplicationContext();
+        new Thread(() -> {
+            // init 幂等：保证 files/models 目录已就绪
+            Live2DNative.init(app);
+            final ModelManager.ImportResult r = ModelManager.importFromUri(app, uri);
+            if (r.ok && PetService.getInstance() != null) {
+                // 桌宠运行中：importFromUri 已注册该目录，这里再全量核对一次，
+                // 让覆盖导入（同名目录）后的旧条目也能对齐
+                ModelManager.registerImportedModels(app);
+            }
+            safeRun(() -> {
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle(r.ok ? "导入完成" : "导入失败")
+                        .setMessage(r.message)
+                        .setPositiveButton("好", null)
+                        .show();
+                refreshList();
+            });
+        }, "model-import").start();
     }
 
     // ============ 视图工具 ============
