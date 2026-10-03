@@ -174,7 +174,7 @@ public final class MarkdownRenderer {
     private static final int COL_GAP = 2;
 
     /**
-     * 整表总宽上限（半角字符数）。v1.130.0：表格是等宽文本渲染，
+     * 整表总宽上限（半角字符数）。v1.131.0：表格是等宽文本渲染，
      * 总宽一旦超过气泡可用宽度，TextView 就会在列间空隙处折行、整张表散掉。
      * 按 15sp 等宽字体估算，手机上大约放得下 32 个半角字符。
      */
@@ -184,7 +184,7 @@ public final class MarkdownRenderer {
     static final int MIN_COL_WIDTH = 3;
 
     /**
-     * v1.130.0：把各列自然宽度等比压缩进总宽预算（单列不低于 {@link #MIN_COL_WIDTH}）。
+     * v1.131.0：把各列自然宽度等比压缩进总宽预算（单列不低于 {@link #MIN_COL_WIDTH}）。
      * <p>宁可每列窄一点，也要保证一行放得下——折行会让表格结构彻底乱掉，
      * 比压缩难看得多。列数多到连下限都塞不下时放弃压缩（接受溢出），
      * 至少不会把某列压成 0 导致内容整列消失。</p>
@@ -220,7 +220,7 @@ public final class MarkdownRenderer {
     }
 
     /**
-     * v1.130.0：空格换成不换行空格。
+     * v1.131.0：空格换成不换行空格。
      * 表格靠空格对齐，但普通空格是 TextView 的合法折行点——宽表格会被从这里
      * 折断成两截，对齐全乱。换成 NBSP 后整行不会断。
      */
@@ -249,7 +249,7 @@ public final class MarkdownRenderer {
         }
         // 单列限宽，避免超宽表格横向撑爆气泡
         for (int i = 0; i < cols; i++) widths[i] = java.lang.Math.min(widths[i], MAX_COL_WIDTH);
-        // v1.130.0：整表压进总宽预算，宁可列窄一点也不要换行
+        // v1.131.0：整表压进总宽预算，宁可列窄一点也不要换行
         widths = fitColumns(widths, MAX_TABLE_WIDTH - COL_GAP * (cols - 1));
 
         int start = out.length();
@@ -262,7 +262,7 @@ public final class MarkdownRenderer {
                 line.append(padCell(cell, widths[i]));
                 if (i < cols - 1) line.append("  ");
             }
-            // v1.130.0：整行转 NBSP，列间空隙不再是折行点
+            // v1.131.0：整行转 NBSP，列间空隙不再是折行点
             out.append(noBreakSpaces(line.toString()));
             if (r < rows.size() - 1) out.append('\n');
         }

@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-10-03（版本 v1.130.0，台账按 agent 聚合 + 每条气泡 HH:mm 时间戳；协作约定见第 9 节）
+> 最后更新：2026-10-03（版本 v1.131.0，宽表格整表宽度受控 + 列间不折行；协作约定见第 9 节）
 
 ---
 
@@ -35,7 +35,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.130.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）；v1.119.0 ChatActivity 纯逻辑下沉（ChatTextOps/HistoryBudget/FailoverPolicy/SuggestionEngine）+ 46 单测；v1.120.0 记忆闭环（查询相关召回、对话接入长期记忆、自动提取启用、解析下沉 MemoryExtractionParser）；v1.121.0 记忆召回修正（统一关键词提取到 MemoryRelevance，修对话大脑中文相关召回失效）；v1.122.0 MCP 客户端协议修正（修 session 被清零、补 notifications/initialized、SSE 按事件解析并抽 McpResponseParser、JSON-RPC id 改用 AtomicLong）；v1.123.0 历史会话时间条改用真实时间戳（修「时间条显示的是打开会话时间」且紧循环下只插得出第一条；workbuddy PR #9）；v1.124.0 多智能体深化（新增 `delegate_pipeline` 有序依赖链编排：逐步串行、前序结论透传、失败即停、步数上限；复用并行卡片 UI，不改 ChatActivity）；v1.125.0 表格单元格支持行内 Markdown（`MarkdownRenderer.stripInline` 先剥标记再算列宽，修「标记占宽度把对齐撑歪」；workbuddy PR #12）；v1.126.0 多智能体补齐 writer/critic 子智能体（`delegate_pipeline` 可跑「研究→写稿→审校」；两者只读白名单、无递归委派）；v1.127.0 消息支持「引用回复」（长按菜单，引用块纯逻辑下沉 `ChatTextOps.buildQuote`；workbuddy PR #16）；v1.128.0 多智能体协作台账（新增 `SubagentLedger` 环形缓冲，`SubagentRunner.run` 一处埋点覆盖串行/并行/依赖链且所有出口留痕；控制台新增第 5 个 Tab「多智能体」，顺带修顶栏写死版本号；PR #20）；v1.129.0 修会话列表空状态死代码（`ConversationTabView.hasUserSession` 判定改为「除内置护理会话外有无自建会话」，空态不再 return 而是引导卡插在最上方，chip 对齐聊天页空态；workbuddy PR #19）；v1.130.0 台账按 agent 聚合（`SubagentLedger.AgentStat` / `byAgent()` 统计成功率与平均耗时，控制台 Tab5 新增「各子智能体」；PR #22）＋ 每条气泡 HH:mm 时间戳（`ChatTextOps.formatBubbleTime` + `ChatActivity.wrapBubble`，同步加固搜索/删除的 `bubbleOf`/`removeBubble`；workbuddy PR #21，补齐 5.4 第 1 条）
+- **已完成**：v1.0 → v1.131.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）；v1.119.0 ChatActivity 纯逻辑下沉（ChatTextOps/HistoryBudget/FailoverPolicy/SuggestionEngine）+ 46 单测；v1.120.0 记忆闭环（查询相关召回、对话接入长期记忆、自动提取启用、解析下沉 MemoryExtractionParser）；v1.121.0 记忆召回修正（统一关键词提取到 MemoryRelevance，修对话大脑中文相关召回失效）；v1.122.0 MCP 客户端协议修正（修 session 被清零、补 notifications/initialized、SSE 按事件解析并抽 McpResponseParser、JSON-RPC id 改用 AtomicLong）；v1.123.0 历史会话时间条改用真实时间戳（修「时间条显示的是打开会话时间」且紧循环下只插得出第一条；workbuddy PR #9）；v1.124.0 多智能体深化（新增 `delegate_pipeline` 有序依赖链编排：逐步串行、前序结论透传、失败即停、步数上限；复用并行卡片 UI，不改 ChatActivity）；v1.125.0 表格单元格支持行内 Markdown（`MarkdownRenderer.stripInline` 先剥标记再算列宽，修「标记占宽度把对齐撑歪」；workbuddy PR #12）；v1.126.0 多智能体补齐 writer/critic 子智能体（`delegate_pipeline` 可跑「研究→写稿→审校」；两者只读白名单、无递归委派）；v1.127.0 消息支持「引用回复」（长按菜单，引用块纯逻辑下沉 `ChatTextOps.buildQuote`；workbuddy PR #16）；v1.128.0 多智能体协作台账（新增 `SubagentLedger` 环形缓冲，`SubagentRunner.run` 一处埋点覆盖串行/并行/依赖链且所有出口留痕；控制台新增第 5 个 Tab「多智能体」，顺带修顶栏写死版本号；PR #20）；v1.129.0 修会话列表空状态死代码（`ConversationTabView.hasUserSession` 判定改为「除内置护理会话外有无自建会话」，空态不再 return 而是引导卡插在最上方，chip 对齐聊天页空态；workbuddy PR #19）；v1.130.0 台账按 agent 聚合（`SubagentLedger.AgentStat` / `byAgent()` 统计成功率与平均耗时，控制台 Tab5 新增「各子智能体」；PR #22）＋ 每条气泡 HH:mm 时间戳（`ChatTextOps.formatBubbleTime` + `ChatActivity.wrapBubble`，同步加固搜索/删除的 `bubbleOf`/`removeBubble`；workbuddy PR #21，补齐 5.4 第 1 条）；v1.131.0 修宽表格被折行破坏（`MarkdownRenderer.fitColumns` 整表等比压进宽度预算、`noBreakSpaces` 列间用 NBSP；workbuddy PR #25）
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -314,7 +314,7 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 ### 5.4 App 功能方向（其他候选，按推荐度排序）
 1. ~~**消息时间戳**：气泡上没有时间显示，长按才知道~~ ✅ 已完成——v1.123.0 修「历史时间条用的是打开时间」，v1.130.0 补齐**每条气泡各自的 HH:mm**（`ChatTextOps.formatBubbleTime` + `ChatActivity.wrapBubble`，历史与流式都带；workbuddy PR #21）
 2. ~~**引用回复**：消息菜单现在只有「复制/重新生成/删除」~~ ✅ 已完成——v1.127.0 用户/AI 气泡长按菜单新增「引用回复」，引用块纯逻辑下沉 `ChatTextOps.buildQuote`（引前剥折叠提示、最多 4 行、结尾换行），workbuddy PR #16
-3. **Markdown 表格增强**：当前是等宽文本对齐，可考虑真表格布局
+3. ~~**Markdown 表格增强**：当前是等宽文本对齐，可考虑真表格布局~~ ✅ 已完成（窄屏关键问题）——v1.131.0 `MarkdownRenderer.fitColumns` 整表等比压缩进宽度预算、`noBreakSpaces` 列间改 NBSP，宽表格不再被 TextView 从列间折断（workbuddy PR #25）；真表格布局（Spannable/TableLayout）仍未来做
 4. ~~**会话列表空状态**：与聊天页空态一致的引导~~ ✅ 已完成——v1.129.0 修 `sessions.isEmpty()` 死代码（先 ensure 护理会话导致恒不触发），改按 `hasUserSession` 判定，空态引导卡 chip 对齐聊天页空态，workbuddy PR #19
 5. ~~表格单元格内的行内 Markdown（**加粗**等）目前不解析，只显示原始文本~~ ✅ 已完成——v1.125.0 `MarkdownRenderer.stripInline` 先剥标记再算列宽，workbuddy PR #12
 
