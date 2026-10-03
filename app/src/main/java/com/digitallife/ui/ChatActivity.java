@@ -1694,7 +1694,7 @@ public class ChatActivity extends Activity {
     }
 
     /**
-     * v1.125.0：把消息以引用块形式放进输入框（5.4 第 2 条「引用回复」）。
+     * v1.127.0：把消息以引用块形式放进输入框（5.4 第 2 条「引用回复」）。
      * 引用块的纯文本拼装在 {@link ChatTextOps#buildQuote} 里，这里只负责塞进输入框。
      */
     private void quoteIntoInput(String text) {
@@ -1745,7 +1745,7 @@ public class ChatActivity extends Activity {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
                     // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
-                    // v1.125.0：新增「引用回复」（索引 2），其后项索引顺延
+                    // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     .setItems(new String[]{"朗读", "复制", "引用回复", "重新发送", "分享"}, (d, w) -> {
                         if (w == 0) {
                             speakText(txt);
@@ -1786,7 +1786,7 @@ public class ChatActivity extends Activity {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
                     // v1.29.0：新增「重新生成」「删除」
-                    // v1.125.0：新增「引用回复」（索引 2），其后项索引顺延
+                    // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     .setItems(new String[]{"朗读", "复制", "引用回复", "分享", "重新生成", "删除"},
                             (d, w) -> {
                         if (w == 0) {
