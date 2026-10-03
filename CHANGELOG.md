@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.122.0 (2026-10-03)
+
+### MCP 客户端协议正确性修正
+
+MCP 其实早已实现（Streamable HTTP + SSE、配置持久化、设置页入口、服务启动自动连接），但核心客户端有几处协议级错误，会让遵规范的远端服务器连不上。本版修正它们。
+
+- **修「握手后 session 被清零」**：`initialize()` 里写了一行 `sessionId = null`，把 `request()` 刚从响应头取到的 `Mcp-Session-Id` 直接抹掉。标准 Streamable HTTP 要求 initialize 之后的每个请求都回带该 id，于是后续 `tools/list` 会失败或每请求新开会话。已删除该行，并加注释说明不要清。
+- **补 `notifications/initialized`**：协议要求 initialize 成功后再发这条通知。新增 `notify()`（无 id、best-effort，失败不阻断握手）。
+- **修 SSE 解析**：原实现把所有 `data:` 行**无分隔拼接**再 `new JSONObject`——多事件（如服务端通知 + 本次响应）时必然拼成非法 JSON，多行事件也会撑坏 JSON。抽出纯逻辑 `McpResponseParser`：按 SSE 规范切事件（空行分隔、同事件多行 `data:` 以 `\n` 连接）、跳过注释/`event:`/`[DONE]`、**优先返回与请求 id 匹配的帧**。
+- **修 JSON-RPC id 精度**：id 原用 `System.nanoTime()`（约 1e18，超出 double 精度），org.json 以 double 存取会失真导致 id 比对不可靠；改为静态 `AtomicLong` 小整数递增。
+- 顺带：`request()` 在无 `result` 时返回空对象而非 null（消除调用方 NPE）；HTTP 判定放宽为 2xx；通知与请求共用 `post()`，去重。
+- 新增 15 条单测（`McpResponseParserTest`），单测 216 → 231。
+
 ## v1.121.0 (2026-10-03)
 
 ### 记忆召回修正：中文相关召回原先形同虚设

@@ -28,7 +28,11 @@ public class McpClient {
         void onError(String error);
     }
 
-private final String endpoint;
+    /** JSON-RPC id 用小整数递增：System.nanoTime() 超出 double 精度，org.json 读写会失真 */
+    private static final java.util.concurrent.atomic.AtomicLong REQUEST_ID =
+            new java.util.concurrent.atomic.AtomicLong(0);
+
+    private final String endpoint;
     private final String headerName;
     private final String headerValue;
     private String sessionId;
@@ -81,9 +85,11 @@ private final String endpoint;
         params.put("protocolVersion", "2025-03-26");
         params.put("capabilities", new JSONObject());
         params.put("clientInfo", clientInfo);
-        JSONObject res = request("initialize", params);
-        // 若服务器要求 session 续传，保存返回的 session id
-        sessionId = null; // Streamable HTTP 经 Mcp-Session-Id 响应头传递，此处简化按需读取
+        request("initialize", params);
+        // 注意：不要在此清空 sessionId——request() 已从响应头取出 Mcp-Session-Id，
+        // 标准 Streamable HTTP 服务器要求 initialize 之后的每个请求都回带它。
+        // 协议要求 initialize 之后发送 initialized 通知（best-effort，服务器不支持也不阻断）。
+        notify("notifications/initialized", new JSONObject());
     }
 
     private List<McpToolSpec> listTools() throws Exception {
@@ -129,14 +135,42 @@ private final String endpoint;
         return sb.length() > 0 ? sb.toString() : "（工具无文本返回）";
     }
 
-    /** JSON-RPC 请求 */
+    /** JSON-RPC 请求：发送并解析出 result（无 result 时返回空对象，避免调用方 NPE） */
     private JSONObject request(String method, JSONObject params) throws Exception {
+        long id = REQUEST_ID.incrementAndGet();
         JSONObject body = new JSONObject();
         body.put("jsonrpc", "2.0");
-        body.put("id", System.nanoTime());
+        body.put("id", id);
         body.put("method", method);
-        body.put("params", params);
+        body.put("params", params != null ? params : new JSONObject());
 
+        JSONObject json = McpResponseParser.parse(post(body), id);
+        JSONObject error = json.optJSONObject("error");
+        if (error != null) {
+            throw new Exception(error.optString("message", "MCP 错误"));
+        }
+        JSONObject result = json.optJSONObject("result");
+        return result != null ? result : new JSONObject();
+    }
+
+    /**
+     * JSON-RPC 通知（无 id、无响应）。协议要求 initialize 后发送 notifications/initialized；
+     * 通知是 best-effort，服务器返回错误也不影响后续调用。
+     */
+    private void notify(String method, JSONObject params) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("jsonrpc", "2.0");
+            body.put("method", method);
+            if (params != null) body.put("params", params);
+            post(body);
+        } catch (Exception ignored) {
+            // 通知失败不阻断握手
+        }
+    }
+
+    /** 发送 JSON-RPC 报文，返回响应体文本（SSE 或 JSON 均由调用方解析）。 */
+    private String post(JSONObject body) throws Exception {
         URL url = new URL(endpoint);
         HttpURLConnection conn = null;
         try {
@@ -158,43 +192,19 @@ private final String endpoint;
             }
 
             int code = conn.getResponseCode();
-            // Streamable HTTP 响应可能为 SSE；此处解析 JSON-RPC body（单块 JSON）
             String responseText = readStream(code >= 400 ? conn.getErrorStream() : conn.getInputStream());
             String sessionHeader = conn.getHeaderField("Mcp-Session-Id");
             if (sessionHeader != null && !sessionHeader.isEmpty()) {
                 sessionId = sessionHeader;
             }
-
-            if (code != 200) {
+            if (code < 200 || code >= 300) {
                 throw new Exception("HTTP " + code + ": " + responseText);
             }
-            JSONObject json = parseJsonResponse(responseText);
-            if (json.has("error") && !json.isNull("error")) {
-                throw new Exception(json.optJSONObject("error").optString("message", "MCP 错误"));
-            }
-            return json.optJSONObject("result");
+            return responseText;
         } finally {
             // 异常路径也必须释放连接，避免 HttpURLConnection 泄漏
             if (conn != null) conn.disconnect();
         }
-    }
-
-    /** 兼容 SSE 单帧与纯 JSON */
-    private JSONObject parseJsonResponse(String text) throws Exception {
-        String t = text.trim();
-        if (t.startsWith("data:")) {
-            // SSE 形式：data: {...}
-            StringBuilder sb = new StringBuilder();
-            for (String line : t.split("\n")) {
-                String l = line.trim();
-                if (l.startsWith("data:")) {
-                    String d = l.substring(5).trim();
-                    if (!d.isEmpty() && !d.equals("[DONE]")) sb.append(d);
-                }
-            }
-            return new JSONObject(sb.toString());
-        }
-        return new JSONObject(t);
     }
 
     private String readStream(java.io.InputStream in) throws Exception {
