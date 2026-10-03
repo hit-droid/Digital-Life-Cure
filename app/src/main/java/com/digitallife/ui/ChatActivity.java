@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -18,6 +19,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -29,10 +31,12 @@ import android.widget.Toast;
 import com.digitallife.R;
 import com.digitallife.brain.LLMClient;
 import com.digitallife.care.CareAI;
+import com.digitallife.harness.ToolApprovalPolicy;
 import com.digitallife.service.PetService;
 import com.digitallife.ui.chat.ChatTextOps;
 import com.digitallife.ui.chat.FailoverPolicy;
 import com.digitallife.ui.chat.HistoryBudget;
+import com.digitallife.ui.chat.ScrollAnchor;
 import com.digitallife.ui.chat.SuggestionEngine;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
@@ -49,6 +53,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 统一聊天页（豆包/微信式）。
@@ -68,6 +74,13 @@ public class ChatActivity extends Activity {
     private ScrollView scroll;
     /** 用户向上翻阅历史时暂停自动滚底，回到底部后恢复 */
     private boolean userScrolledAway = false;
+    /** v1.141.0（#43）：判定「已离开底部」的底部间隙阈值（dp） */
+    private static final int SCROLL_BOTTOM_THRESHOLD_DP = 140;
+    /** v1.141.0（#43）：回到底部按钮的未读累积 / 清零逻辑 */
+    private final ScrollAnchor scrollAnchor = new ScrollAnchor();
+    /** 记录上一次已计入的行数，用行数差把「一条消息」和「流式多次刷新」区分开 */
+    private int lastRowCount = 0;
+    private TextView btnScrollBottom;
     private android.view.ViewTreeObserver.OnScrollChangedListener scrollWatcher;
     private LinearLayout listContainer;
     private EditText etInput;
@@ -163,7 +176,8 @@ public class ChatActivity extends Activity {
                 getColorCompat(R.color.code_text),
                 getColorCompat(R.color.operit_text_secondary),
                 getColorCompat(R.color.operit_text_primary),
-                getColorCompat(R.color.operit_accent));
+                getColorCompat(R.color.operit_accent),
+                getColorCompat(R.color.operit_divider));
         restoreHistory();
     }
 
@@ -259,7 +273,11 @@ public class ChatActivity extends Activity {
             View content = scroll.getChildAt(0);
             if (content == null) return;
             int bottomGap = content.getBottom() - (scroll.getScrollY() + scroll.getHeight());
-            userScrolledAway = bottomGap > dp(140);
+            boolean away = ScrollAnchor.shouldShow(bottomGap, dp(SCROLL_BOTTOM_THRESHOLD_DP));
+            // v1.141.0（#43）：回到（或被带回）底部即清零未读
+            if (userScrolledAway && !away) scrollAnchor.clear();
+            userScrolledAway = away;
+            updateScrollBottomButton();
         };
         scroll.getViewTreeObserver().addOnScrollChangedListener(scrollWatcher);
         listContainer = new LinearLayout(this);
@@ -267,7 +285,17 @@ public class ChatActivity extends Activity {
         listContainer.setPadding(dp(12), dp(8), dp(12), dp(8));
         scroll.addView(listContainer, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(scroll, new LinearLayout.LayoutParams(
+        // v1.141.0（#43）：列表外套一层 FrameLayout，把「回到底部」浮动按钮压在右下角
+        FrameLayout listFrame = new FrameLayout(this);
+        listFrame.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        btnScrollBottom = buildScrollBottomButton();
+        FrameLayout.LayoutParams fabLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fabLp.gravity = Gravity.BOTTOM | Gravity.END;
+        fabLp.setMargins(0, 0, dp(14), dp(14));
+        listFrame.addView(btnScrollBottom, fabLp);
+        root.addView(listFrame, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // 输入区与对话区的细分隔线
@@ -954,6 +982,11 @@ public class ChatActivity extends Activity {
     private final java.util.List<LLMClient.ChatMessage> chatLiveMsgs = new java.util.ArrayList<>();
     /** DeepSeek Harness：一切皆插件的对话循环 */
     private com.digitallife.harness.DeepSeekHarness harness;
+    /** v1.141.0（#40）：危险工具审批策略；会话级放行集需在 Activity 生命周期内保持 */
+    private final com.digitallife.harness.ToolApprovalPolicy toolApprovalPolicy =
+            new com.digitallife.harness.ToolApprovalPolicy();
+    /** v1.141.0（#40）：等待用户审批的超时秒数，超时按拒绝处理，避免工具线程卡死 */
+    private static final int APPROVAL_TIMEOUT_SEC = 120;
     /** v1.111.0：正在运行的子智能体客户端（用户点停止时一并取消）。
      *  v1.117.0 支持并行子智能体后可能同时存在多个，故用列表跟踪。 */
     private final java.util.List<LLMClient> subAgentLlms =
@@ -1084,6 +1117,7 @@ public class ChatActivity extends Activity {
         if (harness == null) {
             harness = com.digitallife.harness.DeepSeekHarness.boot(getApplicationContext());
         }
+        installToolApproval(harness);
         // v1.120.0：把当轮用户问题交给记忆插件，做「查询相关召回」
         harness.context().provide(com.digitallife.harness.plugin.MemoryPlugin.KEY_QUERY,
                 lastUserText == null ? "" : lastUserText);
@@ -2274,6 +2308,105 @@ public class ChatActivity extends Activity {
         scrollToBottom();
     }
 
+    // ==================== v1.141.0（#40）：危险工具执行前确认 ====================
+
+    /** 审批结果回调（避免用 API 24+ 的 java.util.function） */
+    private interface OutcomeSink {
+        void accept(ToolApprovalPolicy.Outcome outcome);
+    }
+
+    /**
+     * v1.141.0（#40）：把危险工具审批接到 harness。
+     *
+     * <p>回调运行在工具循环的**后台线程**上：这里 post 到主线程弹确认卡片，
+     * 同时阻塞后台线程等结果（{@link #APPROVAL_TIMEOUT_SEC} 秒超时按拒绝兜底）。</p>
+     */
+    private void installToolApproval(com.digitallife.harness.DeepSeekHarness h) {
+        if (h == null || h.tools() == null) return;
+        h.tools().setApproval(toolApprovalPolicy, (toolName, args, summary) -> {
+            final ArrayBlockingQueue<ToolApprovalPolicy.Outcome> queue =
+                    new ArrayBlockingQueue<>(1);
+            runOnUiThread(() -> showToolApprovalCard(summary,
+                    o -> queue.offer(o == null ? ToolApprovalPolicy.Outcome.DENY : o)));
+            try {
+                ToolApprovalPolicy.Outcome outcome = queue.poll(APPROVAL_TIMEOUT_SEC, TimeUnit.SECONDS);
+                return outcome == null ? ToolApprovalPolicy.Outcome.DENY : outcome;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return ToolApprovalPolicy.Outcome.DENY;
+            }
+        });
+    }
+
+    /** 确认卡片：显示脱敏后的工具与参数摘要，给出「仅这次 / 本会话始终 / 拒绝」三个选择 */
+    private void showToolApprovalCard(String summary, OutcomeSink sink) {
+        if (isFinishing() || isDestroyed() || listContainer == null) {
+            sink.accept(ToolApprovalPolicy.Outcome.DENY);
+            return;
+        }
+        hideThinkingDot();
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackgroundResource(R.drawable.bg_tool);
+
+        TextView tv = new TextView(this);
+        tv.setTextSize(13f);
+        tv.setTextColor(getColorCompat(R.color.operit_text_primary));
+        tv.setLineSpacing(2f, 1f);
+        tv.setText("⚠️ 这个操作有风险，需要你确认后才会执行\n\n"
+                + (summary == null ? "" : summary));
+        card.addView(tv);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowLp.topMargin = dp(8);
+        card.addView(row, rowLp);
+
+        final boolean[] answered = {false};
+        int brand = getColorCompat(R.color.brand);
+        int muted = getColorCompat(R.color.operit_text_secondary);
+        row.addView(makeApprovalButton("仅这次允许", ToolApprovalPolicy.Outcome.ALLOW_ONCE,
+                answered, card, sink, brand));
+        row.addView(makeApprovalButton("本会话始终允许", ToolApprovalPolicy.Outcome.ALLOW_SESSION,
+                answered, card, sink, brand));
+        row.addView(makeApprovalButton("拒绝", ToolApprovalPolicy.Outcome.DENY,
+                answered, card, sink, muted));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(4);
+        lp.leftMargin = dp(8);
+        lp.rightMargin = dp(24);
+        listContainer.addView(card, lp);
+        scrollToBottom();
+    }
+
+    private TextView makeApprovalButton(String text, ToolApprovalPolicy.Outcome outcome,
+                                        boolean[] answered, View card, OutcomeSink sink, int color) {
+        TextView b = new TextView(this);
+        b.setText(text);
+        b.setTextSize(12f);
+        b.setTextColor(color);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(10), dp(8), dp(10), dp(8));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMargins(dp(3), 0, dp(3), 0);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(v -> {
+            if (answered[0]) return;   // 只认第一次点击，避免重复 resolve
+            answered[0] = true;
+            UiKit.flash(v);
+            card.setVisibility(View.GONE);
+            sink.accept(outcome);
+        });
+        return b;
+    }
+
     /** 工具执行结果回填：完整结果直接展示，状态徽标标识成败 */
     private void markLastToolResult(String toolName, Boolean ok, String result) {
         if (curToolBubble != null) {
@@ -2444,12 +2577,65 @@ public class ChatActivity extends Activity {
     }
 
     private void scrollToBottom() {
+        noteAppendedRows();
         if (userScrolledAway) return;
         scroll.post(() -> {
             View child = scroll.getChildAt(0);
             if (child == null) return;
             scroll.smoothScrollTo(0, child.getBottom());
         });
+    }
+
+    /**
+     * v1.141.0（#43）：按「新增了几行」累积未读。
+     * <p>流式回复每个 delta 都会调一次 {@link #scrollToBottom()}，但气泡行只在首个
+     * delta 加一次；用行数差计数，才能保证「一条消息算一条」，不被流式刷新刷爆。</p>
+     */
+    private void noteAppendedRows() {
+        if (listContainer == null) return;
+        int rows = listContainer.getChildCount();
+        if (rows <= lastRowCount) return;
+        int added = rows - lastRowCount;
+        lastRowCount = rows;
+        if (userScrolledAway) {
+            for (int i = 0; i < added; i++) scrollAnchor.onMessageAppended(false);
+            updateScrollBottomButton();
+        }
+    }
+
+    /** v1.141.0（#43）：右下角「回到底部 / N 条新消息」浮动按钮 */
+    private TextView buildScrollBottomButton() {
+        TextView b = new TextView(this);
+        b.setText(ScrollAnchor.label(0));
+        b.setTextSize(12f);
+        b.setTextColor(Color.WHITE);
+        b.setPadding(dp(14), dp(8), dp(14), dp(8));
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(getColorCompat(R.color.operit_accent));
+        bg.setCornerRadius(dp(18));
+        b.setBackground(bg);
+        b.setVisibility(View.GONE);
+        b.setOnClickListener(v -> {
+            UiKit.flash(v);
+            scrollAnchor.clear();
+            userScrolledAway = false;
+            updateScrollBottomButton();
+            View child = scroll.getChildAt(0);
+            if (child != null) scroll.smoothScrollTo(0, child.getBottom());
+        });
+        return b;
+    }
+
+    /** v1.141.0（#43）：按当前是否离开底部与未读数刷新按钮显隐 / 文案 */
+    private void updateScrollBottomButton() {
+        if (btnScrollBottom == null) return;
+        if (!userScrolledAway) {
+            btnScrollBottom.setVisibility(View.GONE);
+            return;
+        }
+        btnScrollBottom.setText(ScrollAnchor.label(scrollAnchor.unreadCount()));
+        btnScrollBottom.setVisibility(View.VISIBLE);
     }
 
     private ImageButton iconButton(int res) {

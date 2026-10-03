@@ -4,6 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.text.Spanned;
+import android.text.style.URLSpan;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -26,7 +29,8 @@ public class MarkdownRendererTest {
                 0xFFDDDDDD, // codeTextColor
                 0xFF888888, // quoteTextColor
                 0xFF000000, // baseTextColor
-                0xFF3366CC  // linkColor
+                0xFF3366CC, // linkColor
+                0xFF3A3A3A  // dividerColor
         );
     }
 
@@ -208,5 +212,52 @@ public class MarkdownRendererTest {
     public void render_decimalNumberUnaffected() {
         String out = renderer().render("3.14 是圆周率\n").toString();
         assertTrue("小数不能被拆成列表项：" + out, out.contains("3.14 是圆周率"));
+    }
+
+    // ============ v1.141.0（#44）：行内链接 / 任务列表 / 水平线 ============
+
+    /** 取第一个 URLSpan 的 url；没有则返回 null */
+    private static String urlSpanUrl(CharSequence cs) {
+        if (!(cs instanceof Spanned)) return null;
+        URLSpan[] spans = ((Spanned) cs).getSpans(0, cs.length(), URLSpan.class);
+        return spans.length == 0 ? null : spans[0].getURL();
+    }
+
+    @Test
+    public void render_inlineLink_showsLabelOnlyAndCarriesUrl() {
+        CharSequence cs = renderer().render("见 [官网](https://example.com) 了解\n");
+        String out = cs.toString();
+        assertFalse("不应再吐出链接语法：" + out, out.contains("]("));
+        assertTrue("只应显示文字：" + out, out.contains("官网"));
+        assertEquals("https://example.com", urlSpanUrl(cs));
+    }
+
+    @Test
+    public void render_bareUrl_stillLinked() {
+        CharSequence cs = renderer().render("裸链接 https://a.example.com/x 结束\n");
+        assertTrue(cs.toString().contains("https://a.example.com/x"));
+        assertEquals("https://a.example.com/x", urlSpanUrl(cs));
+    }
+
+    @Test
+    public void render_boldWrappingLink_stillLinked() {
+        CharSequence cs = renderer().render("**[官网](https://example.com)**\n");
+        assertFalse("加粗里套链接也不能残留语法：" + cs, cs.toString().contains("]("));
+        assertEquals("https://example.com", urlSpanUrl(cs));
+    }
+
+    @Test
+    public void render_taskList_usesCheckboxGlyphs() {
+        String out = renderer().render("- [ ] 未做\n- [x] 已做\n").toString();
+        assertTrue("未勾选应显示 ☐：" + out, out.contains("\u2610"));
+        assertTrue("已勾选应显示 ☑：" + out, out.contains("\u2611"));
+        assertFalse("不应残留勾选语法：" + out, out.contains("[ ]"));
+    }
+
+    @Test
+    public void render_horizontalRule_drawsDivider() {
+        String out = renderer().render("上\n\n---\n\n下\n").toString();
+        assertFalse("不应再原样显示 ---：" + out, out.contains("---"));
+        assertTrue(out.contains(MarkdownRenderer.DIVIDER_CHAR));
     }
 }

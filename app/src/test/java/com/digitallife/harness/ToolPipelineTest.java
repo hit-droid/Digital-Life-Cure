@@ -1,6 +1,7 @@
 package com.digitallife.harness;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -205,5 +206,119 @@ public class ToolPipelineTest {
         pa.setToolSchemas(null);
         assertEquals("", pa.toolsDesc());
         assertEquals(0, pa.toolSchemas().length());
+    }
+
+    // ==================== v1.141.0（#40）：危险工具审批 seam ====================
+
+    @Test
+    public void approval_readOnlyToolNeverAsks() {
+        final int[] asked = {0};
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("echo", args -> "pong"));
+        p.setApproval(new ToolApprovalPolicy(), (n, a, s) -> {
+            asked[0]++;
+            return ToolApprovalPolicy.Outcome.ALLOW_ONCE;
+        });
+        assertEquals("pong", p.execute("echo", new JSONObject(), "c1").result);
+        assertEquals(0, asked[0]);
+    }
+
+    @Test
+    public void approval_deniedCall_neverRunsHost() {
+        final boolean[] ran = {false};
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> {
+            ran[0] = true;
+            return "opened";
+        }));
+        p.setApproval(new ToolApprovalPolicy(),
+                (n, a, s) -> ToolApprovalPolicy.Outcome.DENY);
+
+        ToolPipeline.Call c = p.execute("open_app", new JSONObject(), "c1");
+        assertTrue(c.rejected);
+        assertFalse("拒绝后绝不能执行宿主", ran[0]);
+        assertNotNull(c.error);
+    }
+
+    @Test
+    public void approval_allowedOnce_runsHost() {
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> "opened"));
+        p.setApproval(new ToolApprovalPolicy(),
+                (n, a, s) -> ToolApprovalPolicy.Outcome.ALLOW_ONCE);
+
+        ToolPipeline.Call c = p.execute("open_app", new JSONObject(), "c1");
+        assertFalse(c.rejected);
+        assertEquals("opened", c.result);
+    }
+
+    @Test
+    public void approval_allowSession_asksOnlyOnce() {
+        final int[] asked = {0};
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> "opened"));
+        p.setApproval(new ToolApprovalPolicy(), (n, a, s) -> {
+            asked[0]++;
+            return ToolApprovalPolicy.Outcome.ALLOW_SESSION;
+        });
+
+        p.execute("open_app", new JSONObject(), "c1");
+        p.execute("open_app", new JSONObject(), "c2");
+        assertEquals("会话放行后不应再问", 1, asked[0]);
+    }
+
+    @Test
+    public void approval_deniedThisTurn_skipsSecondAsk() {
+        final int[] asked = {0};
+        ToolApprovalPolicy policy = new ToolApprovalPolicy();
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> "opened"));
+        p.setApproval(policy, (n, a, s) -> {
+            asked[0]++;
+            return ToolApprovalPolicy.Outcome.DENY;
+        });
+
+        assertTrue(p.execute("open_app", new JSONObject(), "c1").rejected);
+        assertTrue("同轮第二次应直接短路", p.execute("open_app", new JSONObject(), "c2").rejected);
+        assertEquals("同轮不应重复打扰用户", 1, asked[0]);
+    }
+
+    @Test
+    public void approval_beginTurn_reAsksAfterDenial() {
+        final int[] asked = {0};
+        ToolApprovalPolicy policy = new ToolApprovalPolicy();
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> "opened"));
+        p.setApproval(policy, (n, a, s) -> {
+            asked[0]++;
+            return ToolApprovalPolicy.Outcome.DENY;
+        });
+
+        p.execute("open_app", new JSONObject(), "c1");
+        policy.beginTurn();
+        p.execute("open_app", new JSONObject(), "c2");
+        assertEquals("新一轮应重新询问", 2, asked[0]);
+    }
+
+    @Test
+    public void approval_nullApprover_deniesDangerousTool() {
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> "opened"));
+        p.setApproval(new ToolApprovalPolicy(), null);
+        assertTrue("没有可询问的 UI 时按拒绝兜底",
+                p.execute("open_app", new JSONObject(), "c1").rejected);
+    }
+
+    @Test
+    public void approval_notInstalled_keepsOldBehavior() {
+        final boolean[] ran = {false};
+        ToolPipeline p = new ToolPipeline(new EventBus());
+        p.setHost(hostWith("open_app", args -> {
+            ran[0] = true;
+            return "opened";
+        }));
+        // 未装配审批：沿用旧行为，直接执行
+        assertEquals("opened", p.execute("open_app", new JSONObject(), "c1").result);
+        assertTrue(ran[0]);
     }
 }

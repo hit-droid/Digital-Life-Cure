@@ -24,6 +24,11 @@ public final class AgentLoop {
     public void runTurn(AgentHandle agent, String userText) {
         if (agent == null) return;
         agent.cancelled = false;
+        // v1.141.0（#40）：新一轮开始，清空「本轮已拒绝」记账（会话放行集保留）
+        ToolPipeline approvalPipeline = agent.tools;
+        if (approvalPipeline != null && approvalPipeline.approvalPolicy() != null) {
+            approvalPipeline.approvalPolicy().beginTurn();
+        }
         SessionLog log = agent.session;
         JSONObject turnData = new JSONObject();
         try {
