@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.133.0 (2026-10-03)
+
+本轮合并两个 PR：workbuddy 的 #29（状态胶囊**底层**）与 trae 的 #31（开机自启），由发布负责人 trae 统一 bump 发版。
+
+### 桌宠常驻：开机自启 + 划掉任务不杀
+
+由 trae 提交（PR #31，Closes #30）。这是桌宠「常驻」缺失的两块。
+
+**问题**：桌宠只在用户手动「开始」后存在——**全仓没有 `BOOT_COMPLETED` 接收器**，设备重启后桌宠不会自己回来；也没有 `stopWithTask=false`，从最近任务划掉 App 会连带停掉桌宠。
+
+**改法**：
+
+- **纯逻辑 `util/AutoStartPolicy.shouldStart(autoStart, wasRunning, overlayGranted)`**（JVM 可测）：只有「用户开着自启 + 关机前桌宠确实在跑 + 仍有悬浮窗权限」三者同时成立才拉起，**避免没启用过的用户被莫名启动**。
+- **`service/BootReceiver`**：收 `BOOT_COMPLETED`（含部分 ROM 的 `QUICKBOOT_POWERON`）拉起 `PetService` 前台服务。
+- **`Settings.auto_start`**（默认开）与 **`Settings.pet_enabled`**（用户意图）；`PetService` 在启动/停止时维护 `pet_enabled`，作为唯一事实来源，覆盖 UI 启停与通知停止两条路径。
+- **`AndroidManifest`**：`RECEIVE_BOOT_COMPLETED` 权限 + 注册 receiver + `PetService` 加 `android:stopWithTask="false"`。
+- **`SettingsTabView`** 功能设置新增「开机自动启动（重启后桌宠自己回来）」开关。
+
+新增 5 条单测。
+
+### 桌宠状态胶囊（底层就位，第二步接线后可见）
+
+由协作者 workbuddy 提交（PR #29，Refs #27 第 1 条）。`brain/EmotionState`（亲密度 / 精力 / 6 维情绪）此前只在「发现」页展示。
+
+- **`ui/pet/PetStatusText`**（纯逻辑）：把三个标量拼成 `亲密度 62% · 精力 71% · 开心`；只收标量、不认识 `EmotionState`（避免 `ui/` 反向依赖 `brain/`），百分比夹取、`NaN` 视作 0、未知情绪回退「平静」。
+- **`ui/PetOverlayView`**：底部居中状态胶囊 + 5 秒 `ticker`（`onDetachedFromWindow` 摘回调防泄漏）、取数异常不崩桌宠。
+- ⚠️ **尚未接线**：`statusProvider` 目前为 `null`，胶囊保持隐藏；接线 + 长按快捷菜单是 #27 的第二步，届时胶囊才可见。本版仅先把纯逻辑与视图就位。
+
+新增 7 条单测。单测 310 → 322。
+
 ## v1.132.0 (2026-10-03)
 
 ### 桌宠体验：松手贴边停靠（左/右边缘吸附）+ 设置开关
