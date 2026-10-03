@@ -174,7 +174,8 @@ public class SubagentTeamTest {
 
     @Test
     public void teamEmitsStartAndTeamResultPhases() {
-        final List<String> phases = new ArrayList<>();
+        // 子任务真并发，事件可能来自多个线程：必须用同步集合，否则会丢事件（CI 已翻过车）
+        final List<String> phases = java.util.Collections.synchronizedList(new ArrayList<String>());
         SubagentRunner.ProgressListener p = (agent, phase, detail) -> phases.add(phase);
         SubagentTeam.run(tasks("researcher", "查 A", "nobody", "查 B"),
                 hostWith("web_search"), new FakeFactory("结论", null, false), p);
@@ -187,7 +188,7 @@ public class SubagentTeamTest {
     @Test
     public void teamStepsCarryTaskSoDuplicateAgentsAreDistinguishable() {
         // 同一个 agent 并发接多个任务时，UI 必须靠 task 区分卡片，否则会互相覆盖
-        final List<String> events = new ArrayList<>();
+        final List<String> events = java.util.Collections.synchronizedList(new ArrayList<String>());
         SubagentRunner.ProgressListener p = new SubagentRunner.ProgressListener() {
             @Override
             public void onStep(String agent, String phase, String detail) {
