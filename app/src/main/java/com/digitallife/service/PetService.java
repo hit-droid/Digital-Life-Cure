@@ -38,6 +38,7 @@ import com.digitallife.util.Settings;
 import com.digitallife.util.ThoughtStore;
 import com.digitallife.ui.PetOverlayView;
 import com.digitallife.ui.pet.PetQuickMenu;
+import com.digitallife.ui.pet.PetTouchReaction;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.render.ContinuousMotionEngine;
@@ -478,6 +479,24 @@ public class PetService extends Service implements AICore.Output,
             return;
         }
         aiCore.onUserTap();
+    }
+
+    @Override
+    public void onTapZone(String zone) {
+        // v1.137.0（Issue #37）：摸头 / 戳身子的差异化反馈。
+        // 只读调用 EmotionState 公开方法，不改 brain/ 内部算法；表情与动作已在 PetOverlayView 落定。
+        PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
+        if (aiCore != null) {
+            if (reaction.intimacy != 0f) {
+                aiCore.getEmotion().addIntimacy(reaction.intimacy);
+            }
+            for (String dim : reaction.emotionDims()) {
+                aiCore.getEmotion().apply(dim, reaction.emotion(dim));
+            }
+        }
+        if (reaction.bubble != null && overlayView != null) {
+            overlayView.showBubble(reaction.bubble, 2.2f);
+        }
     }
 
     @Override
