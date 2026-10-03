@@ -399,20 +399,22 @@ public class ChatActivity extends Activity {
         root.addView(attachBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        if (isCare) {
-            btnAttach = new ImageButton(this);
-            btnAttach.setImageResource(R.drawable.ic_attach);
-            btnAttach.setColorFilter(getColorCompat(R.color.brand));
-            btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
-            btnAttach.setScaleType(ImageView.ScaleType.CENTER);
-            btnAttach.setPadding(dp(10), dp(10), dp(10), dp(10));
-            btnAttach.setContentDescription("附加文件");   // v1.37.0 无障碍
-            UiKit.pressScale(btnAttach);
-            LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
-            alp.rightMargin = dp(6);
-            btnAttach.setOnClickListener(v -> pickAttach());
-            inputBar.addView(btnAttach, alp);
-        }
+        // v1.142.0（#55）：附件按钮两种模式都建。此前只在护理模式下创建，可
+        // hint 对普通会话写着「＋ 可附带文件」，pickAttach / onActivityResult /
+        // attachBar / buildFileContext 整条链路也都不限模式（普通会话发 .txt/.md/
+        // .json/.java 等文本文件本就能读进上下文）——唯独按钮没建，等于死代码。
+        btnAttach = new ImageButton(this);
+        btnAttach.setImageResource(R.drawable.ic_attach);
+        btnAttach.setColorFilter(getColorCompat(R.color.brand));
+        btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnAttach.setScaleType(ImageView.ScaleType.CENTER);
+        btnAttach.setPadding(dp(10), dp(10), dp(10), dp(10));
+        btnAttach.setContentDescription("附加文件");   // v1.37.0 无障碍
+        UiKit.pressScale(btnAttach);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        alp.rightMargin = dp(6);
+        btnAttach.setOnClickListener(v -> pickAttach());
+        inputBar.addView(btnAttach, alp);
 
         etInput = new EditText(this);
         etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 可附带模型 zip…"
@@ -542,6 +544,36 @@ public class ChatActivity extends Activity {
                 appendAiBubble(m.content, m.timestamp);
             }
         }
+        // v1.142.0（#55）：历史渲染完两件事——
+        // 1) 直接落到最新一条。此前打开有历史的会话停在顶部，看到的是最旧的消息，
+        //    得自己滑到底才能接上上下文（scrollToBottom 只在发消息时调）。
+        // 2) 把已渲染行数同步给未读计数。lastRowCount 原先只在追加新行时更新，
+        //    历史恢复后仍是 0，于是上翻后到来的第一条新消息会把整屏历史全算成未读
+        //    （浮标一上来就是「101 条新消息」）。
+        lastRowCount = listContainer.getChildCount();
+        jumpToLatestOnce();
+    }
+
+    /**
+     * v1.142.0（#55）：一次性把列表滚到最底部。
+     *
+     * <p>用 {@code OnPreDrawListener} 而不是 {@code post}：首帧绘制前布局量已完成，
+     * 此时 {@code getBottom()} 才准；用 {@code post} 有可能赶在 measure 之前跑，滚不到位。
+     * 长列表直接 {@code scrollTo} 不跑平滑动画——打开会话就该直接看到最新一条。</p>
+     */
+    private void jumpToLatestOnce() {
+        if (scroll == null) return;
+        scroll.getViewTreeObserver().addOnPreDrawListener(
+                new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override
+                    public boolean onPreDraw() {
+                        android.view.ViewTreeObserver obs = scroll.getViewTreeObserver();
+                        if (obs.isAlive()) obs.removeOnPreDrawListener(this);
+                        View child = scroll.getChildAt(0);
+                        if (child != null) scroll.scrollTo(0, child.getBottom());
+                        return true;
+                    }
+                });
     }
 
     // ==================== 发送与分发 ====================
