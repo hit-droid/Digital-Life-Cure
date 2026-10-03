@@ -139,4 +139,26 @@ public final class ChatTextOps {
         sb.append('\n');
         return sb.toString();
     }
+
+    // ==================== 气泡时间戳 ====================
+
+    /** 气泡时间戳格式：24 小时制 {@code HH:mm} */
+    private static final String BUBBLE_TIME_PATTERN = "HH:mm";
+
+    /**
+     * v1.128.0：气泡自己的时间戳（AGENTS.md 5.4 第 1 条）。
+     * 与 {@link #formatDividerTime} 不同——分隔线只在间隔 5 分钟时出现，
+     * 这个时间是每条气泡都带的，所以只给 {@code HH:mm}，不带日期。
+     *
+     * @param ts 消息真实时间戳（毫秒）；<=0 时回退为当前时间
+     */
+    public static String formatBubbleTime(long ts) {
+        return formatBubbleTime(ts, Locale.getDefault());
+    }
+
+    public static String formatBubbleTime(long ts, Locale locale) {
+        long t = ts > 0 ? ts : System.currentTimeMillis();
+        Locale l = locale != null ? locale : Locale.getDefault();
+        return new SimpleDateFormat(BUBBLE_TIME_PATTERN, l).format(new Date(t));
+    }
 }
