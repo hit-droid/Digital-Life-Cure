@@ -92,6 +92,22 @@ public class ConversationTabView extends LinearLayout {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
 
+    /**
+     * v1.128.0：是否已经存在「用户自建」会话（除内置护理会话外的任一条）。
+     * <p>{@link #refresh()} 开头就 ensure 了护理会话，列表至少有一条，
+     * 所以原来的 {@code sessions.isEmpty()} 恒为 false —— 空态分支是死代码，
+     * 新用户打开「对话」Tab 只会看到孤零零一条护理会话、没有任何引导。
+     * 判定改为「除内置护理会话外没有其它会话」。</p>
+     * <p>纯逻辑（不碰 Android / 数据库），便于单测。</p>
+     */
+    static boolean hasUserSession(List<ChatStore.SessionInfo> sessions) {
+        if (sessions == null) return false;
+        for (ChatStore.SessionInfo s : sessions) {
+            if (s != null && !ChatStore.SESSION_CARE.equals(s.id)) return true;
+        }
+        return false;
+    }
+
     /** 刷新会话列表（在切换 Tab / onResume 时调用） */
     public void refresh() {
         if (listContainer == null) return;
@@ -99,27 +115,9 @@ public class ConversationTabView extends LinearLayout {
         // 护理大脑会话始终存在并置顶
         chatStore.ensureSession(ChatStore.SESSION_CARE, "护理大脑", ChatStore.TYPE_CARE, "care", null);
         List<ChatStore.SessionInfo> sessions = chatStore.getSessions();
-        if (sessions.isEmpty()) {
-            LinearLayout emptyBox = new LinearLayout(activity);
-            emptyBox.setOrientation(LinearLayout.VERTICAL);
-            emptyBox.setGravity(Gravity.CENTER);
-            emptyBox.setPadding(0, UiKit.dp(activity, 56), 0, 0);
-
-            ImageView emptyIcon = new ImageView(activity);
-            emptyIcon.setImageResource(R.drawable.ic_empty);
-            emptyIcon.setAlpha(0.9f);
-            emptyBox.addView(emptyIcon);
-
-            TextView empty = new TextView(activity);
-            empty.setText("还没有对话\n点右上角「＋ 新建对话」开始\n或打开通讯录，与某个模型单独聊聊");
-            empty.setTextSize(13f);
-            empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
-            empty.setGravity(Gravity.CENTER);
-            empty.setLineSpacing(4f, 1f);
-            empty.setPadding(0, UiKit.dp(activity, 14), 0, 0);
-            emptyBox.addView(empty);
-            listContainer.addView(emptyBox);
-            return;
+        // v1.128.0：空态不再 return——引导卡插在最上方，护理会话卡片照常渲染在下方
+        if (!hasUserSession(sessions)) {
+            listContainer.addView(buildEmptyGuide());
         }
         for (int i = 0; i < sessions.size(); i++) {
             View card = buildSessionCard(sessions.get(i));
@@ -129,6 +127,73 @@ public class ConversationTabView extends LinearLayout {
                     .setDuration(220).setStartDelay(i * 45L).start();
             listContainer.addView(card);
         }
+    }
+
+    /**
+     * v1.128.0：会话列表空态引导（AGENTS.md 5.4 第 4 条）。
+     * <p>样式与交互对齐聊天页空态（{@code ChatActivity#appendEmptyGuide}）：
+     * 同样的 {@code bg_chip_outline} chip，点了直接做事，而不是只给一行说明文字。</p>
+     */
+    private View buildEmptyGuide() {
+        LinearLayout emptyBox = new LinearLayout(activity);
+        emptyBox.setOrientation(LinearLayout.VERTICAL);
+        emptyBox.setGravity(Gravity.CENTER_HORIZONTAL);
+        emptyBox.setPadding(0, UiKit.dp(activity, 40), 0, UiKit.dp(activity, 10));
+
+        ImageView emptyIcon = new ImageView(activity);
+        emptyIcon.setImageResource(R.drawable.ic_empty);
+        emptyIcon.setAlpha(0.9f);
+        emptyBox.addView(emptyIcon);
+
+        TextView empty = new TextView(activity);
+        // 文案与右上角按钮的实际文案对齐（按钮是「＋ 新建会话」，此前写成「新建对话」）
+        empty.setText("还没有对话\n点右上角「＋ 新建会话」开始\n或打开通讯录，与某个模型单独聊聊");
+        empty.setTextSize(13f);
+        empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+        empty.setGravity(Gravity.CENTER);
+        empty.setLineSpacing(4f, 1f);
+        empty.setPadding(0, UiKit.dp(activity, 14), 0, 0);
+        emptyBox.addView(empty);
+
+        TextView tip = new TextView(activity);
+        tip.setText("快捷开始：");
+        tip.setTextSize(12f);
+        tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+        tip.setGravity(Gravity.CENTER);
+        tip.setPadding(0, UiKit.dp(activity, 16), 0, UiKit.dp(activity, 8));
+        emptyBox.addView(tip);
+
+        LinearLayout chips = new LinearLayout(activity);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.setGravity(Gravity.CENTER);
+        chips.addView(guideChip("＋ 新建会话", v -> showNewSessionDialog()));
+        chips.addView(guideChip("✦ 打开护理大脑", v -> {
+            if (listener != null) {
+                listener.onOpenSession(ChatStore.SESSION_CARE, "护理大脑",
+                        ChatStore.TYPE_CARE, "care");
+            }
+        }));
+        emptyBox.addView(chips);
+        return emptyBox;
+    }
+
+    /** 空态引导 chip：与聊天页 {@code ChatActivity#addQuickChip} 同一套观感 */
+    private TextView guideChip(String label, View.OnClickListener l) {
+        TextView chip = new TextView(activity);
+        chip.setText(label);
+        chip.setTextSize(13f);
+        chip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+        chip.setGravity(Gravity.CENTER);
+        chip.setBackgroundResource(R.drawable.bg_chip_outline);
+        chip.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 7),
+                UiKit.dp(activity, 12), UiKit.dp(activity, 7));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = UiKit.dp(activity, 8);
+        chip.setLayoutParams(lp);
+        UiKit.pressScale(chip);
+        chip.setOnClickListener(l);
+        return chip;
     }
 
     private View buildSessionCard(ChatStore.SessionInfo s) {
