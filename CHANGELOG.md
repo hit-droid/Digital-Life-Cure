@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.120.0 (2026-10-03)
+
+### 记忆闭环：查询相关召回 + 对话记忆自动提取
+
+本版把此前"各就各位但没接上"的三段记忆能力接成一个闭环：对话 → 记忆源 → 相关召回 → 沉淀 facts。这三处都是**已写成但从未生效**的死代码，属于对标 OpenMinis「设备端记忆」的收尾。
+
+- **修「记忆注入永远查空」**：`MemoryPlugin` 一直调用 `renderForPrompt("")`，检索器里已有的"关键词相关"维度被完全跳过，注入的永远只是"最近 + 高权重"。现在插件从 `HarnessContext` 读取 `MemoryPlugin.KEY_QUERY`，`ChatActivity` 在每轮 `startTurn` 前把当轮用户问题交付给它；未提供时退化为旧行为，不影响其他调用方。
+- **对话接入长期记忆**：对话大脑（含模型小房间）此前只写 `ChatStore`，从不写 `MemoryStore`，导致记忆检索与自动提取的数据源只有桌宠大脑。现在用户/助手消息在落库时一并并入长期记忆（助手侧先剥掉折叠/中断角标）；护理大脑不参与，避免医疗会话混入角色记忆。
+- **自动提取真正跑起来**：`MemoryExtractor.schedulePeriodic()` 此前**没有任何地方调用**，"每 6 小时自动提取"实际不存在。现在由常驻前台服务 `PetService` 在启动时调度、销毁时取消。
+- **提取结果解析下沉为纯逻辑**：新增 `MemoryExtractionParser`（无 Android 依赖，可单测），把原先埋在 `MemoryExtractor.handleResult` 里的解析收敛成：抽 JSON（兼容 ```json 包裹 / 正文混入）、限 5 条新记忆 / 3 条遗忘、单条截断 60 字、`weight` 夹到 [0,1]、分类归一到 `facts` 表实际取值（如模型爱写的 `personality` → `profile`，否则 `getProfile` 查不到）。`extractJson` 还修了字符串内花括号/转义引号会打乱括号计数的问题。
+- 新增 19 条单测（`MemoryExtractionParserTest`），单测总数 184 → 203。
+
 ## v1.119.0 (2026-10-03)
 
 ### 重构：ChatActivity 纯逻辑下沉 + 46 条单测

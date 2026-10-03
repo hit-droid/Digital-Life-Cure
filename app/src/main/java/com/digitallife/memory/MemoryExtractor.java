@@ -8,7 +8,6 @@ import com.digitallife.brain.LLMClient;
 import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.List;
@@ -122,69 +121,24 @@ public class MemoryExtractor {
     }
 
     private void handleResult(String raw, Listener listener) {
-        try {
-            String json = extractJson(raw);
-            if (json == null) {
-                if (listener != null) listener.onError("LLM 输出非 JSON");
-                return;
-            }
-            JSONObject obj = new JSONObject(json);
-            int newCount = 0;
-            JSONArray arr = obj.optJSONArray("new_memories");
-            if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject m = arr.optJSONObject(i);
-                    if (m == null) continue;
-                    String content = m.optString("content", "").trim();
-                    if (content.isEmpty()) continue;
-                    String category = m.optString("category", "fact");
-                    double weight = m.optDouble("weight", 0.6);
-                    store.saveFact(category, content, weight, System.currentTimeMillis());
-                    newCount++;
-                }
-            }
-            int forgottenCount = 0;
-            JSONArray forget = obj.optJSONArray("forgotten");
-            if (forget != null) {
-                for (int i = 0; i < forget.length(); i++) {
-                    String content = forget.optString(i, "").trim();
-                    if (content.isEmpty()) continue;
-                    List<MemoryStore.Fact> facts = store.getAllFacts();
-                    for (MemoryStore.Fact f : facts) {
-                        if (f.content != null && f.content.contains(content)) {
-                            store.deleteFact(f.id);
-                            forgottenCount++;
-                        }
-                    }
-                }
-            }
-            if (listener != null) listener.onExtracted(newCount, forgottenCount);
-        } catch (Exception e) {
-            if (listener != null) listener.onError("解析失败: " + e.getMessage());
+        MemoryExtractionParser.Result result = MemoryExtractionParser.parse(raw);
+        if (result == null) {
+            if (listener != null) listener.onError("LLM 输出非 JSON");
+            return;
         }
-    }
-
-    private String extractJson(String raw) {
-        if (raw == null) return null;
-        // 尝试提取 ```json ... ``` 块
-        int s = raw.indexOf("```json");
-        if (s >= 0) {
-            int e = raw.indexOf("```", s + 7);
-            if (e > s) return raw.substring(s + 7, e).trim();
+        long now = System.currentTimeMillis();
+        for (MemoryExtractionParser.NewMemory m : result.memories) {
+            store.saveFact(m.category, m.content, m.weight, now);
         }
-        // 尝试直接找 { ... }
-        s = raw.indexOf('{');
-        if (s >= 0) {
-            int depth = 0;
-            for (int i = s; i < raw.length(); i++) {
-                char c = raw.charAt(i);
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    depth--;
-                    if (depth == 0) return raw.substring(s, i + 1);
+        int forgottenCount = 0;
+        for (String content : result.forgotten) {
+            for (MemoryStore.Fact f : store.getAllFacts()) {
+                if (f.content != null && f.content.contains(content)) {
+                    store.deleteFact(f.id);
+                    forgottenCount++;
                 }
             }
         }
-        return null;
+        if (listener != null) listener.onExtracted(result.memories.size(), forgottenCount);
     }
 }
