@@ -110,6 +110,8 @@ public class ChatActivity extends Activity {
     private boolean isCare;
 
     private ChatStore chatStore;
+    /** v1.120.0：长期记忆（对话内容作为记忆源，供检索与自动提取；护理大脑不参与） */
+    private com.digitallife.util.MemoryStore chatMemory;
 
     private TextView curAssistantBubble;   // care 流式回复气泡
     private TextView curToolBubble;        // care 工具过程卡片
@@ -152,6 +154,7 @@ public class ChatActivity extends Activity {
         modelName = getIntent().getStringExtra(EXTRA_MODEL);
         if (sessionKey == null) sessionKey = ChatStore.SESSION_CARE;
         isCare = ChatStore.TYPE_CARE.equals(type);
+        if (!isCare) chatMemory = new com.digitallife.util.MemoryStore(this);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().getDecorView().setSystemUiVisibility(0);
         buildUi();
@@ -586,6 +589,7 @@ public class ChatActivity extends Activity {
             String bubble = text.isEmpty() ? "📄 " + display : text + "\n📄 " + display;
             appendUserBubble(bubble);
             chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            rememberUser(text.isEmpty() ? display : text);
             scrollToBottom();
             final String filePath = pendingFilePath;
             final String userText = text;
@@ -659,6 +663,7 @@ public class ChatActivity extends Activity {
             updateSendButton();
             careAI.sendMessage(text);
         } else {
+            rememberUser(text);
             if (ChatStore.TYPE_MODEL.equals(type) && modelName != null && !modelName.isEmpty()) {
                 PetService svc = PetService.getInstance();
                 if (svc != null) svc.switchToModelByName(modelName);
@@ -668,6 +673,23 @@ public class ChatActivity extends Activity {
             updateSendButton();
             sendChatMessage(text, null);
         }
+    }
+
+    /**
+     * v1.120.0：把对话内容并入长期记忆，使对话成为记忆源
+     * （可被相关召回注入 prompt，也可被自动提取沉淀为 facts）。护理大脑不参与。
+     */
+    private void rememberUser(String text) {
+        if (isCare || chatMemory == null || text == null || text.trim().isEmpty()) return;
+        chatMemory.addUserMessage(text);
+    }
+
+    /** 见 {@link #rememberUser}；assistant 侧需先剥掉折叠/中断角标再入库 */
+    private void rememberAssistant(String text) {
+        if (isCare || chatMemory == null) return;
+        String clean = ChatTextOps.stripCollapseHint(text);
+        if (clean == null || clean.trim().isEmpty()) return;
+        chatMemory.addAssistantMessage(clean);
     }
 
     // ==================== 停止生成 / 发送按钮状态 ====================
@@ -706,6 +728,7 @@ public class ChatActivity extends Activity {
             String finalText = curAssistantText + ChatTextOps.INTERRUPT_MARK;
             chatStore.addMessage(sessionKey, "assistant", finalText,
                     null, null, System.currentTimeMillis());
+            rememberAssistant(curAssistantText);
             markInterrupted(curAssistantBubble);
             // v1.28.0：完成后对长消息应用折叠
             applyCollapse(curAssistantBubble);
@@ -1061,6 +1084,9 @@ public class ChatActivity extends Activity {
         if (harness == null) {
             harness = com.digitallife.harness.DeepSeekHarness.boot(getApplicationContext());
         }
+        // v1.120.0：把当轮用户问题交给记忆插件，做「查询相关召回」
+        harness.context().provide(com.digitallife.harness.plugin.MemoryPlugin.KEY_QUERY,
+                lastUserText == null ? "" : lastUserText);
         harness.startTurn(llm, chatTools, chatPromptOverlay(), chatLiveMsgs,
                 new com.digitallife.harness.AgentHandle.Listener() {
                     @Override
@@ -1108,12 +1134,14 @@ public class ChatActivity extends Activity {
                             if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
                                 chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                         null, null, System.currentTimeMillis());
+                                rememberAssistant(curAssistantText);
                                 applyCollapse(curAssistantBubble);
                                 curAssistantBubble = null;
                                 curAssistantText = "";
                             } else if (fullText != null && !fullText.isEmpty()) {
                                 chatStore.addMessage(sessionKey, "assistant", fullText,
                                         null, null, System.currentTimeMillis());
+                                rememberAssistant(fullText);
                                 hideThinkingDot();
                                 appendAiBubble(fullText);
                             }

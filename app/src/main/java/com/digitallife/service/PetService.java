@@ -77,6 +77,8 @@ public class PetService extends Service implements AICore.Output,
     private Settings settings;
     private Heartbeat heartbeat;
     private MemoryStore memory;
+    /** v1.120.0：常驻服务承载记忆自动提取（此前 schedulePeriodic 从未被调用） */
+    private com.digitallife.memory.MemoryExtractor memoryExtractor;
 
     // L2 生理状态机 / L3 心理独白
     private PetVitalsManager vitals;
@@ -234,6 +236,10 @@ public class PetService extends Service implements AICore.Output,
         aiCore.setOutput(this);
         aiCore.start();
         memory = aiCore.getMemory();
+
+        // v1.120.0：启动长期记忆自动提取（每 6 小时从近期对话沉淀 facts）
+        memoryExtractor = new com.digitallife.memory.MemoryExtractor(this);
+        memoryExtractor.schedulePeriodic();
 
         // v1.24.0：主动行为引擎
         proactiveEngine = new com.digitallife.brain.ProactiveEngine(this);
@@ -937,6 +943,10 @@ public class PetService extends Service implements AICore.Output,
         // 注销无障碍服务监听器，避免匿名内部类持有 Service 引用造成泄漏
         com.digitallife.service.PetAccessibilityService.setListener(null);
         if (careAutomation != null) careAutomation.stop();
+        if (memoryExtractor != null) {
+            memoryExtractor.cancel();
+            memoryExtractor = null;
+        }
         if (heartbeat != null) heartbeat.stop();
         if (aiCore != null) aiCore.stop();
         if (thoughtLoop != null) thoughtLoop.stop();

@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-10-03（版本 v1.118.0，工程化加固：CI 单测门禁 / 代理注入 / 版本号去硬编码）
+> 最后更新：2026-10-03（版本 v1.120.0，记忆闭环：查询相关召回 / 对话接入长期记忆 / 自动提取启用）
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.118.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）
+- **已完成**：v1.0 → v1.120.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）；v1.119.0 ChatActivity 纯逻辑下沉（ChatTextOps/HistoryBudget/FailoverPolicy/SuggestionEngine）+ 46 单测；v1.120.0 记忆闭环（查询相关召回、对话接入长期记忆、自动提取启用、解析下沉 MemoryExtractionParser）
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -50,6 +50,8 @@
   | v1.116.0 | 原生崩溃修复 | 修 Live2D 模型文件缺失导致的 SIGSEGV |
   | v1.117.0 | **多智能体并行编排** | `delegate_parallel` fan-out/fan-in，最多 5 个子任务真并发 + 失败隔离 + 逐任务超时；并行协作卡片按「agent + 任务原文」索引；`Tools` 支持对象数组 schema |
   | v1.118.0 | **工程化加固** | CI 增加单测门禁（此前 CI 只编译、138 个单测从不拦回归）；`app/build.gradle` 自动把代理环境变量注入测试 JVM（修 `tools/verify.sh` 在代理环境下必挂）；修两处写死版本号（`DeveloperActivity`/`OperitDrawer` 曾硬编码 v1.24.0）；删除误入库的临时脚本（含明文 PAT） |
+  | v1.119.0 | 纯逻辑下沉 | ChatActivity 2661 → 2490 行，抽出 `ChatTextOps`/`HistoryBudget`/`FailoverPolicy`/`SuggestionEngine` 四个纯逻辑类 + 46 单测 |
+  | v1.120.0 | **记忆闭环** | `MemoryPlugin` 支持查询相关召回（此前永远传空串）；对话大脑消息接入 `MemoryStore`（此前只写 ChatStore）；`MemoryExtractor.schedulePeriodic` 由 `PetService` 真正调度（此前从无调用）；解析下沉 `MemoryExtractionParser` + 19 单测 |
 - **待发行**：无
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
@@ -63,7 +65,7 @@
 ├── app/
 │   ├── build.gradle                ← 版本发版入口：versionCode / versionName
 │   └── src/main/
-│       ├── java/com/digitallife/   ← 全部源码（118 个 java 文件）
+│       ├── java/com/digitallife/   ← 全部源码（123 个 java 文件）
 │       ├── res/
 │       │   ├── drawable/           ← 只有 drawable，没有 layout！
 │       │   ├── values/ colors.xml  ← 配色定义
@@ -77,7 +79,7 @@
 │   ├── genpatch.py                 ← 机械改进补丁生成器
 │   └── mkpatch.py                  ← 安全补丁生成助手（隔离区工作流）
 ├── tools/local-build.sh            ← 【v1.113.0】本地构建（免 Android Studio）
-├── app/src/test/java/              ← 【v1.113.0】harness 内核单测（138 个 / 12 类）
+├── app/src/test/java/              ← 【v1.114.0 起】内核 + 纯逻辑单测（203 个 / 17 类）
 └── AGENTS.md                       ← 本文件
 ```
 
@@ -87,7 +89,7 @@
 
 ```sh
 ./tools/local-build.sh                # 编译 Java（增量约 10 秒）
-./tools/local-build.sh testDebugUnitTest   # 跑 138 个单测
+./tools/local-build.sh testDebugUnitTest   # 跑 203 个单测
 ./tools/local-build.sh assembleDebug       # 出 APK
 ```
 
@@ -293,7 +295,7 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 - Tools.execute 回调为同步返回，execTool 用 1 元素数组捕获 res/err（lambda 只捕获 effectively final）
 
 后续可继续对标的（按可行性排序）：
-1. **对话记忆自主提取**：工具循环已通，可加「系统定期把聊天摘要写入 MemoryStore」的工具（现只靠 ChatStore 原文 + LLM 无工具记忆）
+1. **对话记忆自主提取**：✅ v1.120.0 已落地——对话消息接入 `MemoryStore`，`PetService` 每 6h 跑 `MemoryExtractor` 沉淀 facts，`MemoryPlugin` 按当轮问题做相关召回注入 prompt。
 2. **浏览器/App 自动化操作**：OpenMinis 有 browser-automation；Android 上等价物是辅助功能 AccessibilityService 点击，成本高
 3. **真 MCP 对接**：现只本地 17 工具，可支持远端 MCP server 的 SSE 流式调用
 4. **iSH/PRoot 沙箱**：在本机跑 shell，工程量大且 Android 权限受限
