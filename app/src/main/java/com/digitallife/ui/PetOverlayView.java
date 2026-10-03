@@ -126,6 +126,18 @@ public class PetOverlayView extends FrameLayout {
         statusView.setPadding(dp(8), dp(3), dp(8), dp(3));
         statusView.setAlpha(0.9f);
         statusView.setVisibility(View.GONE);
+        statusView.setGravity(Gravity.CENTER);
+        statusView.setMinHeight(dp(24));
+        // v1.136.0（Issue #27 第 1 条「可点开详情」）：胶囊本身可点。
+        // 在此之前它不是 clickable，点它会被下面的手势层当成「点了人偶」→ 打开输入框，
+        // 想看一眼完整状态反而弹出键盘，纯属添乱。
+        statusView.setClickable(true);
+        statusView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showStatusDetail();
+            }
+        });
         FrameLayout.LayoutParams stp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         stp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
@@ -221,6 +233,23 @@ public class PetOverlayView extends FrameLayout {
         float energy();
 
         String dominant();
+
+        /**
+         * v1.136.0：角色名（{@code Settings.pet_name}），详情卡片标题用；不实现则回落「我的状态」。
+         * <p>用 default 方法是为了不破坏已有的匿名实现——只有 {@code PetService} 一处接线。</p>
+         */
+        default String name() {
+            return "";
+        }
+
+        /**
+         * v1.136.0：某一维情绪的强度（0~1），详情卡片逐条画进度条用。
+         *
+         * @param dim 取值为 {@link PetStatusText#DIMS}
+         */
+        default float emotion(String dim) {
+            return 0f;
+        }
     }
 
     /** 接线入口：{@code PetService} 调一次即可点亮胶囊；传 null 则隐藏 */
@@ -393,6 +422,173 @@ public class PetOverlayView extends FrameLayout {
         bg.setColor(colorRes(R.color.card_bg));
         bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
         return bg;
+    }
+
+    // ==================== v1.136.0：状态详情卡片（Issue #27 第 1 条「可点开详情」） ====================
+
+    /** 详情进度条的最大宽度（px）；{@code PetStatusText.barWidth} 按它换算填充宽度 */
+    private static final int DETAIL_BAR_MAX_DP = 128;
+
+    /** 详情遮罩层；非 null 即为详情打开中 */
+    private FrameLayout detailLayer;
+
+    public boolean isStatusDetailShowing() {
+        return detailLayer != null && detailLayer.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * 点状态胶囊 → 详情卡片：亲密度 / 精力 + 六维情绪逐条进度条。
+     *
+     * <p>数据在打开瞬间快照一次。胶囊本身就是 5 秒刷一次，详情属于「点开看一眼」的
+     * 轻交互，为一个浮层再挂个 ticker 不划算。</p>
+     */
+    public void showStatusDetail() {
+        final StatusProvider p = statusProvider;
+        if (p == null) return;
+        runOnUi(new Runnable() {
+            @Override
+            public void run() {
+                hideQuickMenu();
+                hideStatusDetail();
+                if (chatInput.getVisibility() == View.VISIBLE) hideChatInput();
+
+                try {
+                    float intimacy = safeValue(p.intimacy());
+                    float energy = safeValue(p.energy());
+
+                    final FrameLayout layer = new FrameLayout(getContext());
+                    layer.setBackgroundColor(Color.parseColor("#33000000"));
+                    layer.setClickable(true);
+                    layer.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            hideStatusDetail();
+                        }
+                    });
+
+                    LinearLayout card = new LinearLayout(getContext());
+                    card.setOrientation(LinearLayout.VERTICAL);
+                    card.setBackground(getMenuBackground());
+                    card.setPadding(dp(16), dp(14), dp(16), dp(14));
+                    card.setClickable(true); // 吃掉落点卡片内部的点击，避免顺带关掉
+                    FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    cp.gravity = Gravity.CENTER;
+                    card.setLayoutParams(cp);
+
+                    card.addView(detailText(PetStatusText.detailTitle(p.name()), 14f,
+                            colorRes(R.color.operit_text_primary)));
+                    card.addView(detailText(PetStatusText.detailSubtitle(intimacy), 11f,
+                            colorRes(R.color.operit_text_secondary)));
+
+                    card.addView(detailGap(dp(10)));
+                    card.addView(detailBarRow("亲密度", intimacy, colorRes(R.color.brand)));
+                    card.addView(detailBarRow("精力", energy, colorRes(R.color.success)));
+                    card.addView(detailGap(dp(8)));
+                    card.addView(detailHairline());
+                    card.addView(detailGap(dp(8)));
+
+                    for (String dim : PetStatusText.DIMS) {
+                        card.addView(detailBarRow(PetStatusText.dominantLabel(dim),
+                                safeValue(p.emotion(dim)), colorRes(R.color.brand_operit_light)));
+                    }
+
+                    card.addView(detailGap(dp(10)));
+                    card.addView(detailText("点空白处收起", 10f,
+                            colorRes(R.color.operit_text_hint)));
+
+                    layer.addView(card);
+                    addView(layer, new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    detailLayer = layer;
+                } catch (Throwable t) {
+                    // 悬浮窗里任何构建异常都不该把整个桌宠带崩，取不到就当作没点
+                    Log.w(TAG, "showStatusDetail failed", t);
+                    hideStatusDetail();
+                }
+            }
+        });
+    }
+
+    /** 关闭详情卡片；已关闭时是空操作，可以放心重复调 */
+    public void hideStatusDetail() {
+        runOnUi(new Runnable() {
+            @Override
+            public void run() {
+                if (detailLayer == null) return;
+                removeView(detailLayer);
+                detailLayer = null;
+            }
+        });
+    }
+
+    /** 一行：{@code 标签 | 进度条 | 数值}，三段等宽对齐，几行叠起来不会参差 */
+    private View detailBarRow(String label, float value, int fillColor) {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(3), 0, dp(3));
+
+        TextView name = detailText(label, 12f, colorRes(R.color.operit_text_secondary));
+        name.setWidth(dp(44));
+        row.addView(name);
+
+        int maxPx = dp(DETAIL_BAR_MAX_DP);
+        int h = dp(6);
+        FrameLayout bar = new FrameLayout(getContext());
+        android.graphics.drawable.GradientDrawable track = new android.graphics.drawable.GradientDrawable();
+        track.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        track.setCornerRadius(h / 2f);
+        track.setColor(colorRes(R.color.brand_soft));
+        bar.setBackground(track);
+        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(maxPx, h);
+        barLp.leftMargin = dp(4);
+        barLp.rightMargin = dp(8);
+        row.addView(bar, barLp);
+
+        View fill = new View(getContext());
+        android.graphics.drawable.GradientDrawable fg = new android.graphics.drawable.GradientDrawable();
+        fg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        fg.setCornerRadius(h / 2f);
+        fg.setColor(fillColor);
+        fill.setBackground(fg);
+        // barWidth 已保证落在 [0, maxPx]，这里不再夹取（回归在 PetStatusTextTest）
+        bar.addView(fill, new FrameLayout.LayoutParams(PetStatusText.barWidth(value, maxPx), h));
+
+        TextView val = detailText(PetStatusText.rowValue(value), 12f,
+                colorRes(R.color.operit_text_primary));
+        val.setGravity(Gravity.END);
+        val.setWidth(dp(38));
+        row.addView(val);
+
+        return row;
+    }
+
+    private TextView detailText(String text, float sizeSp, int color) {
+        TextView tv = new TextView(getContext());
+        tv.setText(text);
+        tv.setTextSize(sizeSp);
+        tv.setTextColor(color);
+        return tv;
+    }
+
+    private View detailGap(int px) {
+        View v = new View(getContext());
+        v.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px));
+        return v;
+    }
+
+    private View detailHairline() {
+        View v = new View(getContext());
+        v.setBackgroundColor(colorRes(R.color.brand_stroke));
+        v.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        return v;
+    }
+
+    /** 数据源里的 NaN / 越界不让它传进布局计算；非法值按 0 处理 */
+    private static float safeValue(float v) {
+        if (Float.isNaN(v)) return 0f;
+        return v < 0f ? 0f : (v > 1f ? 1f : v);
     }
 
     @Override
@@ -659,10 +855,17 @@ public class PetOverlayView extends FrameLayout {
     public boolean onTouchEvent(MotionEvent event) {
         // v1.135.0：菜单期间不参与手势（拖拽 / 长按），全交给菜单层，避免边点菜单边拖窗口
         if (isQuickMenuShowing()) return false;
+        // v1.136.0：详情卡片开着时同理，遮罩层自己处理「点空白收起」
+        if (isStatusDetailShowing()) return false;
         // 点击气泡区域：直接关闭气泡，不触发人偶交互
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isTouchInBubble(event.getRawX(), event.getRawY())) {
             clearBubble();
             return true;
+        }
+        // 点状态胶囊：透传给胶囊自身处理（点开详情），不走人偶手势
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+                && isTouchInStatus(event.getX(), event.getY())) {
+            return false;
         }
         // 人偶区域外的事件（子 View 未消费回溯到此处）不处理，透传给下层窗口
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
@@ -698,11 +901,18 @@ public class PetOverlayView extends FrameLayout {
         // v1.135.0：菜单开着时一律放行。菜单居中显示、正好落在人偶区域里，
         // 不放行就会被下面的拦截逻辑吃掉，菜单点不动。
         if (isQuickMenuShowing()) return false;
+        // v1.136.0：详情卡片同上，遮罩层自己处理点击
+        if (isStatusDetailShowing()) return false;
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
             // 聊天输入框可见时，其范围放行给输入框本身（可聚焦输入），不参与穿透判定
             if (chatInput.getVisibility() == View.VISIBLE
                     && ev.getX() >= chatInput.getLeft() && ev.getX() <= chatInput.getRight()
                     && ev.getY() >= chatInput.getTop() && ev.getY() <= chatInput.getBottom()) {
+                return false;
+            }
+            // v1.136.0：状态胶囊压在「人偶区域」里，不放行的话点它会被下面的拦截吃掉，
+            // 变成「点头像 = 打开输入框」。胶囊自己 clickable，这里让路。
+            if (isTouchInStatus(ev.getX(), ev.getY())) {
                 return false;
             }
             // 人偶区域（模型带）内拦截以支持拖动/点击；区域外放行，最终经事件回溯透传给下层应用
@@ -711,5 +921,12 @@ public class PetOverlayView extends FrameLayout {
             }
         }
         return true;
+    }
+
+    /** 该坐标是否落在可见的状态胶囊上（胶囊隐藏 / 未接线时一律 false） */
+    private boolean isTouchInStatus(float x, float y) {
+        if (statusView == null || statusView.getVisibility() != View.VISIBLE) return false;
+        return x >= statusView.getLeft() && x <= statusView.getRight()
+                && y >= statusView.getTop() && y <= statusView.getBottom();
     }
 }
