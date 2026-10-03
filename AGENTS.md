@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-10-03（版本 v1.123.0，历史会话时间条改用真实时间戳；协作约定见第 9 节）
+> 最后更新：2026-10-03（版本 v1.124.0，多智能体深化：delegate_pipeline 有序依赖链编排；协作约定见第 9 节）
 
 ---
 
@@ -35,7 +35,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.123.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）；v1.119.0 ChatActivity 纯逻辑下沉（ChatTextOps/HistoryBudget/FailoverPolicy/SuggestionEngine）+ 46 单测；v1.120.0 记忆闭环（查询相关召回、对话接入长期记忆、自动提取启用、解析下沉 MemoryExtractionParser）；v1.121.0 记忆召回修正（统一关键词提取到 MemoryRelevance，修对话大脑中文相关召回失效）；v1.122.0 MCP 客户端协议修正（修 session 被清零、补 notifications/initialized、SSE 按事件解析并抽 McpResponseParser、JSON-RPC id 改用 AtomicLong）；v1.123.0 历史会话时间条改用真实时间戳（修「时间条显示的是打开会话时间」且紧循环下只插得出第一条；workbuddy PR #9）
+- **已完成**：v1.0 → v1.124.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）；v1.119.0 ChatActivity 纯逻辑下沉（ChatTextOps/HistoryBudget/FailoverPolicy/SuggestionEngine）+ 46 单测；v1.120.0 记忆闭环（查询相关召回、对话接入长期记忆、自动提取启用、解析下沉 MemoryExtractionParser）；v1.121.0 记忆召回修正（统一关键词提取到 MemoryRelevance，修对话大脑中文相关召回失效）；v1.122.0 MCP 客户端协议修正（修 session 被清零、补 notifications/initialized、SSE 按事件解析并抽 McpResponseParser、JSON-RPC id 改用 AtomicLong）；v1.123.0 历史会话时间条改用真实时间戳（修「时间条显示的是打开会话时间」且紧循环下只插得出第一条；workbuddy PR #9）；v1.124.0 多智能体深化（新增 `delegate_pipeline` 有序依赖链编排：逐步串行、前序结论透传、失败即停、步数上限；复用并行卡片 UI，不改 ChatActivity）
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -58,6 +58,7 @@
   | v1.121.0 | **记忆召回修正** | 发现"相关召回"有两套分叉实现：桌宠侧完善、对话侧用整句 `contains`（中文必空）。抽 `MemoryRelevance` 统一，顺带修"高重要度 5 条"实为"最近高权重"。+13 单测 |
   | v1.122.0 | **MCP 协议修正** | `initialize()` 曾把刚取到的 `Mcp-Session-Id` 清零（遵协议的远端服务器连不上）；补 `notifications/initialized`；SSE 由"多帧拼接"改为按事件切分并优先取 id 匹配帧（`McpResponseParser`）；JSON-RPC id 由 `nanoTime()` 改 `AtomicLong`（避免 double 精度失真）。+15 单测 |
   | v1.123.0 | 时间条真实时间戳 | 历史恢复时 `appendTimeDividerIfNeeded` 一律取 `System.currentTimeMillis()` → 时间条显示"打开会话的时间"，且紧循环下相邻间隔恒 <5min，只有第一条插得出。改为透传 `StoredMsg.timestamp`（`appendUserBubble`/`appendAiBubble` 加 `long ts` 重载），间隔比较用 `Math.abs`。workbuddy PR #9 |
+  | v1.124.0 | **依赖链编排** | 此前只有 `delegate_task`（单个顺序）/`delegate_parallel`（互不依赖并发），缺"有先后依赖"的多步。新增 `delegate_pipeline`：逐步串行、前序结论截断后注入下一步、失败即停（后续标"未执行"）、步数上限 5。复用 `SubagentRunner` 隔离/超时与并行卡片 UI，**不改 `ChatActivity`**。+15 单测 |
 - **待发行**：无
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
