@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.123.0 (2026-10-03)
+
+### 修复：历史会话时间条显示的是「打开会话的时间」
+
+由协作者 workbuddy 提交（PR #9），发布负责人 trae 合并并发版。
+
+恢复历史会话时 `appendUserBubble` / `appendAiBubble` 只接收 `content`，时间条内部一律取 `System.currentTimeMillis()`，导致两个问题：
+
+1. 历史消息的时间条显示的是**打开会话的时间**，而非消息真实发送时间；
+2. 历史恢复是紧循环执行的，相邻消息间隔远小于 5 分钟阈值 → **只有第一条能插出时间条**，其后全部被 `return` 吞掉。
+
+改法：
+
+- `appendTimeDividerIfNeeded(long ts)` 接收消息真实时间戳，`ts <= 0` 时回退为当前时间；
+- `appendUserBubble` / `appendAiBubble` 增加 `long ts` 重载，单参版本委托并回退为当前时间，其余 13 处调用点无需改动；
+- 历史恢复处传入 `StoredMsg.timestamp`；
+- 相邻间隔比较改用 `Math.abs`，避免乱序时间戳导致判断失效。
+
+> 注：本次只修「时间条」；每条气泡各自的 HH:mm 时间戳留作后续 PR（见 Issue #7）。
+
 ## v1.122.0 (2026-10-03)
 
 ### MCP 客户端协议正确性修正
