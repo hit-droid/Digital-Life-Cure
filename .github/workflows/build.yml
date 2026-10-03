@@ -75,8 +75,31 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Create GitHub Release and upload APK
+      - name: Check if release needed
+        # 多写入者场景：只有 versionName 变化（tag 不存在）时才发版，
+        # 否则每次 PR 合并/文档提交都会重传一次同名 Release 资产。
+        id: release_check
         if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VERSION_NAME=$(grep -oE 'versionName\s+"[^"]+"' app/build.gradle | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          TAG="v${VERSION_NAME}"
+          CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+          if [ "$CODE" = "200" ]; then
+            echo "Release ${TAG} 已存在，versionName 未变化，跳过发版"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release ${TAG} 不存在，将发版"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release and upload APK
+        if: github.event_name == 'push' && steps.release_check.outputs.needed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
