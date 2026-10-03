@@ -345,6 +345,20 @@ public class AgentConsoleActivity extends Activity {
                 sa.append("共 ").append(subTotal).append(" 次 · 成功 ")
                         .append(ledger.okCount()).append(" · 失败 ")
                         .append(ledger.failCount()).append("\n");
+                // v1.129.0：按子智能体聚合，先看「谁最不可靠/最慢」，再看下面的逐条明细
+                java.util.List<com.digitallife.harness.subagent.SubagentLedger.AgentStat> stats =
+                        ledger.byAgent();
+                if (!stats.isEmpty()) {
+                    sa.append("各子智能体：");
+                    for (com.digitallife.harness.subagent.SubagentLedger.AgentStat st : stats) {
+                        sa.append("\n  ").append(st.agent.isEmpty() ? "?" : st.agent)
+                                .append("  ×").append(st.runs)
+                                .append(" · 成功 ").append(st.ok).append(" · 失败 ").append(st.fail)
+                                .append(" · ").append(st.successRate()).append("%")
+                                .append(" · 均 ").append(st.avgDurationMs).append("ms");
+                    }
+                    sa.append("\n\n");
+                }
                 java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
                         "HH:mm:ss", java.util.Locale.getDefault());
                 java.util.List<com.digitallife.harness.subagent.SubagentLedger.Entry> runs =
