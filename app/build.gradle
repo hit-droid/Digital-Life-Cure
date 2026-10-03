@@ -10,8 +10,8 @@ android {
         applicationId "com.digitallife"
         minSdk 21
         targetSdk 34
-        versionCode 120
-        versionName "1.117.0"
+        versionCode 121
+        versionName "1.118.0"
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86'
         }
@@ -59,6 +59,26 @@ android {
 
     testOptions {
         unitTests.includeAndroidResources = true
+    }
+}
+
+// Robolectric 首次运行要从 Maven 下载 android-all jar，而测试 worker 是独立 JVM，
+// 不继承 shell 里的 HTTP_PROXY/HTTPS_PROXY，导致有代理的环境下也拉不到包。
+// 这里把代理环境变量转成测试 JVM 的系统属性（代理地址不写死在脚本里）；无代理时空操作。
+tasks.withType(Test).configureEach {
+    def rawProxy = System.getenv('HTTPS_PROXY') ?: System.getenv('https_proxy')
+            ?: System.getenv('HTTP_PROXY') ?: System.getenv('http_proxy')
+    if (rawProxy) {
+        try {
+            def uri = new java.net.URI(rawProxy)
+            if (uri.host != null) {
+                systemProperty 'https.proxyHost', uri.host
+                systemProperty 'http.proxyHost', uri.host
+                systemProperty 'https.proxyPort', String.valueOf(uri.port)
+                systemProperty 'http.proxyPort', String.valueOf(uri.port)
+            }
+        } catch (Exception ignored) {
+        }
     }
 }
 

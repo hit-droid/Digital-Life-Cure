@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.118.0 (2026-10-03)
+
+### 工程化加固：CI 单测门禁 / 测试代理注入 / 版本号去硬编码
+
+本版不新增功能，集中还技术债，堵住几个会持续放大的口子。
+
+- **CI 增加单测门禁**：此前 `build.yml` 只跑 `assembleDebug`，138 个单测从不在 CI 执行，回归完全拦不住（v1.43 那种"只有调用没有定义"的半成品能直接进发行版）。现在 `testDebugUnitTest` 前置，失败即不出包、不发 Release；并缓存 `~/.m2/repository/org/robolectric`，避免每次 CI 重下 android-all jar（约十几分钟）。
+- **修 `tools/verify.sh` 在代理环境下必挂**：Robolectric 的测试 worker 是独立 JVM，不继承 shell 的 `HTTP_PROXY`，会卡在拉 `android-all` jar 上。`app/build.gradle` 现在把代理环境变量转成测试 JVM 系统属性（代理地址不写死，无代理时空操作），本地全量验证恢复可用。
+- **修两处用户可见的写死版本号**：`DeveloperActivity` 的"版本信息"曾硬编码 `v1.24.0 (versionCode 27)`，`OperitDrawer` 头部曾硬编码 `v1.24.0 · 小汐 · 在线`，与实际版本严重不符。改为从 `PackageManager` 实时读取，随发版自动更新。
+- **清理误入库文件**：删除仓库根目录 4 个临时发布脚本（`wait_build.py` / `poll.py` / `deliver_m7.py` / `deliver_finish.py`）——其中 `wait_build.py` 硬编码了一个明文 GitHub PAT，且脚本内容属于另一个仓库（`maiden-dungeon-apk`），与本项目无关。
+- **文档校正**：`AGENTS.md` 的源码文件数与单测数（77 / 85 → 118 / 138）已失真，一并更新，并补充代理环境说明与 v1.115.0~v1.118.0 的版本记录。
+
+> 注意：被删除脚本里的 PAT 仍在 git 历史中，且当前工作区的 remote URL 内嵌了推送令牌，建议尽快在 GitHub 侧吊销旧令牌并改用 credential helper。
+
 ## v1.117.0 (2026-10-03)
 
 ### 多智能体并行编排：delegate_parallel（fan-out / fan-in）

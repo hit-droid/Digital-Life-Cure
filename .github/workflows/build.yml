@@ -61,6 +61,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Cache Robolectric android-all jars
+        # Robolectric 首次运行要下载 android-all jar（约十几分钟），缓存避免每次 CI 重下
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-android-all-${{ runner.os }}
+
+      - name: Run unit tests
+        # 单测门禁：失败则不再出包、不发 Release，防止半成品混进发行版
+        run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
