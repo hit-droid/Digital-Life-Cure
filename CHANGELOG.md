@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.136.0 (2026-10-03)
+
+桌宠状态胶囊「点开详情」（Issue #27 第 1 条收尾；该条正文的「可点开详情」此前一直没落地）。
+
+### 状态详情卡片
+
+胶囊此前只能看到三个标量，点它还会被手势层当成「点了人偶」→ 直接弹输入框。现在胶囊本身可点，弹出详情卡片。
+
+- **纯逻辑 `ui/pet/PetStatusText`**：新增 `DIMS`（六维顺序，与 `brain/EmotionState.DIMS` 对齐）、`detailTitle`（角色名可改，空名回落「我的状态」，超 8 字截断防顶破卡片）、`detailSubtitle`（`亲密度 62% · 亲密`）、`bondLevel`（陌生/眼熟/朋友/亲密/挚友，20% 一档）、`barWidth`（0~1 → 像素，NaN 视 0、越界夹取，**保证永不出现负数宽度**——负宽度在 View 上直接抛异常）。新增 10 条单测。
+- **`ui/PetOverlayView`**：`statusView` 改为 clickable；详情卡片复用长按菜单的遮罩层套路（居中、点空白收起、卡片自身吃点击不误关）。`StatusProvider` 加 `name()` / `emotion(dim)` 两个 `default` 方法，不破坏既有匿名实现。
+- **手势冲突修复**：`onInterceptTouchEvent` 在「状态胶囊命中」时放行给子 View。胶囊压在 `modelRect` 人偶带里，不放行就永远点不动，只会弹输入框。
+- **`service/PetService`**：接线 `name()`（`Settings.pet_name`）与 `emotion(dim)`（只读 `EmotionState.get`）。不改 `brain/` 逻辑。
+
+单测 332 → 342。本地 `testDebugUnitTest` 全绿（342 条，0 失败）。
+
 ## v1.135.0 (2026-10-03)
 
 桌宠长按快捷菜单 + 位置锁定（PR #34，Closes #27 第 2 条；原 PR #33 由 workbuddy 提交）。
