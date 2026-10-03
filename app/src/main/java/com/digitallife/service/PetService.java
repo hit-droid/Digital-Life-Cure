@@ -264,6 +264,17 @@ public class PetService extends Service implements AICore.Output,
             public String dominant() {
                 return aiCore == null ? null : aiCore.getEmotion().dominant();
             }
+
+            // v1.136.0：详情卡片的标题名与六维情绪（Issue #27 第 1 条「可点开详情」收尾）
+            @Override
+            public String name() {
+                return settings == null ? "" : settings.getPetName();
+            }
+
+            @Override
+            public float emotion(String dim) {
+                return aiCore == null ? 0f : aiCore.getEmotion().get(dim);
+            }
         });
 
         // v1.120.0：启动长期记忆自动提取（每 6 小时从近期对话沉淀 facts）
