@@ -13,6 +13,9 @@
 **如果你接手时流水线还在跑**：别动手改 `/workspace`，先看第 6 节确认进程状态。
 **如果流水线已经死了**：第 7 节有完整的重建步骤（`tools/auto/` 里已经存了全部脚本）。
 
+> ⚠️ **本仓库有多个写入者**（`trae` / `workbuddy` 等 AI agent，另有 `monkeycode-keepalive[bot]` 等自动化提交）。
+> **动手前必读第 9 节「协作约定」**——写入通道、发布负责人、任务认领、领地和提交纪律都在那里。
+
 ---
 
 ## 1. 项目目标与完成程度
@@ -416,3 +419,53 @@ python3 /tmp/opencode/mkpatch.py finish 052-my-feature \
 
 **仓库**：https://github.com/hit-droid/Digital-Life-Cure
 **分支**：main（push main 会自动编译 + 发 Release，tag = `v{versionName}`）
+
+---
+
+## 9. 协作约定（多写入者）
+
+自 2026-10-03 起，本仓库同时存在多个**有写权限的 AI agent**（`trae`、`workbuddy`），
+另有 `monkeycode-keepalive[bot]` 等自动化提交。第 4.1 节的事故（`git reset --hard` 抹掉未提交
+改动、半成品被 `git add -A` 混提）本质是「多个写入者共用工作树 + 无发版归属」；人变多只会更容易重演。
+以下是硬约定，**不是建议**。
+
+### 9.1 写入通道
+- **main 不再接受功能直推**。功能/修复一律走 `feat/*`、`fix/*` 分支 + PR。
+- 合并前必须 CI 绿；本地先跑 `./tools/verify.sh`（compile / test / lint / apk 四关）。
+- 只有「发布负责人」可以把**版本相关**提交直接落到 main（见 9.2）。
+
+### 9.2 发布负责人（单一，避免 bump 撞车）
+- 当前负责人：**trae**。
+- 任何一次发行，以下四处**只由发布负责人改**，其他人在 PR 里不要动：
+  1. `app/build.gradle` 的 `versionCode` / `versionName`
+  2. `CHANGELOG.md` 顶部新增版本段
+  3. `AGENTS.md` 头部的「最后更新」与 1.3 完成程度表
+  4. git tag `v{versionName}` 与 GitHub Release
+- 其他人合并 PR 后由负责人统一 bump + 发版。这样"双方各自 bump → 版本号冲突/发错版"直接消失。
+
+### 9.3 任务认领（避免重复劳动）
+- 开工前先在 GitHub Issues 建或找对应 issue，并打 label 认领：`owner:trae` / `owner:workbuddy`。
+- **同一文件、同一时间只允许一个 owner**。热点文件尤其要先认领再动：
+  `ui/ChatActivity.java`、`brain/Tools.java`、`brain/AICore.java`、`service/PetService.java`、`AGENTS.md`。
+- 领地的默认归属见 9.5；跨领地改动请在 issue/PR 里说明后再动。
+
+### 9.4 提交纪律
+- 每次开工前 `git pull --rebase`；小步提交，别攒一个大提交。
+- **禁止** `git reset --hard`、`git push --force`（尤其对 main）。需要回滚用 `git revert`。
+- **禁止共用工作树**：每个 agent 用自己的工作副本（做法见 4.1 的隔离工作区）。
+- 提交信息格式：`type(scope): 摘要`，正文中文，说明"为什么"。
+- 凭据各自持有；**禁止**把 token / PAT 写进脚本、源码或提交（本项目发生过明文 PAT 误入库）。
+
+### 9.5 建议分工（领地，默认归属）
+| 模块 / 目录 | owner | 说明 |
+|---|---|---|
+| `harness/`、`skill/`、多智能体编排 | trae | 内核与基础设施 |
+| `memory/`、记忆检索与提取 | trae | v1.120.0 刚做完闭环 |
+| `ui/` 聊天体验、OpenMinis 对标剩余项 | workbuddy | 见 5.3 / 5.4 |
+| 发版、CHANGELOG、`AGENTS.md` 头部 | trae | 单一发版人 |
+> 领地是**默认归属**，不构成排他；跨领地务必先认领、在 PR 里说明。
+
+### 9.6 冲突与回滚
+- 同文件冲突：以**先认领者**为准，后到者 rebase 到其分支之上再提。
+- 出现坏版本：优先 `git revert` 回滚，再定位根因；**不做 force push**。
+- 对本文档的修改本身也走 PR，避免两个 agent 同时改同一段。
