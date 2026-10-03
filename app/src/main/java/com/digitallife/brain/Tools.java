@@ -116,7 +116,9 @@ public class Tools {
                         prop.put("type", "number");
                         break;
                     case "tasks":
-                        // 并行委派：数组，元素为 {agent, task}
+                    case "steps":
+                        // 多智能体编排：数组，元素为 {agent, task}
+                        // tasks=delegate_parallel（互不依赖，并发）；steps=delegate_pipeline（有先后，串行）
                         prop.put("type", "array");
                         JSONObject taskItem = new JSONObject();
                         taskItem.put("type", "object");
