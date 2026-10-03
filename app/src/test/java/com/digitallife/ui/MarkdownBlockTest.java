@@ -162,8 +162,62 @@ public class MarkdownBlockTest {
     }
 
     @Test
-    public void plain_horizontalRuleIsNotListItem() {
-        assertEquals(MarkdownRenderer.BlockKind.PLAIN, p("---").kind);
+    public void horizontalRule_isNotListItem() {
+        // v1.141.0（#44）：--- 现在是 HR，但依然不是列表项
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("---").kind);
+    }
+
+    // ==================== v1.141.0（#44）：任务列表 / 水平线 ====================
+
+    @Test
+    public void task_uncheckedBox() {
+        MarkdownRenderer.BlockLine b = p("- [ ] 买牛奶");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertFalse(b.checked);
+        assertEquals("买牛奶", b.text);
+    }
+
+    @Test
+    public void task_checkedBoxLowerCase() {
+        MarkdownRenderer.BlockLine b = p("- [x] 已完成的事");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertTrue(b.checked);
+        assertEquals("已完成的事", b.text);
+    }
+
+    @Test
+    public void task_checkedBoxUpperCase() {
+        MarkdownRenderer.BlockLine b = p("* [X] 大写也算勾选");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertTrue(b.checked);
+    }
+
+    @Test
+    public void task_indentedKeepsLevel() {
+        MarkdownRenderer.BlockLine b = p("  - [ ] 子任务");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertEquals(1, b.level);
+        assertFalse(b.checked);
+    }
+
+    @Test
+    public void task_bracketTextWithoutSpaceIsNotTask() {
+        // 防误判：普通 [文字] 不是勾选框，仍是普通无序项
+        MarkdownRenderer.BlockLine b = p("- [说明] 正文");
+        assertEquals(MarkdownRenderer.BlockKind.UL, b.kind);
+    }
+
+    @Test
+    public void horizontalRule_variants() {
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("***").kind);
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("___").kind);
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("-----").kind);
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("  ---  ").kind);
+    }
+
+    @Test
+    public void horizontalRule_twoDashesIsPlain() {
+        assertEquals(MarkdownRenderer.BlockKind.PLAIN, p("--").kind);
     }
 
     @Test
