@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.138.0 (2026-10-03)
+
+本轮合并两个 PR：workbuddy 的 #39（Markdown 行级渲染补短板，Closes #36）与 trae 的 #42（应用内更新检查，Closes #41），由发布负责人 trae 统一 bump 发版。
+
+### 应用内更新检查
+
+侧载安装没有任何「有新版本」提示——装了 v1.137.0 之后，新版本只能自己去仓库翻。现在「关于」页手动点一下即可。
+
+- **纯逻辑 `update/UpdateChecker`**（JVM 可测）：`normalize`（去 `v` 前缀、丢弃 `-`/`+` 后缀即预发布/构建元数据、超长数字段判非法）、`compare`（数值比较，`"1.10" > "1.9"`；字符串比较会错）、`isNewer`（任一侧无法解析一律 `false`，宁可漏报不误报）、`pickLatest`（跳过 `draft`、默认跳过 `prerelease`，按版本号取最高而非数组顺序）。缺 `html_url` 时兜底到 releases 页。新增 13 单测。
+- **`update/UpdateClient`**：后台线程拉 `releases?per_page=15` → 比较本机 `versionName` → 回调主线程；15s 超时、512KB 上限；403/429（匿名 GitHub API 按 IP 限流 60 次/小时）给友好文案而不是把 `HTTP 403` 甩给用户。
+- **`ui/AboutActivity`**：新增「检查更新」按钮 + 状态文案，检查中禁用防连点；发现新版按钮变「前往下载 vX.Y.Z」，用浏览器打开 Release 页；无新版显示「已是最新版本」。手动触发、不后台轮询（避免打扰与限流）。
+- **实测要点**：仓库里有一批遗留的 `v1.1.0` **draft** release，不过滤 draft 会直接误报「有新版 v1.1.0」——`pickLatest` 已跳过，实测对当前版本判定为「已是最新」。
+
+### Markdown 行级渲染补短板（workbuddy）
+
+由协作者 **workbuddy** 提交（原 PR #39）。App 聊天里的 Markdown 是自研行级渲染，此前三处 LLM 常见写法渲染不出来。
+
+- **缩进列表丢符号**：`UL_ITEM` / `OL_ITEM` / `BLOCKQUOTE` 正则原先锚死行首（`^[-*]`、`^>`），多级列表的二级行匹配不上，连着原始文本吐出、层级全丢。现在放开前导空白并按层级补缩进（用 **NBSP**——普通空格在行首会被 TextView 折行策略吃掉）。
+- **`#标题` 漏识别**：`HEADING` 原要求 `#` 后至少一个空白，模型写中文标题常是 `#标题`，渲染出来是带井号的字面文本。放宽并加 `(?!#)` 护栏（`#### 四级` 仍是普通文本）。
+- **表格截断劈 emoji**：`truncateCell` 逐 char 累加宽度，emoji 是两 char 代理对，边界落在高低代理之间会留下半个字符（豆腐块）。改成按**码点**推进，放不下就整个不要。
+- 行级判定从 `appendLine` 下沉为纯静态 `parseBlockLine`（只识别、不拼 Span），新增 `MarkdownBlockTest` 30 条（不依赖 Robolectric），含三条防误判：`#### 四级` 仍是普通文本、`3.14 是圆周率` 不被当有序列表、任意宽度下表格都不留半个 emoji。
+
+单测 351 → 394（#39 +30、#41 +13）。本地 `verify.sh --quick` 三关通过（compile/test/lint，lint 0 error）。
+
 ## v1.137.0 (2026-10-03)
 
 桌宠触摸分区反应：摸头 / 戳身子给不同反馈（PR #38，Closes #37）。
