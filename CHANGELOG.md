@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.121.0 (2026-10-03)
+
+### 记忆召回修正：中文相关召回原先形同虚设
+
+v1.120.0 给对话大脑接上了「按当轮问题召回记忆」，但这次排查发现**召回逻辑本身是坏的**——等于白接。
+
+- **根因：两套分叉的"关键词召回"实现**。
+  - `MemoryStore.retrieveRelatedFacts`（桌宠大脑走）有完善的中文 2~6 字滑窗 + 英文 ≥3 字符 + 停用词提取；
+  - `MemoryRetriever`（对话大脑走，即 v1.120.0 新接 query 的那条）直接用**整句话**做 `content.contains(query)`。
+  - 中文没有空格，用户问"我喜欢喝什么咖啡"永远匹配不到记忆"喜欢喝美式"，相关召回实际命中率≈0。
+- **收敛为单一实现**：新增纯逻辑类 `com.digitallife.util.MemoryRelevance`（关键词提取 / 命中计数 / 归一化相关度），`MemoryStore` 与 `MemoryRetriever` 共用，消除分叉。`MemoryRetriever` 的关键词维度改为按命中关键词数排序取 top N，得分区间与时间/重要度维度可比。
+- **顺带修正**："高重要度 5 条"此前按 `getAllFacts()` 的 `last_confirmed DESC` 顺序取，实为"最近的高权重"；现改为按 `confidence` 降序取，与注释一致。
+- 新增 13 条单测（`MemoryRelevanceTest`），单测 203 → 216。
+
 ## v1.120.0 (2026-10-03)
 
 ### 记忆闭环：查询相关召回 + 对话记忆自动提取

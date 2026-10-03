@@ -272,7 +272,7 @@ public class MemoryStore {
      */
     public synchronized List<Fact> retrieveRelatedFacts(String query, int topK) {
         if (query == null || query.trim().isEmpty()) return new ArrayList<>();
-        List<String> keywords = extractKeywords(query);
+        List<String> keywords = MemoryRelevance.extractKeywords(query);
         if (keywords.isEmpty()) return new ArrayList<>();
         List<Fact> all = getAllFacts();
         if (all.isEmpty()) return new ArrayList<>();
@@ -282,12 +282,7 @@ public class MemoryStore {
         final long DAY_MS = 24L * 3600 * 1000;
         java.util.PriorityQueue<ScoredFact> heap = new java.util.PriorityQueue<>();
         for (Fact f : all) {
-            int hits = 0;
-            String lower = f.content == null ? "" : f.content.toLowerCase(java.util.Locale.ROOT);
-            for (String k : keywords) {
-                if (k.isEmpty()) continue;
-                if (lower.contains(k)) hits++;
-            }
+            int hits = MemoryRelevance.countHits(keywords, f.content);
             if (hits == 0) continue;
             long ageDays = (now - f.lastConfirmed) / DAY_MS;
             double decay = ageDays > 30 ? 0.3 : Math.max(0.3, 1.0 - ageDays * 0.02);
@@ -302,57 +297,6 @@ public class MemoryStore {
         for (ScoredFact sf : sorted) out.add(sf.fact);
         return out;
     }
-
-    /**
-     * 轻量关键词提取：保留中文 2~6 字片段 + 英文单词（≥3 字符），去停用词。
-     * 避免引入 HanLP/Jieba 等分词库，保持零依赖。
-     */
-    private static List<String> extractKeywords(String text) {
-        ArrayList<String> kws = new ArrayList<>();
-        String lower = text.toLowerCase(java.util.Locale.ROOT);
-        // 英文单词：连续 [a-z0-9] ≥3
-        java.util.regex.Matcher en = java.util.regex.Pattern.compile("[a-z0-9]{3,}").matcher(lower);
-        while (en.find()) {
-            String w = en.group();
-            if (!STOP_WORDS.contains(w)) kws.add(w);
-        }
-        // 中文 2~6 字片段
-        StringBuilder buf = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c >= 0x4E00 && c <= 0x9FFF) {
-                buf.append(c);
-            } else {
-                flushChinese(buf, kws);
-            }
-        }
-        flushChinese(buf, kws);
-        return kws;
-    }
-
-    private static void flushChinese(StringBuilder buf, List<String> out) {
-        if (buf.length() == 0) return;
-        String s = buf.toString();
-        // 滑窗生成 2~6 字片段
-        for (int len = 2; len <= Math.min(6, s.length()); len++) {
-            for (int i = 0; i + len <= s.length(); i++) {
-                String sub = s.substring(i, i + len);
-                if (!STOP_WORDS.contains(sub)) out.add(sub);
-            }
-        }
-        buf.setLength(0);
-    }
-
-    private static final java.util.Set<String> STOP_WORDS = new java.util.HashSet<>(java.util.Arrays.asList(
-            // 英文
-            "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one", "our", "out",
-            "this", "that", "with", "have", "from", "they", "been", "said", "what", "when", "make", "like", "him",
-            "into", "time", "very", "than", "only", "know", "just", "also", "your", "over", "such", "more",
-            // 中文常见停用词
-            "的", "了", "是", "在", "我", "你", "他", "她", "它", "们", "和", "与", "或", "也", "都", "就",
-            "把", "被", "从", "到", "给", "和", "很", "还", "可", "能", "让", "上", "下", "不", "没",
-            "啊", "吗", "呢", "吧", "哦", "呀", "嗯", "啊", "啦", "哈"
-    ));
 
     private static class ScoredFact {
         final Fact fact;
