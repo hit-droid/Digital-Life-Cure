@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.124.0 (2026-10-03)
+
+### 多智能体深化：`delegate_pipeline` 有序依赖链编排
+
+多智能体此前只有 `delegate_task`（单个、顺序）与 `delegate_parallel`（互不依赖、并发），缺少「有先后依赖」的多步编排。后一步依赖前一步产出的任务只能让主智能体多轮调用 `delegate_task`，中间结论回流主对话，既费 token 又污染主历史。
+
+本版新增 `delegate_pipeline`：一次调用编排一条**有序依赖链**。
+
+- **逐步串行执行**，每一步都能拿到前序步骤的结论（截断后注入，避免撑爆上下文）；
+- **失败即停**：某步失败后其余步骤标为「未执行」，报告给出失败原因，不抛整批异常；
+- 步数上限 5，每步超时与 `SubagentRunner` 一致；
+- 复用独立 harness 树 / 最小权限 / 超时；复用 `onTeamStep`，**UI 并行协作卡片无需改动**即可显示每一步。
+
+实现要点：
+
+- 新增 `harness/subagent/SubagentPipeline.java`（编排 + 汇总渲染），与 `SubagentTeam` 并列；
+- `SubagentRunner` 新增 `run(..., progressTask, ...)` 重载——依赖链会把前序结论拼进喂给模型的 task，但 UI 事件仍用步骤原文，卡片才配对得上；
+- `Tools.register` 的数组 schema 增加 `steps`（与 `tasks` 同构）；
+- `delegate_pipeline` 与 `delegate_parallel` 一并在 `installParallelDelegateTool` 装配，**不改 `ui/ChatActivity.java`**（该文件按 AGENTS.md 9.3 归 workbuddy）。
+
+新增 15 条单测（`SubagentPipelineTest`），单测 231 → 246。
+
 ## v1.123.0 (2026-10-03)
 
 ### 修复：历史会话时间条显示的是「打开会话的时间」
