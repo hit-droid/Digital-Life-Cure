@@ -137,4 +137,53 @@ public class SubagentLedgerTest {
         assertEquals("nobody", e.agent);
         assertTrue(e.error.contains("未知子智能体"));
     }
+
+    // ==================== 按 agent 聚合（v1.129.0）====================
+
+    @Test
+    public void byAgentOnEmptyLedgerIsEmpty() {
+        assertTrue(ledger.byAgent().isEmpty());
+    }
+
+    @Test
+    public void byAgentAggregatesCountsAverageAndRate() {
+        ledger.record("researcher", "a", true, null, 100);
+        ledger.record("researcher", "b", false, "超时", 200);
+        ledger.record("researcher", "c", true, null, 300);
+
+        List<SubagentLedger.AgentStat> stats = ledger.byAgent();
+        assertEquals(1, stats.size());
+        SubagentLedger.AgentStat s = stats.get(0);
+        assertEquals("researcher", s.agent);
+        assertEquals(3, s.runs);
+        assertEquals(2, s.ok);
+        assertEquals(1, s.fail);
+        assertEquals(200L, s.avgDurationMs);
+        assertEquals(67, s.successRate()); // 2/3 四舍五入
+    }
+
+    @Test
+    public void byAgentOrdersByRunsDescThenNameAsc() {
+        ledger.record("writer", "w", true, null, 1);
+        ledger.record("critic", "c", true, null, 1);
+        ledger.record("researcher", "r1", true, null, 1);
+        ledger.record("researcher", "r2", true, null, 1);
+
+        List<SubagentLedger.AgentStat> stats = ledger.byAgent();
+        assertEquals(3, stats.size());
+        assertEquals("researcher", stats.get(0).agent); // 2 次最多
+        assertEquals("critic", stats.get(1).agent);     // 同为 1 次，按名字升序
+        assertEquals("writer", stats.get(2).agent);
+    }
+
+    @Test
+    public void byAgentGroupsEmptyAgentAndKeepsLastTimestamp() {
+        ledger.record(null, "t", false, "未知子智能体", 1);
+
+        List<SubagentLedger.AgentStat> stats = ledger.byAgent();
+        assertEquals(1, stats.size());
+        assertEquals("", stats.get(0).agent);
+        assertEquals(0, stats.get(0).successRate());
+        assertTrue(stats.get(0).lastTimestamp > 0);
+    }
 }
