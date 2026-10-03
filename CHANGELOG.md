@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.137.0 (2026-10-03)
+
+桌宠触摸分区反应：摸头 / 戳身子给不同反馈（PR #38，Closes #37）。
+
+### 触摸分区反应
+
+**问题**：摸头和戳身子此前的反馈完全一样——同一句文案、同一个表情、同样的情绪增量，桌宠最该有的「摸头杀」没有差异化反馈。
+
+- **纯逻辑 `ui/pet/PetTouchReaction`**：`zoneFor` 判定分区（落在人偶区域外或区域尺寸退化为 0 一律返回 `NONE`，不除零）、`reactionFor` 映射反馈——摸头害羞（`F06` + 亲密度 +0.02 + shy 0.18）、戳身子惊讶（`F05` + 亲密度 +0.01 + surprised 0.15）；**未知分区兜底**为「不改表情、不出气泡、不动情绪」，仅保留原有随机 `TapBody` 动作。分区值对齐 Cubism `Head`/`Body`，日后原生直出命中结果可直接接。新增 9 条单测覆盖分区边界与头身差异。
+- **`ui/PetOverlayView`**：`Listener` 新增 `onTapZone(zone)`（`onTap()` 语义原样不动，避免波及语音分支）；`handleModelTap` 据此设表情、选动作，并把 zone 透出。
+- **`service/PetService`**：`onTapZone` 只读调用 `EmotionState.addIntimacy/apply` 落气泡与情绪，不改 `brain/` 内部算法。
+
+**为什么用 Java 近似而不是原生 HitArea**：`PetOverlayView.onInterceptTouchEvent` 在 ACTION_DOWN 命中人偶带时就拦截了事件，子 View `Live2DGLView` 只收到 ACTION_CANCEL，`nativeOnTouchesBegan` 从不触发——原生 `LAppModel::HitTest` 这条线在悬浮窗里是死的；跨线程去 GL 线程读 viewMatrix 做命中又会竞态。故按触摸点在人偶区域内的纵向位置切分（上 38% 头 / 其余身子）。**已知误差**：切分线固定，不随模型头身比例自适应，宁可偏「头」。
+
+单测 342 → 351。本地 `verify.sh --quick` 三关通过（0 失败）。
+
 ## v1.136.0 (2026-10-03)
 
 桌宠状态胶囊「点开详情」（Issue #27 第 1 条收尾；该条正文的「可点开详情」此前一直没落地）。
