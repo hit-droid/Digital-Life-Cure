@@ -504,14 +504,14 @@ public class ChatActivity extends Activity {
         }
         for (ChatStore.StoredMsg m : msgs) {
             if ("user".equals(m.role)) {
-                appendUserBubble(m.content);
+                appendUserBubble(m.content, m.timestamp);
             } else if ("tool".equals(m.role)) {
                 markLastToolResult(null, null, m.content);
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
                 appendToolBubble(ChatTextOps.parseToolName(m.toolCalls),
                         ChatTextOps.parseToolArgs(m.toolCalls));
             } else if (m.content != null && !m.content.isEmpty()) {
-                appendAiBubble(m.content);
+                appendAiBubble(m.content, m.timestamp);
             }
         }
     }
@@ -1384,14 +1384,17 @@ public class ChatActivity extends Activity {
 
     // ==================== 气泡渲染 ====================
 
-    /** 相邻消息间隔超过 5 分钟时插入居中的时间标签（iMessage 风格） */
-    private void appendTimeDividerIfNeeded() {
+    /** 相邻消息间隔超过 5 分钟时插入居中的时间标签（iMessage 风格）
+     *  @param ts 该条消息的真实时间戳（毫秒）；<=0 时回退为当前时间 */
+    private void appendTimeDividerIfNeeded(long ts) {
+        long msgTs = ts > 0 ? ts : System.currentTimeMillis();
         long now = System.currentTimeMillis();
-        if (lastTsLabel != 0 && now - lastTsLabel < 5 * 60 * 1000L) return;
-        lastTsLabel = now;
+        if (lastTsLabel != 0 && Math.abs(msgTs - lastTsLabel) < 5 * 60 * 1000L) return;
+        lastTsLabel = msgTs;
         TextView t = new TextView(this);
         // v1.38.0：智能时间分割线（今天 / 昨天 / 更早）
-        t.setText(ChatTextOps.formatDividerTime(now, now, Locale.getDefault()));
+        // 修复：此前一律按「当前时间」渲染，恢复历史会话时时间条显示的是打开时间而非发送时间
+        t.setText(ChatTextOps.formatDividerTime(msgTs, now, Locale.getDefault()));
         t.setTextSize(10f);
         t.setTextColor(getColorCompat(R.color.operit_text_hint));
         t.setGravity(Gravity.CENTER);
@@ -1691,7 +1694,12 @@ public class ChatActivity extends Activity {
     }
 
     private void appendUserBubble(String text) {
-        appendTimeDividerIfNeeded();
+        appendUserBubble(text, System.currentTimeMillis());
+    }
+
+    /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
+    private void appendUserBubble(String text, long ts) {
+        appendTimeDividerIfNeeded(ts);
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.END);
@@ -1734,7 +1742,12 @@ public class ChatActivity extends Activity {
     }
 
     private void appendAiBubble(String text) {
-        appendTimeDividerIfNeeded();
+        appendAiBubble(text, System.currentTimeMillis());
+    }
+
+    /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
+    private void appendAiBubble(String text, long ts) {
+        appendTimeDividerIfNeeded(ts);
         TextView b = newTextViewBubble();
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
         b.setLayoutParams(new LinearLayout.LayoutParams(
