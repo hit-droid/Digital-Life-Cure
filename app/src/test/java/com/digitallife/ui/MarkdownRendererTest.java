@@ -183,4 +183,30 @@ public class MarkdownRendererTest {
         assertFalse("表格里不应残留可折行的普通空格：" + out, out.contains(" "));
         assertTrue(out.contains("\u00A0"));
     }
+
+    // ==================== v1.136.0：行级判定的端到端（需要 Robolectric） ====================
+
+    /**
+     * 这三条同一个断言在 MarkdownBlockTest 里跑不了：那里刻意不带 Robolectric，
+     * 而拼 Spannable 会撞上 unit test 的默认 "not mocked" 异常。
+     */
+    @Test
+    public void render_nestedListKeepsBulletAndIndent() {
+        String out = renderer().render("- 一级\n  - 二级\n").toString();
+        assertTrue("一级应有项目符号：" + out, out.contains("\u2022 一级"));
+        assertTrue("子项应有项目符号且带缩进：" + out, out.contains("\u00A0\u00A0\u2022 二级"));
+    }
+
+    @Test
+    public void render_headingWithoutSpaceDropsHash() {
+        String out = renderer().render("#标题\n").toString();
+        assertFalse("不应残留井号：" + out, out.contains("#"));
+        assertTrue(out.contains("标题"));
+    }
+
+    @Test
+    public void render_decimalNumberUnaffected() {
+        String out = renderer().render("3.14 是圆周率\n").toString();
+        assertTrue("小数不能被拆成列表项：" + out, out.contains("3.14 是圆周率"));
+    }
 }
