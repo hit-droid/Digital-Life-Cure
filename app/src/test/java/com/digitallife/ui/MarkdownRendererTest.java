@@ -110,4 +110,77 @@ public class MarkdownRendererTest {
         int c1 = lines[2].indexOf('z');
         assertTrue("两行首列起始位置应一致：" + c0 + " vs " + c1, c0 >= 0 && c0 == c1);
     }
+
+    // ==================== v1.130.0：整表宽度受控 + 不折行 ====================
+
+    private static int sum(int[] a) {
+        int s = 0;
+        for (int v : a) s += v;
+        return s;
+    }
+
+    @Test
+    public void fitColumns_withinBudgetIsUnchanged() {
+        int[] in = {5, 5};
+        int[] out = MarkdownRenderer.fitColumns(in, 20);
+        assertEquals(5, out[0]);
+        assertEquals(5, out[1]);
+    }
+
+    @Test
+    public void fitColumns_scalesProportionally() {
+        int[] out = MarkdownRenderer.fitColumns(new int[]{10, 30}, 20);
+        assertEquals(2, out.length);
+        // 10:30 等比缩到总宽 20 → 5:15
+        assertEquals(5, out[0]);
+        assertEquals(15, out[1]);
+    }
+
+    @Test
+    public void fitColumns_totalStaysWithinBudget() {
+        int[] out = MarkdownRenderer.fitColumns(new int[]{24, 24, 24}, 30);
+        assertTrue("压缩后总宽应 <= 预算，实际 " + sum(out), sum(out) <= 30);
+    }
+
+    @Test
+    public void fitColumns_neverGoesBelowMinWidth() {
+        // 预算小到连下限都塞不下时，宁可溢出也不把列压成 0（内容会整列消失）
+        int[] out = MarkdownRenderer.fitColumns(new int[]{24, 24, 24, 24, 24}, 4);
+        for (int w : out) {
+            assertTrue("单列不应低于下限，实际 " + w, w >= MarkdownRenderer.MIN_COL_WIDTH);
+        }
+    }
+
+    @Test
+    public void fitColumns_nullGivesEmpty() {
+        assertEquals(0, MarkdownRenderer.fitColumns(null, 10).length);
+    }
+
+    @Test
+    public void noBreakSpaces_replacesOrdinarySpaces() {
+        assertEquals("a\u00A0b", MarkdownRenderer.noBreakSpaces("a b"));
+        assertEquals("", MarkdownRenderer.noBreakSpaces(""));
+        assertEquals("", MarkdownRenderer.noBreakSpaces(null));
+    }
+
+    @Test
+    public void render_tableRowsFitWithinMaxWidth() {
+        // 三列各 24 宽：不压缩的话一行 72+4=76 个字符，手机上必然被折行
+        String md = "| aaaaaaaaaaaaaaaaaaaaaaaa | bbbbbbbbbbbbbbbbbbbbbbbb | cccccccccccccccccccccccc |\n"
+                + "|---|---|---|\n| 1 | 2 | 3 |\n";
+        String out = renderer().render(md).toString();
+        for (String line : out.split("\n")) {
+            assertTrue("表格行宽应受控（<= " + MarkdownRenderer.MAX_TABLE_WIDTH + "），实际 "
+                    + line.length() + "：" + line, line.length() <= MarkdownRenderer.MAX_TABLE_WIDTH);
+        }
+    }
+
+    @Test
+    public void render_tableHasNoBreakableSpace() {
+        // 列间空隙必须是不换行空格：普通空格是 TextView 的合法折行点，
+        // 宽表格会从这里被折断，对齐全乱。
+        String out = renderer().render("| a | b |\n|---|---|\n| 1 | 2 |\n").toString();
+        assertFalse("表格里不应残留可折行的普通空格：" + out, out.contains(" "));
+        assertTrue(out.contains("\u00A0"));
+    }
 }
