@@ -168,6 +168,66 @@ public final class MarkdownRenderer {
         return true;
     }
 
+    /** 单列自然宽度上限 */
+    private static final int MAX_COL_WIDTH = 24;
+    /** 列间距（半角字符数） */
+    private static final int COL_GAP = 2;
+
+    /**
+     * 整表总宽上限（半角字符数）。v1.130.0：表格是等宽文本渲染，
+     * 总宽一旦超过气泡可用宽度，TextView 就会在列间空隙处折行、整张表散掉。
+     * 按 15sp 等宽字体估算，手机上大约放得下 32 个半角字符。
+     */
+    static final int MAX_TABLE_WIDTH = 32;
+
+    /** 压缩时单列的下限，再窄内容就没法读了 */
+    static final int MIN_COL_WIDTH = 3;
+
+    /**
+     * v1.130.0：把各列自然宽度等比压缩进总宽预算（单列不低于 {@link #MIN_COL_WIDTH}）。
+     * <p>宁可每列窄一点，也要保证一行放得下——折行会让表格结构彻底乱掉，
+     * 比压缩难看得多。列数多到连下限都塞不下时放弃压缩（接受溢出），
+     * 至少不会把某列压成 0 导致内容整列消失。</p>
+     * <p>包内可见，便于单测。</p>
+     */
+    static int[] fitColumns(int[] natural, int budget) {
+        if (natural == null) return new int[0];
+        int[] out = natural.clone();
+        long total = 0;
+        for (int w : out) total += w;
+        if (budget <= 0 || total <= budget) return out;
+        long scaled = 0;
+        for (int i = 0; i < out.length; i++) {
+            out[i] = java.lang.Math.max(MIN_COL_WIDTH,
+                    (int) java.lang.Math.floor(out[i] * (long) budget / total));
+            scaled += out[i];
+        }
+        // 下限保护可能让总宽又超了：从最宽的列开始让，直到塞进预算
+        while (scaled > budget) {
+            int idx = -1;
+            int max = 0;
+            for (int i = 0; i < out.length; i++) {
+                if (out[i] > MIN_COL_WIDTH && out[i] > max) {
+                    max = out[i];
+                    idx = i;
+                }
+            }
+            if (idx < 0) break;   // 全都到下限了，接受溢出
+            out[idx]--;
+            scaled--;
+        }
+        return out;
+    }
+
+    /**
+     * v1.130.0：空格换成不换行空格。
+     * 表格靠空格对齐，但普通空格是 TextView 的合法折行点——宽表格会被从这里
+     * 折断成两截，对齐全乱。换成 NBSP 后整行不会断。
+     */
+    static String noBreakSpaces(String s) {
+        return s == null ? "" : s.replace(' ', '\u00A0');
+    }
+
     /** v1.46.0：把表格块渲染成等宽对齐文本，表头加粗 */
     private void appendTable(SpannableStringBuilder out, String[] lines, int from, int to) {
         java.util.List<String[]> rows = new java.util.ArrayList<>();
@@ -188,17 +248,22 @@ public final class MarkdownRenderer {
             }
         }
         // 单列限宽，避免超宽表格横向撑爆气泡
-        for (int i = 0; i < cols; i++) widths[i] = java.lang.Math.min(widths[i], 24);
+        for (int i = 0; i < cols; i++) widths[i] = java.lang.Math.min(widths[i], MAX_COL_WIDTH);
+        // v1.130.0：整表压进总宽预算，宁可列窄一点也不要换行
+        widths = fitColumns(widths, MAX_TABLE_WIDTH - COL_GAP * (cols - 1));
 
         int start = out.length();
         for (int r = 0; r < rows.size(); r++) {
             String[] c = rows.get(r);
+            StringBuilder line = new StringBuilder();
             for (int i = 0; i < cols; i++) {
                 String cell = i < c.length ? c[i] : "";
                 if (displayWidth(cell) > widths[i]) cell = truncateCell(cell, widths[i]);
-                out.append(padCell(cell, widths[i]));
-                if (i < cols - 1) out.append("  ");
+                line.append(padCell(cell, widths[i]));
+                if (i < cols - 1) line.append("  ");
             }
+            // v1.130.0：整行转 NBSP，列间空隙不再是折行点
+            out.append(noBreakSpaces(line.toString()));
             if (r < rows.size() - 1) out.append('\n');
         }
         int end = out.length();
