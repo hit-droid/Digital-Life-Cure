@@ -146,7 +146,7 @@ public final class ChatTextOps {
     private static final String BUBBLE_TIME_PATTERN = "HH:mm";
 
     /**
-     * v1.128.0：气泡自己的时间戳（AGENTS.md 5.4 第 1 条）。
+     * v1.130.0：气泡自己的时间戳（AGENTS.md 5.4 第 1 条）。
      * 与 {@link #formatDividerTime} 不同——分隔线只在间隔 5 分钟时出现，
      * 这个时间是每条气泡都带的，所以只给 {@code HH:mm}，不带日期。
      *

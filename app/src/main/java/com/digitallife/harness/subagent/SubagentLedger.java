@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 子智能体协作台账（v1.128.0；v1.129.0 增加 {@link #byAgent()} 按 agent 聚合）。
+ * 子智能体协作台账（v1.128.0；v1.130.0 增加 {@link #byAgent()} 按 agent 聚合）。
  *
  * <p>每次子智能体执行（不管来自 {@code delegate_task} 串行、{@code delegate_parallel}
  * 并行还是 {@code delegate_pipeline} 依赖链）都由 {@link SubagentRunner} 在这里记一条，
@@ -44,7 +44,7 @@ public final class SubagentLedger {
     }
 
     /**
-     * 单个子智能体在当前台账窗口内的汇总（v1.129.0 深化）。
+     * 单个子智能体在当前台账窗口内的汇总（v1.130.0 深化）。
      *
      * <p>台账原先只有「一条条明细」，看不出**哪个子智能体最不可靠 / 最慢**。
      * 按 agent 聚合后，控制台能一眼看出「writer 跑了 5 次失败了 3 次」这类问题。

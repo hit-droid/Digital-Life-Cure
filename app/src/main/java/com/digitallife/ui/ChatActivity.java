@@ -1096,7 +1096,7 @@ public class ChatActivity extends Activity {
                                 hideThinkingDot();
                                 curAssistantText = "";
                                 curAssistantBubble = newTextViewBubble();
-                                // v1.128.0：流式回复气泡同样带时间戳
+                                // v1.130.0：流式回复气泡同样带时间戳
                                 listContainer.addView(wrapBubble(curAssistantBubble,
                                         System.currentTimeMillis(), false));
                             }
@@ -1245,7 +1245,7 @@ public class ChatActivity extends Activity {
                         hideThinkingDot();
                         curAssistantText = "";
                         curAssistantBubble = newTextViewBubble();
-                        // v1.128.0：流式回复气泡同样带时间戳
+                        // v1.130.0：流式回复气泡同样带时间戳
                         listContainer.addView(wrapBubble(curAssistantBubble,
                                 System.currentTimeMillis(), false));
                     }
@@ -1528,7 +1528,7 @@ public class ChatActivity extends Activity {
         String lower = query.toLowerCase(java.util.Locale.ROOT);
         for (int i = 0; i < listContainer.getChildCount(); i++) {
             android.view.View child = listContainer.getChildAt(i);
-            // v1.128.0：气泡可能包在「气泡+时间戳」容器里，取里面的气泡来匹配
+            // v1.130.0：气泡可能包在「气泡+时间戳」容器里，取里面的气泡来匹配
             TextView bubble = bubbleOf(child);
             if (bubble == null) continue;
             String txt = bubble.getText() == null ? "" : bubble.getText().toString();
@@ -1557,7 +1557,7 @@ public class ChatActivity extends Activity {
         // 滚到该气泡位置
         handler.post(() -> scroll.smoothScrollTo(0, child.getTop()));
         UiKit.flash(child);
-        // v1.128.0：高亮要落在气泡上，不是外层容器
+        // v1.130.0：高亮要落在气泡上，不是外层容器
         TextView bubble = bubbleOf(child);
         if (bubble != null) {
             highlightText(bubble, searchQuery);
@@ -1720,10 +1720,10 @@ public class ChatActivity extends Activity {
         }
     }
 
-    // ==================== 气泡时间戳（v1.128.0，5.4 第 1 条） ====================
+    // ==================== 气泡时间戳（v1.130.0，5.4 第 1 条） ====================
 
     /**
-     * v1.128.0：气泡下方的时间戳 {@code HH:mm}。
+     * v1.130.0：气泡下方的时间戳 {@code HH:mm}。
      * 左右对齐交给外层容器的 gravity，这里只管字号/颜色。
      */
     private TextView newBubbleTime(long ts) {
@@ -1739,7 +1739,7 @@ public class ChatActivity extends Activity {
     }
 
     /**
-     * v1.128.0：把气泡包进「气泡 + 时间戳」的纵向容器。
+     * v1.130.0：把气泡包进「气泡 + 时间戳」的纵向容器。
      * <p>包一层会让气泡不再是 {@code listContainer} 的直接子视图，因此所有
      * 遍历/移除子视图的地方都必须走 {@link #bubbleOf} / {@link #removeBubble}，
      * 否则搜索找不到气泡、删除会留下孤儿时间条。</p>
@@ -1761,7 +1761,7 @@ public class ChatActivity extends Activity {
     }
 
     /**
-     * v1.128.0：移除气泡。气泡被包在容器里时连容器一起移除，
+     * v1.130.0：移除气泡。气泡被包在容器里时连容器一起移除，
      * 否则只移除气泡会把时间戳留在列表里变成孤儿视图。
      */
     private void removeBubble(View v) {
@@ -1775,7 +1775,7 @@ public class ChatActivity extends Activity {
     }
 
     /**
-     * v1.128.0：从 {@code listContainer} 的直接子视图里取出气泡。
+     * v1.130.0：从 {@code listContainer} 的直接子视图里取出气泡。
      * 加了时间戳后气泡是容器（{@link #wrapBubble}）的第 0 个子视图；
      * 没加时间戳的（工具气泡、错误气泡、时间分隔线）本身就是 TextView。
      */
@@ -1796,7 +1796,7 @@ public class ChatActivity extends Activity {
     private void appendUserBubble(String text, long ts) {
         appendTimeDividerIfNeeded(ts);
         LinearLayout row = new LinearLayout(this);
-        // v1.128.0：纵向——气泡在上、时间戳在下；gravity=END 让两者一起靠右
+        // v1.130.0：纵向——气泡在上、时间戳在下；gravity=END 让两者一起靠右
         row.setOrientation(LinearLayout.VERTICAL);
         row.setGravity(Gravity.END);
         TextView bubble = new TextView(this);
@@ -1812,7 +1812,7 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(4);
         row.addView(bubble, lp);
-        // v1.128.0：气泡自己的时间戳（5.4 第 1 条）
+        // v1.130.0：气泡自己的时间戳（5.4 第 1 条）
         row.addView(newBubbleTime(ts));
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1851,7 +1851,7 @@ public class ChatActivity extends Activity {
         appendTimeDividerIfNeeded(ts);
         TextView b = newTextViewBubble();
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
-        // v1.128.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
+        // v1.130.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
         listContainer.addView(wrapBubble(b, ts, false));
         // v1.28.0：长消息折叠（历史消息/非流式回复同样生效）
         applyCollapse(b);

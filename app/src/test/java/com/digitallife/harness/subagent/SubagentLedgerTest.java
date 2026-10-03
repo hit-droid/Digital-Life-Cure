@@ -138,7 +138,7 @@ public class SubagentLedgerTest {
         assertTrue(e.error.contains("未知子智能体"));
     }
 
-    // ==================== 按 agent 聚合（v1.129.0）====================
+    // ==================== 按 agent 聚合（v1.130.0）====================
 
     @Test
     public void byAgentOnEmptyLedgerIsEmpty() {
