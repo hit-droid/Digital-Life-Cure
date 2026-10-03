@@ -23,10 +23,20 @@ public final class MarkdownRenderer {
     private static final Pattern BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
     private static final Pattern ITALIC = Pattern.compile("(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)");
     private static final Pattern INLINE_CODE = Pattern.compile("`([^`]+)`");
-    private static final Pattern HEADING = Pattern.compile("^(#{1,3})\\s+(.+)$");
-    private static final Pattern UL_ITEM = Pattern.compile("^[-*]\\s+(.+)$");
-    private static final Pattern OL_ITEM = Pattern.compile("^(\\d+)[.、]\\s+(.+)$");
-    private static final Pattern BLOCKQUOTE = Pattern.compile("^>\\s?(.+)$");
+    /**
+     * v1.136.0：四个行级正则都放开了前导空白（{@code ^(\s*)}）。
+     * 之前锚死在行首，LLM 输出的多级列表里被缩进的子项一行都匹配不上。
+     * OL_ITEM 另外把「顿号后必须带空格」放宽了：中文列举习惯写成 {@code 1、第一}；
+     * 但**英文句号仍要求空格**，否则 {@code 3.14 是圆周率} 会被当成第 3 条列表项。
+     * HEADING 的 #{1,3} 后面也从「至少一个空白」放宽成「可以没有空格」
+     * （模型写中文标题时常写成 {@code #标题}）。
+     * 末尾的 {@code (?!#)} 是护栏：放宽之后 {@code #### 四级} 里的前三个井号会
+     * 被当成三级标题、剩下那个井号漏进正文，必须显式挡掉四级及以上。
+     */
+    private static final Pattern HEADING = Pattern.compile("^(\\s*)(#{1,3})(?!#)\\s*(.+)$");
+    private static final Pattern UL_ITEM = Pattern.compile("^(\\s*)[-*]\\s+(.+)$");
+    private static final Pattern OL_ITEM = Pattern.compile("^(\\s*)(\\d+)(?:\\.\\s+|、\\s*)(.+)$");
+    private static final Pattern BLOCKQUOTE = Pattern.compile("^(\\s*)>\\s?(.+)$");
     private static final Pattern URL = Pattern.compile("https?://[^\\s)\\]<>]+");
 
     private final int codeBgColor;
@@ -333,56 +343,164 @@ public final class MarkdownRenderer {
         return sb.toString();
     }
 
-    private static String truncateCell(String s, int width) {
+    /**
+     * 截断到指定显示宽度，末尾补省略号。
+     *
+     * <p>v1.136.0：改成按**码点**推进。emoji 是两个 char 的高低代理对，
+     * 逐 char 累加时，(width-1) 的边界正好落在代理之间就会留下半个 emoji，
+     * 渲染出来是豆腐块；现在整体判定，放不下就整个不要。</p>
+     * <p>包内可见，便于单测。</p>
+     */
+    static String truncateCell(String s, int width) {
         if (displayWidth(s) <= width) return s;
         if (width <= 1) return "\u2026";
         StringBuilder sb = new StringBuilder();
         int w = 0;
-        for (int i = 0; i < s.length(); i++) {
+        int i = 0;
+        while (i < s.length()) {
             char c = s.charAt(i);
+            int len = 1;
             int cw = isWide(c) ? 2 : 1;
+            if (Character.isHighSurrogate(c) && i + 1 < s.length()
+                    && Character.isLowSurrogate(s.charAt(i + 1))) {
+                // 一个代理对整体按 2 个半角宽计，与 displayWidth 逐 char 计数的结果一致
+                len = 2;
+                cw = 2;
+            }
             if (w + cw > width - 1) break;
-            sb.append(c);
+            sb.append(s, i, i + len);
             w += cw;
+            i += len;
         }
         sb.append('\u2026');
         return sb.toString();
     }
 
-    private void appendLine(SpannableStringBuilder out, String line) {
+    // ==================== 行级块识别（纯逻辑，便于 JVM 单测） ====================
+
+    /** 一行的块类型 */
+    enum BlockKind { PLAIN, HEADING, QUOTE, UL, OL }
+
+    /**
+     * 列表 / 引用的缩进层级上限。深嵌套如果一路缩进下去，正文会被推到屏外，
+     * 超出这个层级后一律按本级渲染。
+     */
+    static final int MAX_LIST_LEVEL = 3;
+
+    /**
+     * 一级缩进的单位：两个**不换行**空格。
+     * 普通空格在行首会被 TextView 的折行策略吃掉，层级照样看不见，所以用 NBSP。
+     */
+    static final String LIST_INDENT_UNIT = "\u00A0\u00A0";
+
+    /**
+     * 一行的块级解析结果。
+     *
+     * <p>原先这些判定散在 appendLine 里、边匹配边拼 Span，没法在 JVM 上验证。
+     * 这里只负责「识别」，不碰任何 Span，好把各种写法钉死在单测里。</p>
+     */
+    static final class BlockLine {
+        final BlockKind kind;
+        /** HEADING 时为 1~3 级；其余是缩进层级 0~{@link #MAX_LIST_LEVEL} */
+        final int level;
+        /** 行首缩进（已按层级限幅）；PLAIN / HEADING 为空串 */
+        final String indent;
+        /** 去掉块标记后的正文；PLAIN 时是原始行 */
+        final String text;
+        /** 有序列表的原始序号（如 "3"），其余为 null */
+        final String marker;
+
+        BlockLine(BlockKind kind, int level, String indent, String text, String marker) {
+            this.kind = kind;
+            this.level = level;
+            this.indent = indent;
+            this.text = text;
+            this.marker = marker;
+        }
+    }
+
+    /**
+     * 识别一行属于哪种块。
+     *
+     * <p>放宽是纯增量的：原先能匹配上的行照样匹配，只是多了「带缩进的子项」
+     * 和「# 后无空格」这两种原先漏掉的写法。</p>
+     */
+    static BlockLine parseBlockLine(String line) {
+        if (line == null) return new BlockLine(BlockKind.PLAIN, 0, "", "", null);
+
         Matcher h = HEADING.matcher(line);
         if (h.matches()) {
-            int level = h.group(1).length();
-            int start = out.length();
-            out.append(h.group(2));
-            int end = out.length();
-            out.setSpan(new StyleSpan(Typeface.BOLD), start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            float size = level == 1 ? 1.3f : (level == 2 ? 1.2f : 1.1f);
-            out.setSpan(new RelativeSizeSpan(size), start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            return;
+            return new BlockLine(BlockKind.HEADING, h.group(2).length(), "", h.group(3), null);
         }
         Matcher bq = BLOCKQUOTE.matcher(line);
         if (bq.matches()) {
-            int start = out.length();
-            out.append("▍").append(bq.group(1));
-            int end = out.length();
-            out.setSpan(new ForegroundColorSpan(quoteTextColor), start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            return;
+            int lv = indentLevel(bq.group(1));
+            return new BlockLine(BlockKind.QUOTE, lv, indentOf(lv), bq.group(2), null);
         }
         Matcher ul = UL_ITEM.matcher(line);
         if (ul.matches()) {
-            appendStyledText(out, "• " + ul.group(1));
-            return;
+            int lv = indentLevel(ul.group(1));
+            return new BlockLine(BlockKind.UL, lv, indentOf(lv), ul.group(2), null);
         }
         Matcher ol = OL_ITEM.matcher(line);
         if (ol.matches()) {
-            appendStyledText(out, ol.group(1) + ". " + ol.group(2));
-            return;
+            int lv = indentLevel(ol.group(1));
+            return new BlockLine(BlockKind.OL, lv, indentOf(lv), ol.group(3), ol.group(2));
         }
-        appendStyledText(out, line);
+        return new BlockLine(BlockKind.PLAIN, 0, "", line, null);
+    }
+
+    /** 前导空白换算层级：每 2 个空格（或 1 个 tab）算一级，上限 {@link #MAX_LIST_LEVEL} */
+    static int indentLevel(String leading) {
+        if (leading == null || leading.isEmpty()) return 0;
+        int w = 0;
+        for (int i = 0; i < leading.length(); i++) {
+            w += (leading.charAt(i) == '\t') ? 2 : 1;
+        }
+        int lv = w / 2;
+        return lv > MAX_LIST_LEVEL ? MAX_LIST_LEVEL : lv;
+    }
+
+    /** 把层级还原成缩进字符串；层级已在 {@link #indentLevel} 限幅，这里再兜一次 */
+    static String indentOf(int level) {
+        if (level <= 0) return "";
+        StringBuilder sb = new StringBuilder();
+        int n = Math.min(level, MAX_LIST_LEVEL);
+        for (int i = 0; i < n; i++) sb.append(LIST_INDENT_UNIT);
+        return sb.toString();
+    }
+
+    private void appendLine(SpannableStringBuilder out, String line) {
+        BlockLine b = parseBlockLine(line);
+        switch (b.kind) {
+            case HEADING: {
+                int start = out.length();
+                out.append(b.text);
+                int end = out.length();
+                float size = b.level == 1 ? 1.3f : (b.level == 2 ? 1.2f : 1.1f);
+                out.setSpan(new StyleSpan(Typeface.BOLD), start, end,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                out.setSpan(new RelativeSizeSpan(size), start, end,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                return;
+            }
+            case QUOTE: {
+                int start = out.length();
+                out.append(b.indent).append("\u258D").append(b.text);
+                int end = out.length();
+                out.setSpan(new ForegroundColorSpan(quoteTextColor), start, end,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                return;
+            }
+            case UL:
+                appendStyledText(out, b.indent + "\u2022 " + b.text);
+                return;
+            case OL:
+                appendStyledText(out, b.indent + b.marker + ". " + b.text);
+                return;
+            default:
+                appendStyledText(out, b.text);
+        }
     }
 
     private void appendStyledText(SpannableStringBuilder out, String text) {
