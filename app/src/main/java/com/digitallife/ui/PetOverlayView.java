@@ -21,6 +21,7 @@ import android.widget.TextView;
 import com.digitallife.R;
 import com.digitallife.render.Pose;
 import com.digitallife.render.Live2DGLView;
+import com.digitallife.ui.pet.PetStatusText;
 
 /**
  * 悬浮窗 Live2D 视图 + 桌面聊天输入框。
@@ -48,7 +49,11 @@ public class PetOverlayView extends FrameLayout {
     private final LinearLayout bubbleContainer;
     private final TextView bubbleView;
     private final View bubbleTail;
+    /** v1.132.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
+    private final TextView statusView;
     private final EditText chatInput;
+    /** 状态胶囊的数据来源；未接线时为 null，胶囊不显示 */
+    private StatusProvider statusProvider;
     private final GestureDetector gestureDetector;
     private static final java.util.Random rnd = new java.util.Random();
 
@@ -110,6 +115,22 @@ public class PetOverlayView extends FrameLayout {
         bcp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         bcp.topMargin = dp(6);
         addView(bubbleContainer, bcp);
+
+        // v1.132.0：状态胶囊（Issue #27 第 1 条）。
+        // 在 chatInput 之前 addView：弹出输入框时它自然盖住胶囊，
+        // 输入时也不需要看状态，省掉一套互斥逻辑。
+        statusView = new TextView(context);
+        statusView.setTextSize(10f);
+        statusView.setTextColor(colorRes(R.color.operit_text_secondary));
+        statusView.setBackground(getStatusBackground());
+        statusView.setPadding(dp(8), dp(3), dp(8), dp(3));
+        statusView.setAlpha(0.9f);
+        statusView.setVisibility(View.GONE);
+        FrameLayout.LayoutParams stp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        stp.bottomMargin = dp(2);
+        addView(statusView, stp);
 
         // 桌面聊天输入框
         chatInput = new EditText(context);
@@ -176,6 +197,85 @@ public class PetOverlayView extends FrameLayout {
             }
         });
         gestureDetector.setIsLongpressEnabled(true);
+        startStatusTicker();
+    }
+
+    // ==================== v1.132.0：状态胶囊（Issue #27 第 1 条） ====================
+
+    /** 状态刷新间隔；情绪是慢变量（AICore 里按 tick 衰减），5 秒足够 */
+    private static final long STATUS_REFRESH_MS = 5000L;
+
+    /**
+     * 状态胶囊的数据来源。
+     * <p>刻意不让 {@code ui/} 反向依赖 {@code brain/}：这里只收三个标量，
+     * 由 {@code PetService} 接线时把 {@code AICore#getEmotion()} 的值喂进来。
+     * 本期不碰 {@code PetService}（该文件已被 trae 的 #26 认领），
+     * 所以接线放到第二步，胶囊在接线前保持隐藏。</p>
+     */
+    public interface StatusProvider {
+        float intimacy();
+
+        float energy();
+
+        String dominant();
+    }
+
+    /** 接线入口：{@code PetService} 调一次即可点亮胶囊；传 null 则隐藏 */
+    public void setStatusProvider(StatusProvider p) {
+        this.statusProvider = p;
+        refreshStatus();
+    }
+
+    /**
+     * ticker 提为字段：{@link #mainHandler} 是 static 的，匿名 Runnable 又隐式持有
+     * 本 View，view 销毁后不摘掉就会一直空转并拖着整个 PetOverlayView 不释放。
+     */
+    private final Runnable statusTick = new Runnable() {
+        @Override
+        public void run() {
+            refreshStatus();
+            mainHandler.postDelayed(this, STATUS_REFRESH_MS);
+        }
+    };
+
+    private void startStatusTicker() {
+        mainHandler.postDelayed(statusTick, STATUS_REFRESH_MS);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        mainHandler.removeCallbacks(statusTick);
+    }
+
+    private void refreshStatus() {
+        StatusProvider p = statusProvider;
+        if (p == null) {
+            statusView.setVisibility(View.GONE);
+            return;
+        }
+        try {
+            // 悬浮窗里任何取数异常都不该把整个桌宠带崩，取不到就这一轮不显示
+            String text = PetStatusText.capsule(p.intimacy(), p.energy(), p.dominant());
+            if (text.isEmpty()) {
+                statusView.setVisibility(View.GONE);
+                return;
+            }
+            if (!text.equals(statusView.getText().toString())) statusView.setText(text);
+            statusView.setVisibility(View.VISIBLE);
+        } catch (Throwable t) {
+            Log.w(TAG, "refreshStatus failed", t);
+            statusView.setVisibility(View.GONE);
+        }
+    }
+
+    private android.graphics.drawable.Drawable getStatusBackground() {
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(dp(9));
+        bg.setColor(colorRes(R.color.surface_glass));
+        bg.setStroke(1, colorRes(R.color.brand_stroke));
+        return bg;
     }
 
     @Override
