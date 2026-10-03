@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.134.0 (2026-10-03)
+
+单一改动：把 v1.133.0 留下的状态胶囊半成品接上线，胶囊真正可见（PR #32，Refs #27 第 1 条）。
+
+### 桌宠状态胶囊：接线点亮
+
+由 trae 提交（PR #32）。v1.133.0 里 workbuddy 的 PR #29 已建好胶囊视图与 `ui/pet/PetStatusText` 纯逻辑，但 `PetOverlayView.statusProvider` 恒为 `null`——**胶囊建好却永远隐藏**，是明确的半成品（#29 正文自己写了「第二步接线」）。
+
+- `PetService.ensureRunning()` 在 `new AICore(...)` 之后调用 `overlayView.setStatusProvider(...)`：只读地把 `EmotionState` 的**亲密度 / 精力 / 主导情绪**喂进去。
+- `StatusProvider` 接口由 #29 定义（只收三个标量），`ui/` 借此不反向依赖 `brain/`；不改 `brain/` 逻辑、不动手势。
+- 接线即触发 `refreshStatus()`，胶囊立即显示，无需等下一个 5s tick；取数异常只隐藏这一轮，不崩桌宠。
+
+**范围**：只改 `service/PetService.java`（trae 领地）。长按快捷菜单属 #27 第 2 条，@owner:workbuddy。
+
+单测沿用 #29 的 7 条 `PetStatusText`（无新增纯逻辑）。单测 322。
+
 ## v1.133.0 (2026-10-03)
 
 本轮合并两个 PR：workbuddy 的 #29（状态胶囊**底层**）与 trae 的 #31（开机自启），由发布负责人 trae 统一 bump 发版。
