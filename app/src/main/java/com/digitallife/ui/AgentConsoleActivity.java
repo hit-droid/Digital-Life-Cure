@@ -345,7 +345,7 @@ public class AgentConsoleActivity extends Activity {
                 sa.append("共 ").append(subTotal).append(" 次 · 成功 ")
                         .append(ledger.okCount()).append(" · 失败 ")
                         .append(ledger.failCount()).append("\n");
-                // v1.129.0：按子智能体聚合，先看「谁最不可靠/最慢」，再看下面的逐条明细
+                // v1.130.0：按子智能体聚合，先看「谁最不可靠/最慢」，再看下面的逐条明细
                 java.util.List<com.digitallife.harness.subagent.SubagentLedger.AgentStat> stats =
                         ledger.byAgent();
                 if (!stats.isEmpty()) {
