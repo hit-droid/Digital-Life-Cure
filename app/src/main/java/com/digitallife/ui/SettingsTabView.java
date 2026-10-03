@@ -21,6 +21,9 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.OutputStream;
+
 import com.digitallife.R;
 import com.digitallife.brain.AICore;
 import com.digitallife.brain.LLMClient;
@@ -28,6 +31,7 @@ import com.digitallife.care.CareModelsActivity;
 import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.service.PetService;
+import com.digitallife.storage.DataPort;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.CrashHandler;
@@ -39,6 +43,9 @@ import com.digitallife.util.Settings;
  * 模型管理入口、记忆调试、关于。
  */
 public class SettingsTabView extends LinearLayout {
+
+    /** 导出数据（SAF 创建文档）的请求码，由 MainActivity 转发 */
+    public static final int REQ_EXPORT_DATA = 7001;
 
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -52,8 +59,14 @@ public class SettingsTabView extends LinearLayout {
     private ApiProfileSection modelSection;
     private int currentModelIndex = 0;
 
-    /** 转发文件选择结果给模型配置区（当前无文件选择需求，保留占位） */
+    /** 转发文件选择结果：导出数据落盘完成后提示 */
     public boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_EXPORT_DATA) {
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                doExport(data.getData());
+            }
+            return true;
+        }
         return false;
     }
 
@@ -190,6 +203,27 @@ public class SettingsTabView extends LinearLayout {
                 Toast.makeText(activity, "无法打开记忆管理: " + com.digitallife.ui.UiKit.safeMsg(e), Toast.LENGTH_SHORT).show();
             }
         });
+
+        // ---------- 数据与隐私（v1.140.0：密钥加密 / 数据导出 / 一键清除） ----------
+        LinearLayout cPrivacy = UiKit.card(activity, gMain, "数据与隐私");
+
+        TextView tvSecure = new TextView(activity);
+        tvSecure.setTextSize(12f);
+        tvSecure.setLineSpacing(2f, 1f);
+        tvSecure.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+        tvSecure.setText(settings.isSecureStorageSupported()
+                ? "API Key 已用系统密钥库（Android Keystore）加密保存，且不随系统备份导出。"
+                : "当前系统（Android 5.x）没有密钥库加密，API Key 以明文保存，请注意。");
+        cPrivacy.addView(tvSecure, UiKit.lp(activity, 0));
+
+        Button btnExport = UiKit.button(activity, cPrivacy, "导出我的数据（对话 / 记忆 / 角色 / 设置）");
+        btnExport.setOnClickListener(v -> exportData());
+
+        Button btnWipe = UiKit.secondaryButton(activity, cPrivacy, "清除全部数据（不含已导入模型）");
+        btnWipe.setOnClickListener(v -> confirmClearData());
+
+        Button btnPrivacy = UiKit.secondaryButton(activity, cPrivacy, "隐私说明");
+        btnPrivacy.setOnClickListener(v -> showPrivacy());
 
         // ---------- 互动（语音 + 快速聊天） ----------
         LinearLayout cChat = UiKit.card(activity, gChat, "互动");
@@ -583,5 +617,96 @@ public class SettingsTabView extends LinearLayout {
             sb.append("模型：").append(settings.getModel().isEmpty() ? "（空）" : settings.getModel());
         }
         tvStatus.setText(sb.toString());
+    }
+
+    // ==================== 数据与隐私（v1.140.0） ====================
+
+    private void toast(String msg) {
+        Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    /** files / shared_prefs / databases 三个根目录（任一可能为 null，由 DataPort 容错） */
+    private File[] dataDirs() {
+        File filesDir = activity.getFilesDir();
+        File parent = filesDir != null ? filesDir.getParentFile() : null;
+        File prefsDir = parent != null ? new File(parent, "shared_prefs") : null;
+        File dbFile = activity.getDatabasePath("memory.db");
+        File dbDir = dbFile != null ? dbFile.getParentFile() : null;
+        return new File[]{filesDir, prefsDir, dbDir};
+    }
+
+    private void exportData() {
+        try {
+            Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("application/zip");
+            i.putExtra(Intent.EXTRA_TITLE, "digital-life-backup-"
+                    + new java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
+                    .format(new java.util.Date()) + ".zip");
+            activity.startActivityForResult(i, REQ_EXPORT_DATA);
+        } catch (Exception e) {
+            toast("无法打开保存对话框：" + UiKit.safeMsg(e));
+        }
+    }
+
+    private void doExport(final Uri uri) {
+        toast("正在导出…");
+        new Thread(() -> {
+            int count;
+            try {
+                OutputStream os = activity.getContentResolver().openOutputStream(uri);
+                if (os == null) throw new java.io.IOException("无法写入所选位置");
+                File[] d = dataDirs();
+                count = DataPort.exportZip(os, DataPort.exportEntries(d[0], d[1], d[2]));
+                os.close();
+            } catch (final Exception e) {
+                handler.post(() -> toast("导出失败：" + UiKit.safeMsg(e)));
+                return;
+            }
+            final int n = count;
+            handler.post(() -> toast("已导出 " + n + " 个文件"));
+        }, "data-export").start();
+    }
+
+    private void confirmClearData() {
+        new AlertDialog.Builder(activity)
+                .setTitle("清除全部数据")
+                .setMessage("将删除：对话与记忆、角色设定、全部设置（含 API 配置）。\n"
+                        + "不会删除已导入的模型。\n此操作不可撤销。")
+                .setPositiveButton("继续", (d, w) -> confirmClearDataAgain())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmClearDataAgain() {
+        new AlertDialog.Builder(activity)
+                .setTitle("再确认一次")
+                .setMessage("真的要清除吗？清除后需要重新配置 API 才能继续对话。")
+                .setPositiveButton("清除", (d, w) -> clearData())
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void clearData() {
+        try {
+            File[] d = dataDirs();
+            int n = DataPort.clear(d[0], d[1], d[2]);
+            toast("已清除 " + n + " 项，重启应用后生效");
+        } catch (Exception e) {
+            toast("清除失败：" + UiKit.safeMsg(e));
+        }
+    }
+
+    private void showPrivacy() {
+        new AlertDialog.Builder(activity)
+                .setTitle("隐私说明")
+                .setMessage(
+                        "• 对话内容、记忆与角色设定，会在你发起对话时发送到你配置的第三方 AI 服务"
+                                + "（即设置里的 API 地址），用于生成回复与提取记忆。本应用不运营任何中转服务器。\n\n"
+                                + "• API Key 只保存在本机；支持的机型上用系统密钥库加密，且不随系统备份导出。\n\n"
+                                + "• 对话与记忆只存在本机（配置与数据库中），可随时在上方导出或清除。\n\n"
+                                + "• 无障碍感知为可选授权，仅用于判断前台应用与通知，在本机处理，不上传。")
+                .setPositiveButton("知道了", null)
+                .show();
     }
 }
