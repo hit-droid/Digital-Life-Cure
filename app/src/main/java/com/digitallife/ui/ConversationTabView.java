@@ -93,7 +93,7 @@ public class ConversationTabView extends LinearLayout {
     }
 
     /**
-     * v1.128.0：是否已经存在「用户自建」会话（除内置护理会话外的任一条）。
+     * v1.129.0：是否已经存在「用户自建」会话（除内置护理会话外的任一条）。
      * <p>{@link #refresh()} 开头就 ensure 了护理会话，列表至少有一条，
      * 所以原来的 {@code sessions.isEmpty()} 恒为 false —— 空态分支是死代码，
      * 新用户打开「对话」Tab 只会看到孤零零一条护理会话、没有任何引导。
@@ -115,7 +115,7 @@ public class ConversationTabView extends LinearLayout {
         // 护理大脑会话始终存在并置顶
         chatStore.ensureSession(ChatStore.SESSION_CARE, "护理大脑", ChatStore.TYPE_CARE, "care", null);
         List<ChatStore.SessionInfo> sessions = chatStore.getSessions();
-        // v1.128.0：空态不再 return——引导卡插在最上方，护理会话卡片照常渲染在下方
+        // v1.129.0：空态不再 return——引导卡插在最上方，护理会话卡片照常渲染在下方
         if (!hasUserSession(sessions)) {
             listContainer.addView(buildEmptyGuide());
         }
@@ -130,7 +130,7 @@ public class ConversationTabView extends LinearLayout {
     }
 
     /**
-     * v1.128.0：会话列表空态引导（AGENTS.md 5.4 第 4 条）。
+     * v1.129.0：会话列表空态引导（AGENTS.md 5.4 第 4 条）。
      * <p>样式与交互对齐聊天页空态（{@code ChatActivity#appendEmptyGuide}）：
      * 同样的 {@code bg_chip_outline} chip，点了直接做事，而不是只给一行说明文字。</p>
      */
