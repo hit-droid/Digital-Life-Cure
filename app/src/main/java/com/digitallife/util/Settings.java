@@ -10,6 +10,7 @@ public class Settings {
     private static final String PREF = "pet_settings";
     private final SharedPreferences sp;
     private final Context ctx;
+    private final SecureStore secure = new SecureStore();
 
     public Settings(Context ctx) {
         this.ctx = ctx.getApplicationContext();
@@ -28,8 +29,32 @@ public class Settings {
     public String getApiBase() { return sp.getString("api_base", ""); }
     public void setApiBase(String v) { sp.edit().putString("api_base", v).apply(); }
 
-    public String getApiKey() { return sp.getString("api_key", ""); }
-    public void setApiKey(String v) { sp.edit().putString("api_key", v).apply(); }
+    /**
+     * 读取 API Key。磁盘上是密文（{@code enc:v1:...}）；读到旧明文时透明迁移为密文，
+     * 迁移只在设备支持加密时执行，且幂等（迁移后前缀存在，不再重复写）。
+     */
+    public String getApiKey() {
+        String stored = sp.getString("api_key", "");
+        if (stored == null || stored.isEmpty()) return "";
+        if (SecureCrypto.isEncrypted(stored)) return secure.decrypt(stored);
+        if (secure.isSupported()) {
+            String enc = secure.encrypt(stored);
+            if (SecureCrypto.isEncrypted(enc)) {
+                sp.edit().putString("api_key", enc).apply();
+            }
+        }
+        return stored;
+    }
+
+    public void setApiKey(String v) {
+        if (v == null) v = "";
+        sp.edit().putString("api_key", v.isEmpty() ? "" : secure.encrypt(v)).apply();
+    }
+
+    /** 当前设备是否支持加密存储（API<23 会降级明文，设置页据此提示） */
+    public boolean isSecureStorageSupported() {
+        return secure.isSupported();
+    }
 
     public String getModel() { return sp.getString("model", ""); }
     public void setModel(String v) { sp.edit().putString("model", v).apply(); }
