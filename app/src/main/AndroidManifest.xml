@@ -16,6 +16,8 @@
     <!-- 通知：Android 13+ 常驻通知需要 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 开机自启：重启后把桌宠拉回来 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -40,10 +42,11 @@
             </intent-filter>
         </activity>
 
-        <!-- 悬浮窗前台服务 -->
+        <!-- 悬浮窗前台服务；stopWithTask=false：从最近任务划掉 App 不杀桌宠（v1.133.0） -->
         <service
             android:name="com.digitallife.service.PetService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
@@ -140,6 +143,17 @@
         <receiver
             android:name="com.digitallife.brain.TaskReceiver"
             android:exported="false" />
+
+        <!-- 开机自启接收器（v1.133.0）：按设置把桌宠拉回来 -->
+        <receiver
+            android:name="com.digitallife.service.BootReceiver"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
         </application>
 
