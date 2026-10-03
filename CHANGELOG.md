@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.135.0 (2026-10-03)
+
+桌宠长按快捷菜单 + 位置锁定（PR #34，Closes #27 第 2 条；原 PR #33 由 workbuddy 提交）。
+
+### 桌宠长按快捷菜单 + 位置锁定
+
+主体由协作者 **workbuddy** 完成（原 PR #33，5 个提交原样保留在 #34 中）。长按桌宠不再直接跳设置，弹出轻量菜单，贴合桌宠该有的交互。
+
+- **纯逻辑 `ui/pet/PetQuickMenu`**（JVM 可测）：菜单文案（锁/未锁两种措辞）、表情循环（6 档，未知值回落「平静」）、居中坐标（窗口比屏幕宽时夹回 0，绝不产生负坐标把桌宠推出屏外）。新增 10 条单测。
+- **`ui/PetOverlayView`**：接回此前被改成空实现的 `GestureDetector.onLongPress`——`PetService.onLongPress()` 因此一直是**死代码**，不接上这根线菜单弹不出来；菜单居中悬浮，菜单期间 `onTouchEvent`/`onInterceptTouchEvent` 一律让位给菜单层，避免被原有手势拦截吃掉。
+- **`service/PetService`**：菜单五项分发（换表情 / 一键贴边 / 回到中间 / 锁定位置 / 打开设置）。「一键贴边」直接复用 v1.132.0 的 `OverlayDock.dock()`，不另写一份几何；「回到中间」用 `PetQuickMenu.centerX/centerY`。
+- **位置锁定**：`Settings.pet_locked`（默认不锁，落盘）。**只锁拖拽，不做 `FLAG_NOT_TOUCHABLE` 真穿透**——真穿透后窗口彻底不吃触摸，用户再也长按不出菜单，等于把自己锁死在外面。锁定时抬手也不再吸附，否则「锁定」形同虚设。
+
+### 集成收尾（trae）
+
+workbuddy 的 #33 基于 `766240a`（v1.133.0），**不含** #32，其 `setStatusProvider` 与已发版的 v1.134.0 重复。合并会自动产生两段 `setStatusProvider`（后者覆盖前者），多出的是永不生效的死代码。由发版负责人 trae 另开分支 `feat/pet-quick-menu` 集成（**不 force push 原分支**，遵 9.4）：删掉重复接线，恢复该分支误回退的三处 v1.133.0 胶囊注释，菜单本体一行未改。
+
+单测 322 → 332。本地 verify.sh --quick 三关通过。
+
 ## v1.134.0 (2026-10-03)
 
 单一改动：把 v1.133.0 留下的状态胶囊半成品接上线，胶囊真正可见（PR #32，Refs #27 第 1 条）。
