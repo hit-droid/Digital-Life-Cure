@@ -1693,6 +1693,26 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
+    /**
+     * v1.125.0：把消息以引用块形式放进输入框（5.4 第 2 条「引用回复」）。
+     * 引用块的纯文本拼装在 {@link ChatTextOps#buildQuote} 里，这里只负责塞进输入框。
+     */
+    private void quoteIntoInput(String text) {
+        String quote = ChatTextOps.buildQuote(text);
+        if (quote.isEmpty()) return;
+        String cur = etInput.getText() == null ? "" : etInput.getText().toString();
+        String merged = cur.isEmpty() ? quote
+                : (cur.endsWith("\n") ? cur + quote : cur + "\n" + quote);
+        etInput.setText(merged);
+        etInput.setSelection(merged.length());
+        etInput.requestFocus();
+        android.view.inputmethod.InputMethodManager imm =
+                (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(etInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
+
     private void appendUserBubble(String text) {
         appendUserBubble(text, System.currentTimeMillis());
     }
@@ -1725,12 +1745,15 @@ public class ChatActivity extends Activity {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
                     // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
-                    .setItems(new String[]{"朗读", "复制", "重新发送", "分享"}, (d, w) -> {
+                    // v1.125.0：新增「引用回复」（索引 2），其后项索引顺延
+                    .setItems(new String[]{"朗读", "复制", "引用回复", "重新发送", "分享"}, (d, w) -> {
                         if (w == 0) {
                             speakText(txt);
                         } else if (w == 1) {
                             copyToClipboard(txt);
                         } else if (w == 2) {
+                            quoteIntoInput(txt);
+                        } else if (w == 3) {
                             sendRaw(txt);
                         } else {
                             shareText(txt);
@@ -1763,15 +1786,18 @@ public class ChatActivity extends Activity {
             new android.app.AlertDialog.Builder(this)
                     .setTitle("消息操作")
                     // v1.29.0：新增「重新生成」「删除」
-                    .setItems(new String[]{"朗读", "复制", "分享", "重新生成", "删除"},
+                    // v1.125.0：新增「引用回复」（索引 2），其后项索引顺延
+                    .setItems(new String[]{"朗读", "复制", "引用回复", "分享", "重新生成", "删除"},
                             (d, w) -> {
                         if (w == 0) {
                             speakText(clean);
                         } else if (w == 1) {
                             copyToClipboard(clean);
                         } else if (w == 2) {
-                            shareText(clean);
+                            quoteIntoInput(clean);
                         } else if (w == 3) {
+                            shareText(clean);
+                        } else if (w == 4) {
                             regenerateLast(b);
                         } else {
                             deleteBubble(b);
