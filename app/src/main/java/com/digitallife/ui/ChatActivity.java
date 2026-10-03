@@ -80,6 +80,15 @@ public class ChatActivity extends Activity {
     private final ScrollAnchor scrollAnchor = new ScrollAnchor();
     /** 记录上一次已计入的行数，用行数差把「一条消息」和「流式多次刷新」区分开 */
     private int lastRowCount = 0;
+
+    /**
+     * v1.142.0（#57）：按添加顺序登记的 assistant 气泡。
+     *
+     * <p>「删除 / 重新生成」只能作用于最后一条 assistant 消息——数据库侧目前只有
+     * {@code ChatStore.deleteLastAssistantMessage}。此前不校验所点的是哪一条，
+     * 界面移除所点的、数据库删掉最后的，两边对不上。这里记下顺序好做判定。</p>
+     */
+    private final ArrayList<TextView> aiBubbles = new ArrayList<>();
     private TextView btnScrollBottom;
     private android.view.ViewTreeObserver.OnScrollChangedListener scrollWatcher;
     private LinearLayout listContainer;
@@ -1165,6 +1174,7 @@ public class ChatActivity extends Activity {
                                 // v1.130.0：流式回复气泡同样带时间戳
                                 listContainer.addView(wrapBubble(curAssistantBubble,
                                         System.currentTimeMillis(), false));
+                                trackAssistant(curAssistantBubble);
                             }
                             curAssistantText += t;
                             curAssistantBubble.setText(mdRenderer != null
@@ -1314,6 +1324,7 @@ public class ChatActivity extends Activity {
                         // v1.130.0：流式回复气泡同样带时间戳
                         listContainer.addView(wrapBubble(curAssistantBubble,
                                 System.currentTimeMillis(), false));
+                        trackAssistant(curAssistantBubble);
                     }
                     curAssistantText += text;
                     curAssistantBubble.setText(mdRenderer != null
@@ -1832,12 +1843,38 @@ public class ChatActivity extends Activity {
      */
     private void removeBubble(View v) {
         if (listContainer == null || v == null) return;
+        // v1.142.0（#57）：登记必须在两个 return 分支之前清掉，否则被包在容器里的
+        // 气泡（历史 / 流式回复都是）移除后仍留在 aiBubbles 里，会被当成「最后一条」
+        aiBubbles.remove(v);
         android.view.ViewParent p = v.getParent();
         if (p instanceof View && p != listContainer && p.getParent() == listContainer) {
             listContainer.removeView((View) p);
             return;
         }
         listContainer.removeView(v);
+    }
+
+    /**
+     * v1.142.0（#57）：登记一条 assistant 气泡。
+     *
+     * <p>历史恢复、非流式回复、两处流式回复（普通 / 护理）都要登记，漏掉任意一处，
+     * 那条回复就会被误判成「不是最后一条」而删不掉——所以收口成一个方法。</p>
+     */
+    private void trackAssistant(TextView bubble) {
+        if (bubble == null) return;
+        aiBubbles.remove(bubble);   // 防重复登记
+        aiBubbles.add(bubble);
+    }
+
+    /**
+     * v1.142.0（#57）：所点气泡是不是当前最后一条 assistant 气泡。
+     *
+     * <p>只认最后一条：数据库侧删的是最后一条 assistant 消息，对中间某条下手会让
+     * 界面和数据库各改一条，重开会话后界面上删掉的那条还在、库里最后一条却没了。</p>
+     */
+    private boolean isLastAssistantBubble(TextView bubble) {
+        if (bubble == null || aiBubbles.isEmpty()) return false;
+        return aiBubbles.get(aiBubbles.size() - 1) == bubble;
     }
 
     /**
@@ -1919,6 +1956,7 @@ public class ChatActivity extends Activity {
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
         // v1.130.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
         listContainer.addView(wrapBubble(b, ts, false));
+        trackAssistant(b);
         // v1.28.0：长消息折叠（历史消息/非流式回复同样生效）
         applyCollapse(b);
         b.setOnLongClickListener(v -> {
@@ -2213,6 +2251,12 @@ public class ChatActivity extends Activity {
             Toast.makeText(this, "她还在回复中，稍等一下哦…", Toast.LENGTH_SHORT).show();
             return;
         }
+        // v1.142.0（#57）：只对最后一条生效。此前不校验，点中间某条会删掉库里的
+        // 最后一条、移除界面上所点的那条，两条消息一起错位。
+        if (!isLastAssistantBubble(bubble)) {
+            Toast.makeText(this, "只能重新生成最后一条回复", Toast.LENGTH_SHORT).show();
+            return;
+        }
         ChatStore.StoredMsg removed = chatStore.deleteLastAssistantMessage(sessionKey);
         if (removed == null) {
             Toast.makeText(this, "只能重新生成最后一条回复", Toast.LENGTH_SHORT).show();
@@ -2242,6 +2286,13 @@ public class ChatActivity extends Activity {
 
     /** v1.29.0：删除单条气泡（同时从数据库移除） */
     private void deleteBubble(TextView bubble) {
+        // v1.142.0（#57）：数据库侧只有「删最后一条 assistant」的接口，中间某条
+        // 删了界面却删不掉库——重开会话被删的那条又回来了，原本最后一条反没了。
+        // 不是最后一条就明确提示，宁可不支持，也不制造界面与数据库不一致。
+        if (!isLastAssistantBubble(bubble)) {
+            Toast.makeText(this, "目前只能删除最后一条回复", Toast.LENGTH_SHORT).show();
+            return;
+        }
         new android.app.AlertDialog.Builder(this)
                 .setTitle("删除这条消息？")
                 .setMessage("删除后无法恢复。")
@@ -2583,6 +2634,10 @@ public class ChatActivity extends Activity {
                 .setPositiveButton("清空", (d, w) -> {
                     chatStore.clearSession(sessionKey);
                     listContainer.removeAllViews();
+                    // v1.142.0（#57）：登记一并清空，否则清空后残留的气泡会被当成「最后一条」
+                    aiBubbles.clear();
+                    // 行数归零，不然清空后 rows 一直小于旧值，未读计数再也不累加
+                    lastRowCount = 0;
                     // v1.34.0：清空会话后失效建议缓存，避免复用旧建议
                     cachedSuggestionKey = null;
                     cachedSuggestions = null;
