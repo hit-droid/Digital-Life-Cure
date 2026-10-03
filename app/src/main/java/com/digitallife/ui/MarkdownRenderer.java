@@ -173,7 +173,7 @@ public final class MarkdownRenderer {
         java.util.List<String[]> rows = new java.util.ArrayList<>();
         for (int r = from; r < to; r++) {
             if (isSeparatorRow(lines[r])) continue;   // 分隔行不展示，靠对齐自然成表
-            // v1.124.0：先剥掉行内标记再算列宽，否则 ** 之类标记会白占宽度、把对齐撑歪
+            // v1.125.0：先剥掉行内标记再算列宽，否则 ** 之类标记会白占宽度、把对齐撑歪
             rows.add(stripInlineCells(splitRow(lines[r])));
         }
         if (rows.isEmpty()) return;
