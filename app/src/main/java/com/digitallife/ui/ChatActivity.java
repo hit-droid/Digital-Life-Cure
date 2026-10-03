@@ -687,8 +687,13 @@ public class ChatActivity extends Activity {
             } else if (llm != null) {
                 if (harness != null) harness.cancel();
                 llm.cancel();
-                // v1.111.0：连同正在运行的子智能体一起停
-                if (subAgentLlm != null) subAgentLlm.cancel();
+                // v1.111.0：连同正在运行的子智能体一起停（v1.117.0 可能并行多个）
+                synchronized (subAgentLlms) {
+                    for (LLMClient c : subAgentLlms) {
+                        if (c != null) c.cancel();
+                    }
+                    subAgentLlms.clear();
+                }
             }
         } catch (Exception ignored) {
         }
@@ -965,8 +970,10 @@ public class ChatActivity extends Activity {
     private final java.util.List<LLMClient.ChatMessage> chatLiveMsgs = new java.util.ArrayList<>();
     /** DeepSeek Harness：一切皆插件的对话循环 */
     private com.digitallife.harness.DeepSeekHarness harness;
-    /** v1.111.0：当前正在运行的子智能体客户端（用户点停止时一并取消） */
-    private LLMClient subAgentLlm;
+    /** v1.111.0：正在运行的子智能体客户端（用户点停止时一并取消）。
+     *  v1.117.0 支持并行子智能体后可能同时存在多个，故用列表跟踪。 */
+    private final java.util.List<LLMClient> subAgentLlms =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<LLMClient>());
     /** 子智能体协作过程的可视化（严格成对的「建气泡→回填」） */
     private final com.digitallife.harness.subagent.SubagentRunner.ProgressListener subAgentProgress =
             (agent, phase, detail) -> runOnUiThread(() -> {
@@ -977,6 +984,37 @@ public class ChatActivity extends Activity {
                     markLastToolResult(null, Boolean.TRUE, detail);
                 }
             });
+    /** v1.117.0 并行协作：每个子智能体一张独立卡片，按「agent + 任务」索引，
+     *  并发下（含同一 agent 接多个任务）互不串扰 */
+    private final java.util.Map<String, TextView> teamCards = new java.util.HashMap<>();
+    private final java.util.Map<String, String> teamTasks = new java.util.HashMap<>();
+    private final com.digitallife.harness.subagent.SubagentRunner.ProgressListener teamProgress =
+            new com.digitallife.harness.subagent.SubagentRunner.ProgressListener() {
+                @Override
+                public void onStep(String agent, String phase, String detail) {
+                    // 并行批次的工具级事件不单独出气泡，统一收敛到团队卡片
+                }
+
+                @Override
+                public void onTeamStep(String agent, String task, String phase, String detail) {
+                    runOnUiThread(() -> {
+                        String key = teamKey(agent, task);
+                        if ("start".equals(phase)) {
+                            appendTeamCard(key, agent, task);
+                        } else if ("team-ok".equals(phase)) {
+                            finishTeamCard(key, true, detail);
+                        } else if ("team-fail".equals(phase)) {
+                            finishTeamCard(key, false, detail);
+                        }
+                    });
+                }
+            };
+
+    /** 团队卡片索引：同一 agent 接多个任务时靠任务原文区分 */
+    private static String teamKey(String agent, String task) {
+        String a = (agent == null || agent.isEmpty()) ? "子智能体" : agent;
+        return a + "\u0000" + (task == null ? "" : task);
+    }
 
     /** 上下文字符预算（约 6k 字符 ≈ 2~3k token），超出则丢弃较早消息 */
     private static final int CTX_BUDGET_CHARS = 6000;
@@ -1072,12 +1110,15 @@ public class ChatActivity extends Activity {
         com.digitallife.tools.BuiltinTools.install(chatTools, getApplicationContext());
         com.digitallife.harness.subagent.SubagentRunner.installDelegateTool(
                 chatTools, this::newSubAgentLlm, subAgentProgress);
+        // v1.117.0：并行委派（一次多个互不依赖的子任务）
+        com.digitallife.harness.subagent.SubagentRunner.installParallelDelegateTool(
+                chatTools, this::newSubAgentLlm, teamProgress);
     }
 
     /** 子智能体专用模型客户端：与主对话同配置，但独立实例（互不干扰 tools/线程池） */
     private LLMClient newSubAgentLlm() {
         LLMClient c = newChatLlmClient();
-        subAgentLlm = c;
+        subAgentLlms.add(c);
         return c;
     }
 
@@ -1092,6 +1133,8 @@ public class ChatActivity extends Activity {
             });
             return;
         }
+        // 新一轮：上一轮的子智能体客户端已结束，清空跟踪列表
+        subAgentLlms.clear();
         ensureChatTools();
         if (harness == null) {
             harness = com.digitallife.harness.DeepSeekHarness.boot(getApplicationContext());
@@ -2249,6 +2292,56 @@ public class ChatActivity extends Activity {
             curToolBubble.setTag(!longResult);
         }
         curToolBubble = null;
+    }
+
+    /**
+     * v1.117.0 并行协作卡片：某子智能体开始工作时创建，按「agent + 任务」索引。
+     * 同一 agent 并发接多个任务时各有各的卡片，不会互相覆盖。
+     */
+    private void appendTeamCard(String key, String agent, String task) {
+        hideThinkingDot();
+        String name = (agent == null || agent.isEmpty()) ? "子智能体" : agent;
+        TextView b = new TextView(this);
+        b.setTextSize(13f);
+        b.setTextColor(getColorCompat(R.color.operit_text_primary));
+        b.setLineSpacing(2f, 1f);
+        b.setPadding(dp(12), dp(8), dp(12), dp(8));
+        b.setElevation(dp(1));
+        b.setBackgroundResource(R.drawable.bg_tool);
+        b.setText(teamCardText(name, task, "协作中 🔄", null, true));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(4);
+        lp.leftMargin = dp(8);
+        lp.rightMargin = dp(24);
+        listContainer.addView(b, lp);
+        teamCards.put(key, b);
+        teamTasks.put(key, task == null ? "" : task);
+        scrollToBottom();
+    }
+
+    /** v1.117.0 并行协作卡片：某子智能体结束时回填结论或失败原因 */
+    private void finishTeamCard(String key, boolean ok, String detail) {
+        TextView b = teamCards.get(key);
+        if (b == null) return;
+        int sep = key.indexOf('\u0000');
+        String name = sep > 0 ? key.substring(0, sep) : "子智能体";
+        String task = teamTasks.get(key);
+        b.setText(teamCardText(name, task, ok ? "✅ 完成" : "❌ 失败", detail, ok));
+        teamCards.remove(key);
+        teamTasks.remove(key);
+        scrollToBottom();
+    }
+
+    private CharSequence teamCardText(String agent, String task, String status,
+                                      String detail, boolean ok) {
+        StringBuilder sb = new StringBuilder("🤝 协作子智能体：").append(agent)
+                .append("\n\n📋 任务：").append(task == null || task.isEmpty() ? "（无）" : task)
+                .append("\n\n状态：").append(status);
+        if (detail != null && !detail.isEmpty()) {
+            sb.append("\n\n").append(ok ? "📋 结论：" : "原因：").append(detail);
+        }
+        return sb.toString();
     }
 
     /** 工具卡片点击：在完整内容与摘要之间切换（默认完全展开） */
