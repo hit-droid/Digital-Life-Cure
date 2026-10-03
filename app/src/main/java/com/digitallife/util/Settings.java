@@ -50,6 +50,14 @@ public class Settings {
     public boolean isEdgeDockEnabled() { return sp.getBoolean("edge_dock", true); }
     public void setEdgeDockEnabled(boolean v) { sp.edit().putBoolean("edge_dock", v).apply(); }
 
+    /** 开机是否自动拉起桌宠（v1.133.0，默认开；还需 pet_enabled 与悬浮窗权限同时满足） */
+    public boolean isAutoStartEnabled() { return sp.getBoolean("auto_start", true); }
+    public void setAutoStartEnabled(boolean v) { sp.edit().putBoolean("auto_start", v).apply(); }
+
+    /** 用户意图：桌宠是否应在运行（开机自启只看它，不看进程是否还活着；v1.133.0） */
+    public boolean isPetEnabled() { return sp.getBoolean("pet_enabled", false); }
+    public void setPetEnabled(boolean v) { sp.edit().putBoolean("pet_enabled", v).apply(); }
+
     public float getOverlayX() { return sp.getFloat("overlay_x", -1f); }
     public float getOverlayY() { return sp.getFloat("overlay_y", -1f); }
     public void setOverlayPos(float x, float y) { sp.edit().putFloat("overlay_x", x).putFloat("overlay_y", y).apply(); }
