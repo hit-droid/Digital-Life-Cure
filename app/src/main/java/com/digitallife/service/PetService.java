@@ -156,6 +156,7 @@ public class PetService extends Service implements AICore.Output,
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && (ACTION_STOP.equals(intent.getAction()) || ACTION_STOP_OVERLAY.equals(intent.getAction()))) {
+            if (settings != null) settings.setPetEnabled(false); // v1.133.0：用户意图置为「不运行」，开机不再自启
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -165,6 +166,7 @@ public class PetService extends Service implements AICore.Output,
             return START_STICKY;
         }
         ensureRunning();
+        if (settings != null) settings.setPetEnabled(true); // v1.133.0：唯一事实来源，供开机自启判断
         return START_STICKY;
     }
 
