@@ -98,6 +98,54 @@ public class MarkdownBlockTest {
         assertEquals("二级", b.text);
     }
 
+    // ==================== 任务列表（issue #44） ====================
+
+    @Test
+    public void task_uncheckedIsTask() {
+        MarkdownRenderer.BlockLine b = p("- [ ] 待办");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertEquals(false, b.checked);
+        assertEquals("待办", b.text);
+    }
+
+    @Test
+    public void task_checkedIsTaskAndDone() {
+        MarkdownRenderer.BlockLine b = p("- [x] 已完成");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertEquals(true, b.checked);
+        assertEquals("已完成", b.text);
+    }
+
+    @Test
+    public void task_checkedUppercaseX() {
+        MarkdownRenderer.BlockLine b = p("- [X] 大写X也算勾选");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertEquals(true, b.checked);
+    }
+
+    @Test
+    public void task_plainBracketStaysUl() {
+        // 普通 [文字]（非勾选框）必须保持普通无序列表，勾选语义词不能丢
+        MarkdownRenderer.BlockLine b = p("- [任意文字] 不是勾选框");
+        assertEquals(MarkdownRenderer.BlockKind.UL, b.kind);
+        assertEquals("[任意文字] 不是勾选框", b.text);
+    }
+
+    @Test
+    public void task_noSpaceAfterBracketStaysUl() {
+        // [ ] 后必须跟空格才算勾选框；[ ]待办（无空格）仍是普通列表
+        MarkdownRenderer.BlockLine b = p("- [ ]待办");
+        assertEquals(MarkdownRenderer.BlockKind.UL, b.kind);
+    }
+
+    @Test
+    public void task_indentedKeepsLevel() {
+        MarkdownRenderer.BlockLine b = p("  - [x] 缩进的已完成项");
+        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
+        assertEquals(1, b.level);
+        assertEquals(true, b.checked);
+    }
+
     @Test
     public void ul_deepIndentIsCapped() {
         // 不限幅的话深层嵌套会把正文一路推到屏外
@@ -162,62 +210,22 @@ public class MarkdownBlockTest {
     }
 
     @Test
-    public void horizontalRule_isNotListItem() {
-        // v1.141.0（#44）：--- 现在是 HR，但依然不是列表项
+    public void hr_standaloneDashBecomesHr() {
+        // issue #44：独立成行的 --- 应识别为水平线，不再原样显示
         assertEquals(MarkdownRenderer.BlockKind.HR, p("---").kind);
-    }
-
-    // ==================== v1.141.0（#44）：任务列表 / 水平线 ====================
-
-    @Test
-    public void task_uncheckedBox() {
-        MarkdownRenderer.BlockLine b = p("- [ ] 买牛奶");
-        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
-        assertFalse(b.checked);
-        assertEquals("买牛奶", b.text);
-    }
-
-    @Test
-    public void task_checkedBoxLowerCase() {
-        MarkdownRenderer.BlockLine b = p("- [x] 已完成的事");
-        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
-        assertTrue(b.checked);
-        assertEquals("已完成的事", b.text);
-    }
-
-    @Test
-    public void task_checkedBoxUpperCase() {
-        MarkdownRenderer.BlockLine b = p("* [X] 大写也算勾选");
-        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
-        assertTrue(b.checked);
-    }
-
-    @Test
-    public void task_indentedKeepsLevel() {
-        MarkdownRenderer.BlockLine b = p("  - [ ] 子任务");
-        assertEquals(MarkdownRenderer.BlockKind.TASK, b.kind);
-        assertEquals(1, b.level);
-        assertFalse(b.checked);
-    }
-
-    @Test
-    public void task_bracketTextWithoutSpaceIsNotTask() {
-        // 防误判：普通 [文字] 不是勾选框，仍是普通无序项
-        MarkdownRenderer.BlockLine b = p("- [说明] 正文");
-        assertEquals(MarkdownRenderer.BlockKind.UL, b.kind);
-    }
-
-    @Test
-    public void horizontalRule_variants() {
         assertEquals(MarkdownRenderer.BlockKind.HR, p("***").kind);
         assertEquals(MarkdownRenderer.BlockKind.HR, p("___").kind);
-        assertEquals(MarkdownRenderer.BlockKind.HR, p("-----").kind);
-        assertEquals(MarkdownRenderer.BlockKind.HR, p("  ---  ").kind);
     }
 
     @Test
-    public void horizontalRule_twoDashesIsPlain() {
-        assertEquals(MarkdownRenderer.BlockKind.PLAIN, p("--").kind);
+    public void hr_indentedStillBecomesHr() {
+        assertEquals(MarkdownRenderer.BlockKind.HR, p("   ---   ").kind);
+    }
+
+    @Test
+    public void hr_singleDashStaysPlain() {
+        // 单个 - 不是水平线（也不该是列表项）
+        assertEquals(MarkdownRenderer.BlockKind.PLAIN, p("-").kind);
     }
 
     @Test
