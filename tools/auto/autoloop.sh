@@ -132,7 +132,8 @@ process_task() {
 
   # 3) 提交功能改动
   local msg_file; msg_file=$(mktemp)
-  { echo "$title"; echo; echo "$body"; echo; echo "Co-authored-by: monkeycode-ai <monkeycode-ai@chaitin.com>"; } > "$msg_file"
+  # 不再追加 Co-authored-by（用户 2026-10-03 要求：不要猴码机器人署名）
+  { echo "$title"; echo; echo "$body"; } > "$msg_file"
   git add -A
   if git diff --cached --quiet; then
     log "  · 无实际改动，跳过"
@@ -152,9 +153,7 @@ process_task() {
   sed -i "s/versionName \".*\"/versionName \"$newv\"/" "$REPO_DIR/app/build.gradle"
   git add -A
   GIT_COMMITTER_NAME="hit-droid" GIT_COMMITTER_EMAIL="hit-droid@users.noreply.github.com" \
-    git commit -m "chore: bump version $cur → $newv
-
-Co-authored-by: monkeycode-ai <monkeycode-ai@chaitin.com>" >/dev/null 2>&1
+    git commit -m "chore: bump version $cur → $newv" >/dev/null 2>&1
   log "  ✓ 版本 $cur → $newv (code $newc)"
 
   # 5) 推送

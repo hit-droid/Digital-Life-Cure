@@ -146,8 +146,8 @@ def main():
     with open(os.path.join(QUEUE, base + '.patch'), 'w') as fh:
         fh.write(diff)
     with open(os.path.join(QUEUE, base + '.meta'), 'w') as fh:
-        fh.write('feat(a11y): %s（自动）\n\n%s\n- 文件：%s（变量 %s）\n\n'
-                 'Co-authored-by: monkeycode-ai <monkeycode-ai@chaitin.com>\n'
+        # 不再追加 Co-authored-by（用户 2026-10-03 要求：不要猴码机器人署名）
+        fh.write('feat(a11y): %s（自动）\n\n%s\n- 文件：%s（变量 %s）\n'
                  % (GEN_TITLE.get(gen, gen), GEN_BODY.get(gen, ''), rel, var))
     with open(PROCESSED, 'a') as fh:
         fh.write(key + '\n')

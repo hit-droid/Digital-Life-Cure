@@ -111,12 +111,10 @@ def finish(name, title, body):
     meta = os.path.join(QUEUE, name + '.meta')
     open(patch, 'w').write(diff + "\n")
 
-    coauthor = "Co-authored-by: monkeycode-ai <monkeycode-ai@chaitin.com>"
+    # 不再追加 Co-authored-by（用户 2026-10-03 要求：不要猴码机器人署名）
     text = title + "\n"
     if body:
         text += "\n" + body + "\n"
-    if coauthor not in text:
-        text += "\n" + coauthor + "\n"
     open(meta, 'w').write(text)
 
     # 还原隔离区
