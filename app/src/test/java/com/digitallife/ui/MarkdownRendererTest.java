@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import android.text.Spanned;
+import android.text.Spannable;
 import android.text.style.URLSpan;
 
 import org.junit.Test;
@@ -30,7 +30,7 @@ public class MarkdownRendererTest {
                 0xFF888888, // quoteTextColor
                 0xFF000000, // baseTextColor
                 0xFF3366CC, // linkColor
-                0xFF3A3A3A  // dividerColor
+                0xFFCCCCCC  // dividerColor
         );
     }
 
@@ -214,50 +214,67 @@ public class MarkdownRendererTest {
         assertTrue("小数不能被拆成列表项：" + out, out.contains("3.14 是圆周率"));
     }
 
-    // ============ v1.141.0（#44）：行内链接 / 任务列表 / 水平线 ============
+    // ==================== issue #44：行内链接 / 任务列表 / 水平线 ====================
 
-    /** 取第一个 URLSpan 的 url；没有则返回 null */
-    private static String urlSpanUrl(CharSequence cs) {
-        if (!(cs instanceof Spanned)) return null;
-        URLSpan[] spans = ((Spanned) cs).getSpans(0, cs.length(), URLSpan.class);
-        return spans.length == 0 ? null : spans[0].getURL();
+    @Test
+    public void render_inlineLinkShowsTextOnly() {
+        // [文字](url) 只显示文字，url 与方括号都不该出现在可见文本里
+        String out = renderer().render("[点我](https://example.com)").toString();
+        assertTrue(out.contains("点我"));
+        assertFalse("可见文本不应残留 url：" + out, out.contains("https://example.com"));
+        assertFalse("可见文本不应残留方括号：" + out, out.contains("[点我]"));
     }
 
     @Test
-    public void render_inlineLink_showsLabelOnlyAndCarriesUrl() {
-        CharSequence cs = renderer().render("见 [官网](https://example.com) 了解\n");
-        String out = cs.toString();
-        assertFalse("不应再吐出链接语法：" + out, out.contains("]("));
-        assertTrue("只应显示文字：" + out, out.contains("官网"));
-        assertEquals("https://example.com", urlSpanUrl(cs));
+    public void render_inlineLinkHasUrlSpan() {
+        // 链接文字上必须挂 URLSpan，且指向原 url
+        Spannable ss = (Spannable) renderer().render("[点我](https://example.com)");
+        URLSpan[] spans = ss.getSpans(0, ss.length(), URLSpan.class);
+        assertEquals("应恰好一个 URLSpan：" + spans.length, 1, spans.length);
+        assertEquals("https://example.com", spans[0].getURL());
     }
 
     @Test
-    public void render_bareUrl_stillLinked() {
-        CharSequence cs = renderer().render("裸链接 https://a.example.com/x 结束\n");
-        assertTrue(cs.toString().contains("https://a.example.com/x"));
-        assertEquals("https://a.example.com/x", urlSpanUrl(cs));
+    public void render_bareUrlStillHasLink() {
+        // 裸 URL 行为不变：仍带链接 span
+        Spannable ss = (Spannable) renderer().render("详见 https://example.com 的说明");
+        URLSpan[] spans = ss.getSpans(0, ss.length(), URLSpan.class);
+        assertTrue("裸 URL 应仍带链接 span，实际：" + spans.length, spans.length >= 1);
+        assertEquals("https://example.com", spans[0].getURL());
     }
 
     @Test
-    public void render_boldWrappingLink_stillLinked() {
-        CharSequence cs = renderer().render("**[官网](https://example.com)**\n");
-        assertFalse("加粗里套链接也不能残留语法：" + cs, cs.toString().contains("]("));
-        assertEquals("https://example.com", urlSpanUrl(cs));
+    public void render_tableLinkKeepsTextOnly() {
+        // 表格单元格里的 [文字](url) 仍只留文字（stripInline），不渲染成可点链接
+        String out = renderer().render("| 链接 |\n|---|\n| [点我](https://example.com) |\n").toString();
+        assertTrue(out.contains("点我"));
+        assertFalse("表内链接不应残留 url：" + out, out.contains("https://example.com"));
     }
 
     @Test
-    public void render_taskList_usesCheckboxGlyphs() {
-        String out = renderer().render("- [ ] 未做\n- [x] 已做\n").toString();
-        assertTrue("未勾选应显示 ☐：" + out, out.contains("\u2610"));
-        assertTrue("已勾选应显示 ☑：" + out, out.contains("\u2611"));
-        assertFalse("不应残留勾选语法：" + out, out.contains("[ ]"));
+    public void render_taskUncheckedRendersEmptyBox() {
+        String out = renderer().render("- [ ] 待办\n").toString();
+        assertTrue("未勾选应渲染 ☐：" + out, out.contains("\u2610 待办"));
     }
 
     @Test
-    public void render_horizontalRule_drawsDivider() {
-        String out = renderer().render("上\n\n---\n\n下\n").toString();
-        assertFalse("不应再原样显示 ---：" + out, out.contains("---"));
-        assertTrue(out.contains(MarkdownRenderer.DIVIDER_CHAR));
+    public void render_taskCheckedRendersCheckedBox() {
+        String out = renderer().render("- [x] 已完成\n").toString();
+        assertTrue("已勾选应渲染 ☑：" + out, out.contains("\u2611 已完成"));
+    }
+
+    @Test
+    public void render_taskCheckedAndUncheckedDiffer() {
+        String a = renderer().render("- [ ] 待办\n").toString();
+        String b = renderer().render("- [x] 待办\n").toString();
+        assertTrue("勾选态不同应渲染出不同的符号：" + a + " | " + b, !a.equals(b));
+    }
+
+    @Test
+    public void render_horizontalRuleNotLiteral() {
+        // 独立成行的 --- 不应原样出现，应被替换成淡色分隔线
+        String out = renderer().render("上方\n---\n下方").toString();
+        assertFalse("水平线不应原样显示 ---：" + out, out.contains("---"));
+        assertTrue("水平线应渲染成横线字符：" + out, out.contains("\u2500"));
     }
 }

@@ -38,25 +38,16 @@ public final class MarkdownRenderer {
     private static final Pattern OL_ITEM = Pattern.compile("^(\\s*)(\\d+)(?:\\.\\s+|、\\s*)(.+)$");
     private static final Pattern BLOCKQUOTE = Pattern.compile("^(\\s*)>\\s?(.+)$");
     private static final Pattern URL = Pattern.compile("https?://[^\\s)\\]<>]+");
-    /**
-     * v1.141.0（#44）：行内链接 {@code [文字](url)}。
-     * 正文渲染与 {@link #stripInline} 共用这一份正则，避免两处各写一套走样。
-     * label 要求非空；url 里不许出现空白，避免把后续正文一起吞进链接。
-     */
-    static final Pattern LINK = Pattern.compile("\\[([^\\]]+)\\]\\(([^)\\s]+)\\)");
-    /**
-     * v1.141.0（#44）：勾选框 {@code [ ]} / {@code [x]} / {@code [X]}。
-     * 必须**后接空格**（或有内容前至少一个空格），否则 {@code [文字]} 会被误判成任务列表。
-     */
-    private static final Pattern TASK_ITEM = Pattern.compile("^\\[([ xX])\\](?:\\s+(.*))?$");
-    /**
-     * v1.141.0（#44）：水平线，独立成行的 3 个及以上 {@code -} / {@code *} / {@code _}。
-     * 表格分隔行要求含 {@code |}，与此不冲突。
-     */
+    /** 行内链接：[文字](url)。正文渲染与表格 stripInline 共用同一份，避免两套正则漂移 */
+    private static final Pattern INLINE_LINK = Pattern.compile("\\[([^\\]]*)\\]\\(([^)]*)\\)");
+    /** 任务列表项：- [ ] / - [x] / - [X]（后必须跟空格，否则不是勾选框） */
+    private static final Pattern TASK_ITEM = Pattern.compile("^\\[([ xX])\\]\\s+(.+)$");
+    /** 水平线：--- / *** / ___（同一字符连续 3+，整行仅此） */
     private static final Pattern HR = Pattern.compile("^\\s*([-*_])\\1{2,}\\s*$");
-
-    /** v1.141.0（#44）：水平线渲染串（制表符，等宽下连成一条淡色分隔线） */
-    static final String DIVIDER_CHAR = "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
+    /** 水平线渲染用的淡色横线（box-drawing，固定长度，足够铺满一般气泡） */
+    private static final String HR_LINE =
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+            + "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500";
 
     private final int codeBgColor;
     private final int codeTextColor;
@@ -333,8 +324,8 @@ public final class MarkdownRenderer {
     static String stripInline(String s) {
         if (s == null) return "";
         String t = s.trim();
-        // [文字](链接) -> 文字（与正文渲染共用 LINK，避免两处正则走样）
-        t = LINK.matcher(t).replaceAll("$1");
+        // [文字](链接) -> 文字（与正文渲染共用 INLINE_LINK 同一份正则）
+        t = INLINE_LINK.matcher(t).replaceAll("$1");
         // `代码` -> 代码
         t = t.replaceAll("`([^`]*)`", "$1");
         // **加粗** -> 加粗（必须在单星号之前处理，否则会被当成斜体拆开）
@@ -431,15 +422,10 @@ public final class MarkdownRenderer {
         final String text;
         /** 有序列表的原始序号（如 "3"），其余为 null */
         final String marker;
-        /** v1.141.0（#44）：TASK 的勾选态；其余类型恒为 false */
+        /** 仅 TASK 有意义：是否已完成（[x]/[X] 为 true） */
         final boolean checked;
 
-        BlockLine(BlockKind kind, int level, String indent, String text, String marker) {
-            this(kind, level, indent, text, marker, false);
-        }
-
-        BlockLine(BlockKind kind, int level, String indent, String text, String marker,
-                  boolean checked) {
+        BlockLine(BlockKind kind, int level, String indent, String text, String marker, boolean checked) {
             this.kind = kind;
             this.level = level;
             this.indent = indent;
@@ -456,41 +442,38 @@ public final class MarkdownRenderer {
      * 和「# 后无空格」这两种原先漏掉的写法。</p>
      */
     static BlockLine parseBlockLine(String line) {
-        if (line == null) return new BlockLine(BlockKind.PLAIN, 0, "", "", null);
+        if (line == null) return new BlockLine(BlockKind.PLAIN, 0, "", "", null, false);
 
         Matcher h = HEADING.matcher(line);
         if (h.matches()) {
-            return new BlockLine(BlockKind.HEADING, h.group(2).length(), "", h.group(3), null);
+            return new BlockLine(BlockKind.HEADING, h.group(2).length(), "", h.group(3), null, false);
         }
         Matcher bq = BLOCKQUOTE.matcher(line);
         if (bq.matches()) {
             int lv = indentLevel(bq.group(1));
-            return new BlockLine(BlockKind.QUOTE, lv, indentOf(lv), bq.group(2), null);
-        }
-        // 水平线要在 UL 之前判：`---` 不含空格，本就不会命中 UL，
-        // 但 `***` / `___` 之类先挡掉更省心。
-        if (HR.matcher(line).matches()) {
-            return new BlockLine(BlockKind.HR, 0, "", "", null);
+            return new BlockLine(BlockKind.QUOTE, lv, indentOf(lv), bq.group(2), null, false);
         }
         Matcher ul = UL_ITEM.matcher(line);
         if (ul.matches()) {
             int lv = indentLevel(ul.group(1));
-            // v1.141.0（#44）：`- [ ] 待办` / `- [x] 已完成` → TASK，
-            // 只有 `[ ]`/`[x]` 且后接空格才算勾选框，普通 `[文字]` 仍是 UL 正文。
-            Matcher task = TASK_ITEM.matcher(ul.group(2));
-            if (task.matches()) {
-                boolean checked = task.group(1).charAt(0) != ' ';
-                String body = task.group(2) == null ? "" : task.group(2);
-                return new BlockLine(BlockKind.TASK, lv, indentOf(lv), body, null, checked);
+            String body = ul.group(2);
+            Matcher tk = TASK_ITEM.matcher(body);
+            if (tk.matches()) {
+                boolean done = !" ".equals(tk.group(1));
+                return new BlockLine(BlockKind.TASK, lv, indentOf(lv), tk.group(2), null, done);
             }
-            return new BlockLine(BlockKind.UL, lv, indentOf(lv), ul.group(2), null);
+            return new BlockLine(BlockKind.UL, lv, indentOf(lv), body, null, false);
         }
         Matcher ol = OL_ITEM.matcher(line);
         if (ol.matches()) {
             int lv = indentLevel(ol.group(1));
-            return new BlockLine(BlockKind.OL, lv, indentOf(lv), ol.group(3), ol.group(2));
+            return new BlockLine(BlockKind.OL, lv, indentOf(lv), ol.group(3), ol.group(2), false);
         }
-        return new BlockLine(BlockKind.PLAIN, 0, "", line, null);
+        Matcher hr = HR.matcher(line);
+        if (hr.matches()) {
+            return new BlockLine(BlockKind.HR, 0, "", "", null, false);
+        }
+        return new BlockLine(BlockKind.PLAIN, 0, "", line, null, false);
     }
 
     /** 前导空白换算层级：每 2 个空格（或 1 个 tab）算一级，上限 {@link #MAX_LIST_LEVEL} */
@@ -538,25 +521,32 @@ public final class MarkdownRenderer {
             case UL:
                 appendStyledText(out, b.indent + "\u2022 " + b.text);
                 return;
-            case TASK:
-                // v1.141.0（#44）：勾选框语义词不能丢，用 ☐ / ☑ 体现勾选态
-                appendStyledText(out, b.indent + (b.checked ? "\u2611 " : "\u2610 ") + b.text);
-                return;
             case OL:
                 appendStyledText(out, b.indent + b.marker + ". " + b.text);
                 return;
-            case HR: {
-                // v1.141.0（#44）：独立成行的 --- 渲染成一条淡色分隔线
-                int start = out.length();
-                out.append(DIVIDER_CHAR);
-                int end = out.length();
-                out.setSpan(new ForegroundColorSpan(dividerColor), start, end,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            case TASK:
+                // [ ] -> ☐（未勾选），[x]/[X] -> ☑（已勾选）；勾选态语义词不再丢失
+                appendStyledText(out, b.indent + (b.checked ? "\u2611 " : "\u2610 ") + b.text);
                 return;
-            }
+            case HR:
+                appendHr(out);
+                return;
             default:
                 appendStyledText(out, b.text);
         }
+    }
+
+    /** 水平线：一行淡色 box-drawing 横线，作为轻量分隔 */
+    private void appendHr(SpannableStringBuilder out) {
+        if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
+            out.append('\n');
+        }
+        int start = out.length();
+        out.append(HR_LINE);
+        int end = out.length();
+        out.setSpan(new ForegroundColorSpan(dividerColor), start, end,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.append('\n');
     }
 
     private void appendStyledText(SpannableStringBuilder out, String text) {
@@ -566,9 +556,7 @@ public final class MarkdownRenderer {
         while (bm.find()) {
             appendPlain(out, text.substring(pos, bm.start()));
             int s = out.length();
-            // v1.141.0（#44）：加粗内容也走 appendPlain，否则 **[文字](url)** 里的
-            // 链接语法会被原样拼进来（这里原先直接 out.append(group(1))）。
-            appendPlain(out, bm.group(1));
+            out.append(bm.group(1));
             out.setSpan(new StyleSpan(Typeface.BOLD), s, out.length(),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             pos = bm.end();
@@ -579,7 +567,9 @@ public final class MarkdownRenderer {
 
     /** 对已经拼入的片段再做行内代码与斜体处理（避免外层嵌套顺序问题） */
     private void styleInner(SpannableStringBuilder out, int from, int to) {
-        CharSequence seg = out.subSequence(from, to);
+        // 行内链接会改变文本长度，必须先处理，再对处理后的片段做其余行内样式
+        applyInlineLinks(out, from);
+        CharSequence seg = out.subSequence(from, out.length());
         String s = seg.toString();
         Matcher ic = INLINE_CODE.matcher(s);
         while (ic.find()) {
@@ -611,29 +601,33 @@ public final class MarkdownRenderer {
     }
 
     /**
-     * v1.141.0（#44）：拼入纯文本，同时把 {@code [文字](url)} 渲染成「只显示文字」的可点链接。
-     *
-     * <p>在这里做而不是 {@link #styleInner}：链接语法本身要**从显示文本里去掉**
-     * （只留文字），属于「改文本」而不是「加 Span」，塞进 styleInner 会打乱已有 offset。
-     * 放在最内层拼入处，加粗里套链接（{@code **[文字](url)**}）也一并覆盖。</p>
+     * 行内链接：[文字](url) → 只保留文字并挂 URLSpan + linkColor。
+     * 多个链接时从右往左替换，避免左侧偏移错位。
      */
+    private void applyInlineLinks(SpannableStringBuilder out, int from) {
+        String s = out.subSequence(from, out.length()).toString();
+        Matcher il = INLINE_LINK.matcher(s);
+        java.util.List<int[]> spans = new java.util.ArrayList<>();
+        java.util.List<String[]> parts = new java.util.ArrayList<>();
+        while (il.find()) {
+            spans.add(new int[]{il.start(), il.end()});
+            parts.add(new String[]{il.group(1), il.group(2)});
+        }
+        for (int k = spans.size() - 1; k >= 0; k--) {
+            int ms = from + spans.get(k)[0];
+            int me = from + spans.get(k)[1];
+            String txt = parts.get(k)[0];
+            String url = parts.get(k)[1];
+            out.replace(ms, me, txt);
+            int ne = ms + txt.length();
+            out.setSpan(new URLSpan(url), ms, ne, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            out.setSpan(new ForegroundColorSpan(linkColor), ms, ne,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+    }
+
     private void appendPlain(SpannableStringBuilder out, String s) {
         if (s == null || s.isEmpty()) return;
-        int pos = 0;
-        Matcher m = LINK.matcher(s);
-        while (m.find()) {
-            out.append(s, pos, m.start());
-            int start = out.length();
-            String label = m.group(1);
-            out.append(label);
-            int end = out.length();
-            if (end > start) {
-                out.setSpan(new URLSpan(m.group(2)), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                out.setSpan(new ForegroundColorSpan(linkColor), start, end,
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-            pos = m.end();
-        }
-        out.append(s, pos, s.length());
+        out.append(s);
     }
 }
