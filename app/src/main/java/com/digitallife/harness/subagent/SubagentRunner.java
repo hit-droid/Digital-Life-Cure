@@ -6,6 +6,7 @@ import com.digitallife.harness.DeepSeekHarness;
 import com.digitallife.harness.LlmFactory;
 import com.digitallife.harness.SessionEvent;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -27,10 +28,27 @@ public final class SubagentRunner {
     public interface ProgressListener {
         /**
          * @param agent  子智能体名
-         * @param phase  "start" 开始 / "tool" 调用工具 / "result" 工具结果 / "done" 结束
+         * @param phase  事件类型：
+         *               <ul>
+         *                 <li>"start" 子任务开始（detail 为任务原文）</li>
+         *                 <li>"tool" 调用工具（detail 为「工具名 参数摘要」）</li>
+         *                 <li>"result" 工具结果（detail 为「工具名 → 结果摘要」）</li>
+         *                 <li>"done" 子任务结束（detail 为结论预览或中断原因）</li>
+         *                 <li>"team-ok" 并行批次内某子任务成功（detail 为完整结论）</li>
+         *                 <li>"team-fail" 并行批次内某子任务失败（detail 为错误原因）</li>
+         *               </ul>
          * @param detail 具体说明
          */
         void onStep(String agent, String phase, String detail);
+
+        /**
+         * 带任务原文的进度事件：并行委派时同一个子智能体可能同时接多个任务，
+         * 仅凭 agent 名无法区分是哪一条，故把自己也一并透出，供 UI 精确配对卡片。
+         * 默认退回三参数版本，顺序委派与测试无需感知。
+         */
+        default void onTeamStep(String agent, String task, String phase, String detail) {
+            onStep(agent, phase, detail);
+        }
     }
 
     public static final class Result {
@@ -54,6 +72,16 @@ public final class SubagentRunner {
 
     public static Result run(String presetName, String task, Tools host,
                              LlmFactory factory, ProgressListener progress) {
+        return run(presetName, task, host, factory, progress, TIMEOUT_SEC);
+    }
+
+    /**
+     * @param timeoutSec 子智能体超时秒数（&le;0 时用默认值）；并行编排需要按批控制，
+     *                   因此把超时从常量改为可注入。
+     */
+    public static Result run(String presetName, String task, Tools host,
+                             LlmFactory factory, ProgressListener progress, int timeoutSec) {
+        final int timeout = timeoutSec > 0 ? timeoutSec : TIMEOUT_SEC;
         SubagentPreset preset = SubagentPresets.get(presetName);
         if (preset == null) {
             return new Result(null, "未知子智能体：" + presetName
@@ -79,7 +107,7 @@ public final class SubagentRunner {
         List<com.digitallife.brain.LLMClient.ChatMessage> seed = new ArrayList<>();
         seed.add(new com.digitallife.brain.LLMClient.ChatMessage("user", task));
 
-        if (progress != null) progress.onStep(preset.name, "start", task);
+        if (progress != null) progress.onTeamStep(preset.name, task, "start", task);
 
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] text = new String[1];
@@ -125,11 +153,11 @@ public final class SubagentRunner {
                 }, preset.maxSteps);
 
         try {
-            if (!latch.await(TIMEOUT_SEC, TimeUnit.SECONDS)) {
+            if (!latch.await(timeout, TimeUnit.SECONDS)) {
                 sub.cancel();
                 if (progress != null) progress.onStep(preset.name, "done", "超时中断");
                 return new Result(null, "子智能体 " + preset.name + " 执行超时（"
-                        + TIMEOUT_SEC + "s）");
+                        + timeout + "s）");
             }
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -215,5 +243,59 @@ public final class SubagentRunner {
                     if (!r.ok()) throw new RuntimeException(r.error);
                     return r.text;
                 });
+    }
+
+    /**
+     * 注册 delegate_parallel：一次并行委派多个互不依赖的子任务（fan-out），
+     * 全部结束后汇总各自结论（fan-in）。
+     */
+    public static void installParallelDelegateTool(Tools host, LlmFactory factory,
+                                                   ProgressListener progress) {
+        if (host == null) return;
+        host.register("delegate_parallel",
+                "当有多个互相独立的子任务时，一次性把它们并行交给多个子智能体同时去做，最后汇总结论。"
+                        + "适合「同时查几件不相干的事」这类可并行的任务；"
+                        + "有先后依赖的任务不要用本工具，改用 delegate_task 逐个来。"
+                        + "参数 tasks 是子任务数组，一次最多 " + SubagentTeam.MAX_TASKS + " 个。可选子智能体："
+                        + SubagentPresets.describeAll(),
+                new String[]{"tasks"},
+                args -> {
+                    List<SubagentTeam.Task> tasks = parseTasks(args);
+                    if (tasks.isEmpty()) {
+                        throw new RuntimeException(
+                                "tasks 为空：请给出至少一个 {\"agent\":\"...\",\"task\":\"...\"} 子任务");
+                    }
+                    if (tasks.size() > SubagentTeam.MAX_TASKS) {
+                        throw new RuntimeException("一次最多并行 " + SubagentTeam.MAX_TASKS
+                                + " 个子任务，请分批调用");
+                    }
+                    return SubagentTeam.run(tasks, host, factory, progress).render();
+                });
+    }
+
+    /** 解析 delegate_parallel 的 tasks 参数；兼容模型把数组序列化成字符串的情况 */
+    private static List<SubagentTeam.Task> parseTasks(JSONObject args) {
+        List<SubagentTeam.Task> out = new ArrayList<>();
+        if (args == null) return out;
+        JSONArray arr = args.optJSONArray("tasks");
+        if (arr == null) {
+            String raw = args.optString("tasks", "").trim();
+            if (raw.startsWith("[")) {
+                try {
+                    arr = new JSONArray(raw);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String agent = o.optString("agent", "").trim();
+            String task = o.optString("task", "").trim();
+            if (agent.isEmpty() && task.isEmpty()) continue;
+            out.add(new SubagentTeam.Task(agent, task));
+        }
+        return out;
     }
 }

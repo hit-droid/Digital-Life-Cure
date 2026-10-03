@@ -115,6 +115,25 @@ public class Tools {
                     case "y":
                         prop.put("type", "number");
                         break;
+                    case "tasks":
+                        // 并行委派：数组，元素为 {agent, task}
+                        prop.put("type", "array");
+                        JSONObject taskItem = new JSONObject();
+                        taskItem.put("type", "object");
+                        JSONObject taskProps = new JSONObject();
+                        JSONObject pAgent = new JSONObject();
+                        pAgent.put("type", "string");
+                        pAgent.put("description", "子智能体名，如 researcher / secretary");
+                        JSONObject pTask = new JSONObject();
+                        pTask.put("type", "string");
+                        pTask.put("description", "交给它的完整子任务，需自包含");
+                        taskProps.put("agent", pAgent);
+                        taskProps.put("task", pTask);
+                        taskItem.put("properties", taskProps);
+                        taskItem.put("required", new org.json.JSONArray()
+                                .put("agent").put("task"));
+                        prop.put("items", taskItem);
+                        break;
                     default:
                         prop.put("type", "string");
                         break;
