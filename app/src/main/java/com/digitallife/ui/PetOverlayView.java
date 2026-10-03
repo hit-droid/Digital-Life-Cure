@@ -49,7 +49,7 @@ public class PetOverlayView extends FrameLayout {
     private final LinearLayout bubbleContainer;
     private final TextView bubbleView;
     private final View bubbleTail;
-    /** v1.133.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
+    /** v1.132.0：桌宠状态胶囊（亲密度 / 精力 / 主导情绪） */
     private final TextView statusView;
     private final EditText chatInput;
     /** 状态胶囊的数据来源；未接线时为 null，胶囊不显示 */
@@ -116,7 +116,7 @@ public class PetOverlayView extends FrameLayout {
         bcp.topMargin = dp(6);
         addView(bubbleContainer, bcp);
 
-        // v1.133.0：状态胶囊（Issue #27 第 1 条）。
+        // v1.132.0：状态胶囊（Issue #27 第 1 条）。
         // 在 chatInput 之前 addView：弹出输入框时它自然盖住胶囊，
         // 输入时也不需要看状态，省掉一套互斥逻辑。
         statusView = new TextView(context);
@@ -182,7 +182,10 @@ public class PetOverlayView extends FrameLayout {
 
             @Override
             public void onLongPress(MotionEvent e) {
-                // 长按不再打开设置，改为不做任何事
+                // v1.133.0（Issue #27 第 2 条）：长按拉起快捷菜单。
+                // 之前这里是空实现，listener.onLongPress() 从来没被调用过，
+                // PetService 那一侧等于死代码；补上这句，菜单才弹得出来。
+                if (listener != null) listener.onLongPress();
             }
 
             @Override
@@ -200,7 +203,7 @@ public class PetOverlayView extends FrameLayout {
         startStatusTicker();
     }
 
-    // ==================== v1.133.0：状态胶囊（Issue #27 第 1 条） ====================
+    // ==================== v1.132.0：状态胶囊（Issue #27 第 1 条） ====================
 
     /** 状态刷新间隔；情绪是慢变量（AICore 里按 tick 衰减），5 秒足够 */
     private static final long STATUS_REFRESH_MS = 5000L;
@@ -275,6 +278,120 @@ public class PetOverlayView extends FrameLayout {
         bg.setCornerRadius(dp(9));
         bg.setColor(colorRes(R.color.surface_glass));
         bg.setStroke(1, colorRes(R.color.brand_stroke));
+        return bg;
+    }
+
+    // ==================== v1.133.0：长按快捷菜单（Issue #27 第 2 条） ====================
+
+    /** 菜单项点击回调：回传 {@link PetQuickMenu} 里的索引 */
+    public interface MenuCallback {
+        void onItem(int index);
+    }
+
+    /** 菜单遮罩层；非 null 即为菜单打开中 */
+    private FrameLayout menuLayer;
+
+    public boolean isQuickMenuShowing() {
+        return menuLayer != null && menuLayer.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * 在悬浮窗正中弹出快捷菜单。
+     *
+     * <p>遮罩层最后 addView，z 序最高且 clickable，点空白处关闭；菜单期间
+     * {@link #onInterceptTouchEvent} 与 {@link #onTouchEvent} 都让位，手势不会打架。</p>
+     */
+    public void showQuickMenu(String[] items, final MenuCallback cb) {
+        if (items == null || items.length == 0) return;
+        runOnUi(new Runnable() {
+            @Override
+            public void run() {
+                hideQuickMenu();
+                if (chatInput.getVisibility() == View.VISIBLE) hideChatInput();
+
+                final FrameLayout layer = new FrameLayout(getContext());
+                layer.setBackgroundColor(Color.parseColor("#33000000"));
+                layer.setClickable(true);
+                layer.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        hideQuickMenu();
+                    }
+                });
+
+                LinearLayout card = new LinearLayout(getContext());
+                card.setOrientation(LinearLayout.VERTICAL);
+                card.setBackground(getMenuBackground());
+                FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                cp.gravity = Gravity.CENTER;
+                card.setLayoutParams(cp);
+
+                for (int i = 0; i < items.length; i++) {
+                    final int index = i;
+                    TextView row = new TextView(getContext());
+                    row.setText(items[i]);
+                    row.setTextSize(13f);
+                    row.setTextColor(colorRes(R.color.operit_text_primary));
+                    row.setGravity(Gravity.CENTER);
+                    row.setPadding(dp(16), dp(10), dp(16), dp(10));
+                    row.setMinWidth(dp(104));
+                    row.setClickable(true);
+                    row.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            hideQuickMenu();
+                            if (cb != null) cb.onItem(index);
+                        }
+                    });
+                    card.addView(row, new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                    if (i < items.length - 1) {
+                        card.addView(menuDivider(), new LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+                    }
+                }
+                layer.addView(card);
+                addView(layer, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                menuLayer = layer;
+            }
+        });
+    }
+
+    /** 关闭菜单；已关闭时是空操作，可以放心重复调 */
+    public void hideQuickMenu() {
+        runOnUi(new Runnable() {
+            @Override
+            public void run() {
+                if (menuLayer == null) return;
+                removeView(menuLayer);
+                menuLayer = null;
+            }
+        });
+    }
+
+    /** 主线程直跑、其它线程丢回主线程：菜单是 View 操作，跨线程改会崩 */
+    private void runOnUi(Runnable r) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            r.run();
+        } else {
+            mainHandler.post(r);
+        }
+    }
+
+    private View menuDivider() {
+        View v = new View(getContext());
+        v.setBackgroundColor(colorRes(R.color.brand_stroke));
+        return v;
+    }
+
+    private android.graphics.drawable.Drawable getMenuBackground() {
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(dp(12));
+        bg.setColor(colorRes(R.color.card_bg));
+        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
         return bg;
     }
 
@@ -540,6 +657,8 @@ public class PetOverlayView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        // v1.133.0：菜单期间不参与手势（拖拽 / 长按），全交给菜单层，避免边点菜单边拖窗口
+        if (isQuickMenuShowing()) return false;
         // 点击气泡区域：直接关闭气泡，不触发人偶交互
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isTouchInBubble(event.getRawX(), event.getRawY())) {
             clearBubble();
@@ -576,6 +695,9 @@ public class PetOverlayView extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+        // v1.133.0：菜单开着时一律放行。菜单居中显示、正好落在人偶区域里，
+        // 不放行就会被下面的拦截逻辑吃掉，菜单点不动。
+        if (isQuickMenuShowing()) return false;
         if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
             // 聊天输入框可见时，其范围放行给输入框本身（可聚焦输入），不参与穿透判定
             if (chatInput.getVisibility() == View.VISIBLE
