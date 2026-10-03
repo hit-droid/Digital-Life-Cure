@@ -9,7 +9,10 @@ import static org.junit.Assert.assertTrue;
 /**
  * Markdown 行级渲染的回归（见 issue #36）。
  *
- * <p>这些都是纯字符串 / 正则逻辑，不需要 Robolectric，本地 JVM 直接能跑：
+ * <p>这些都是纯字符串 / 正则逻辑，不需要 Robolectric，本地 JVM 直接能跑。
+ * 注意：这里**不要**调 {@code render()} —— unit test 的 android.jar 里所有方法默认抛
+ * "not mocked"，碰到 SpannableStringBuilder 就会炸；端到端断言放在跑 Robolectric 的
+ * MarkdownRendererTest 里。</p>
  * 改动的是「一行文本属于哪种块」的判定，而这类判定一旦写错，用户看到的就是
  * 漏了项目符号的多级列表、或者顶着井号的字面标题，肉眼很难归因。</p>
  */
@@ -211,33 +214,6 @@ public class MarkdownBlockTest {
     @Test
     public void truncate_tinyWidthGivesEllipsisOnly() {
         assertEquals("\u2026", MarkdownRenderer.truncateCell("任意内容", 1));
-    }
-
-    // ==================== 端到端：渲染结果 ====================
-
-    private static String render(String md) {
-        return new MarkdownRenderer(0xFF222222, 0xFFDDDDDD, 0xFF888888, 0xFF000000, 0xFF3366CC)
-                .render(md).toString();
-    }
-
-    @Test
-    public void render_nestedListKeepsBulletAndIndent() {
-        String out = render("- 一级\n  - 二级\n");
-        assertTrue("一级应有项目符号：" + out, out.contains("\u2022 一级"));
-        assertTrue("子项应有项目符号且带缩进：" + out, out.contains("\u00A0\u00A0\u2022 二级"));
-    }
-
-    @Test
-    public void render_headingWithoutSpaceDropsHash() {
-        String out = render("#标题\n");
-        assertFalse("不应残留井号：" + out, out.contains("#"));
-        assertTrue(out.contains("标题"));
-    }
-
-    @Test
-    public void render_decimalNumberUnaffected() {
-        String out = render("3.14 是圆周率\n");
-        assertTrue("小数不能被拆成列表项：" + out, out.contains("3.14 是圆周率"));
     }
 
     private static boolean hasUnpairedSurrogate(String s) {
