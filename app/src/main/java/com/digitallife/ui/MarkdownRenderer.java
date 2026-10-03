@@ -173,7 +173,8 @@ public final class MarkdownRenderer {
         java.util.List<String[]> rows = new java.util.ArrayList<>();
         for (int r = from; r < to; r++) {
             if (isSeparatorRow(lines[r])) continue;   // 分隔行不展示，靠对齐自然成表
-            rows.add(splitRow(lines[r]));
+            // v1.124.0：先剥掉行内标记再算列宽，否则 ** 之类标记会白占宽度、把对齐撑歪
+            rows.add(stripInlineCells(splitRow(lines[r])));
         }
         if (rows.isEmpty()) return;
         int cols = 0;
@@ -217,6 +218,35 @@ public final class MarkdownRenderer {
         String[] parts = t.split("\\|", -1);
         for (int i = 0; i < parts.length; i++) parts[i] = parts[i].trim();
         return parts;
+    }
+
+    /** 整行单元格逐个剥掉行内 Markdown 标记 */
+    private static String[] stripInlineCells(String[] cells) {
+        if (cells == null) return cells;
+        for (int i = 0; i < cells.length; i++) cells[i] = stripInline(cells[i]);
+        return cells;
+    }
+
+    /**
+     * 剥掉行内 Markdown 标记，只留纯文本。
+     * 表格是等宽对齐的纯文本渲染，标记既显示不出来又会占列宽，
+     * 所以这里直接去掉：{@code **加粗**} → {@code 加粗}。
+     * <p>包内可见，便于单测（MarkdownRendererTest）。</p>
+     */
+    static String stripInline(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        // [文字](链接) -> 文字
+        t = t.replaceAll("\\[([^\\]]*)\\]\\(([^)]*)\\)", "$1");
+        // `代码` -> 代码
+        t = t.replaceAll("`([^`]*)`", "$1");
+        // **加粗** -> 加粗（必须在单星号之前处理，否则会被当成斜体拆开）
+        t = t.replaceAll("\\*\\*([^*]*)\\*\\*", "$1");
+        // ~~删除线~~ -> 删除线
+        t = t.replaceAll("~~([^~]*)~~", "$1");
+        // *斜体* -> 斜体（此时 ** 已处理完，剩下的单星号成对出现）
+        t = t.replaceAll("\\*([^*]+)\\*", "$1");
+        return t.trim();
     }
 
     /** 显示宽度：全角字符按 2 计，等宽字体下对齐才准 */
