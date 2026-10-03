@@ -18,7 +18,10 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags '-std=c++17'
-                arguments '-DANDROID_STL=c++_shared'
+                // Android 15+ 的 16 KB 页设备（Android 16 默认）无法加载按 4 KB 对齐的 .so。
+                // NDK r27 起 c++_shared 已是 16 KB 对齐；此处仍在用 r26，故改用 c++_static，
+                // 不再打包 NDK 预编译的 4 KB 对齐 libc++_shared.so（详见 CMakeLists.txt 的对齐链接项）。
+                arguments '-DANDROID_STL=c++_static'
             }
         }
     }
