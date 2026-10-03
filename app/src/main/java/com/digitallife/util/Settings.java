@@ -46,6 +46,10 @@ public class Settings {
     public int getScale() { return sp.getInt("scale", 100); }
     public void setScale(int v) { sp.edit().putInt("scale", v).apply(); }
 
+    /** 桌宠松手是否吸附到屏幕左/右边缘（v1.132.0，默认开） */
+    public boolean isEdgeDockEnabled() { return sp.getBoolean("edge_dock", true); }
+    public void setEdgeDockEnabled(boolean v) { sp.edit().putBoolean("edge_dock", v).apply(); }
+
     public float getOverlayX() { return sp.getFloat("overlay_x", -1f); }
     public float getOverlayY() { return sp.getFloat("overlay_y", -1f); }
     public void setOverlayPos(float x, float y) { sp.edit().putFloat("overlay_x", x).putFloat("overlay_y", y).apply(); }

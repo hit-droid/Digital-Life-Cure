@@ -492,6 +492,29 @@ public class PetService extends Service implements AICore.Output,
                 gl.setParamTarget("ParamAngleZ", 0f);
                 gl.setParamTarget("ParamBodyAngleX", 0f);
             }
+            snapToEdgeIfNeeded(); // v1.132.0：松手吸附到最近的左/右边缘
+        }
+    }
+
+    /**
+     * 松手后按设置把桌宠吸附到最近的左/右边缘并持久化。
+     * 关闭「贴边停靠」时只把窗口夹回屏内（拖拽期间允许越界，靠这里兜底）。
+     */
+    private void snapToEdgeIfNeeded() {
+        if (windowManager == null || overlayView == null || overlayParams == null || settings == null) return;
+        try {
+            Point size = new Point();
+            windowManager.getDefaultDisplay().getRealSize(size);
+            com.digitallife.util.OverlayDock.Result r = com.digitallife.util.OverlayDock.dock(
+                    overlayParams.x, overlayParams.y,
+                    overlayParams.width, overlayParams.height,
+                    size.x, size.y, settings.isEdgeDockEnabled());
+            if (r.x == overlayParams.x && r.y == overlayParams.y) return;
+            overlayParams.x = r.x;
+            overlayParams.y = r.y;
+            windowManager.updateViewLayout(overlayView, overlayParams);
+            settings.setOverlayPos(overlayParams.x, overlayParams.y);
+        } catch (Exception ignored) {
         }
     }
 
