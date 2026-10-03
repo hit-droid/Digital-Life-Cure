@@ -75,7 +75,7 @@ public class DeveloperActivity extends Activity {
 
         // ===== 版本信息 =====
         content.addView(buildSection("版本信息"));
-        content.addView(buildInfoRow("App", "v1.24.0 (versionCode 27)"));
+        content.addView(buildInfoRow("App", appVersionText()));
         content.addView(buildInfoRow("角色", "小汐"));
         content.addView(buildInfoRow("智能体", "已启用（工具/记忆/角色/计划/控制台）"));
         content.addView(buildInfoRow("Java", System.getProperty("java.version")));
@@ -155,6 +155,17 @@ public class DeveloperActivity extends Activity {
         tv.setTextColor(0xFF6366F1);
         tv.setPadding(0, UiKit.dp(this, 12), 0, UiKit.dp(this, 6));
         return tv;
+    }
+
+    /** 版本号从 PackageManager 实时读取，避免界面写死版本随发版过期 */
+    private String appVersionText() {
+        try {
+            android.content.pm.PackageInfo pi =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            return "v" + pi.versionName + " (versionCode " + pi.versionCode + ")";
+        } catch (Exception e) {
+            return "未知";
+        }
     }
 
     private View buildInfoRow(String key, String value) {

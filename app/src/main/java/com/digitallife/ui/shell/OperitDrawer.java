@@ -116,7 +116,7 @@ public class OperitDrawer extends LinearLayout {
         textCol.addView(brand);
 
         TextView version = new TextView(getContext());
-        version.setText("v1.24.0 · 小汐 · 在线");
+        version.setText(appVersionText() + " · 小汐 · 在线");
         version.setTextSize(11f);
         version.setTextColor(UiKit.color(getContext(), R.color.operit_text_hint));
         LinearLayout.LayoutParams vlp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
@@ -125,6 +125,17 @@ public class OperitDrawer extends LinearLayout {
 
         header.addView(textCol);
         return header;
+    }
+
+    /** 版本号从 PackageManager 实时读取，避免界面写死版本随发版过期 */
+    private String appVersionText() {
+        try {
+            android.content.pm.PackageInfo pi = getContext().getPackageManager()
+                    .getPackageInfo(getContext().getPackageName(), 0);
+            return "v" + pi.versionName;
+        } catch (Exception e) {
+            return "v未知";
+        }
     }
 
     private View buildDivider() {

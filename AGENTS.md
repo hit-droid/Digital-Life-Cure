@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-10-03（版本 v1.117.0，多智能体并行编排）
+> 最后更新：2026-10-03（版本 v1.118.0，工程化加固：CI 单测门禁 / 代理注入 / 版本号去硬编码）
 
 ---
 
@@ -32,7 +32,7 @@
 
 ### 1.3 完成程度
 
-- **已完成**：v1.0 → v1.117.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）
+- **已完成**：v1.0 → v1.118.0；v1.102.0 ~ v1.110.0 OpenMinis 对标手工轮；v1.111.0 多智能体；v1.112.0 对话大脑改 DeepSeek Harness；v1.113.0 Harness 内核化；v1.114.0 Robolectric 测试体系 + 低版本兼容修复；v1.115.0 Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 seam；v1.116.0 修 Live2D 模型文件缺失导致的原生 SIGSEGV；v1.117.0 多智能体并行编排（`delegate_parallel` fan-out/fan-in、失败隔离、并行协作卡片）；v1.118.0 工程化加固（CI 单测门禁、测试代理注入、版本号去硬编码、清理误入库脚本）
 - **OpenMinis 对标手工功能**（2026-09-05，我亲自写的）：
   | 版本 | 功能 | 说明 |
   |---|---|---|
@@ -46,7 +46,11 @@
   | v1.112.0 | **DeepSeek Harness** | 对话大脑改为 everything-is-a-plugin：`com.digitallife.harness`（session log / prompt assembler / tool pipeline / agent-loop / guard），ChatActivity.startChatLoop 走 `DeepSeekHarness.startTurn` |
   | v1.113.0 | **Harness 内核化** | LLM seam（`LlmAdapter`）使循环可脚本化驱动；85 个内核单测；子智能体改独立 harness 树 + `SubagentPreset`/`ScopedTools`（删 `AgentTeam`）；CareAI 收敛并新增 `CareToolHost`；AICore 工具走 `ToolPipeline`（修回断掉的 `ToolUsageLog`）；删死代码 `AgentBrain` |
   | v1.114.0 | **测试体系 + 兼容修复** | Robolectric 接入（110 单测）；修 6 处 minSdk 21 崩溃点与 20 处 locale 敏感调用；`ToolGovernance` 统一装配策略；`tools/verify.sh` 一条命令全量验证 |
-- **待发行**：无（queue 空，等 taskgen 机械补丁或新手工任务）
+  | v1.115.0 | 架构 seam | Profile 组装 / 可卸载插件 / 提示词分段 / 上下文压缩 |
+  | v1.116.0 | 原生崩溃修复 | 修 Live2D 模型文件缺失导致的 SIGSEGV |
+  | v1.117.0 | **多智能体并行编排** | `delegate_parallel` fan-out/fan-in，最多 5 个子任务真并发 + 失败隔离 + 逐任务超时；并行协作卡片按「agent + 任务原文」索引；`Tools` 支持对象数组 schema |
+  | v1.118.0 | **工程化加固** | CI 增加单测门禁（此前 CI 只编译、138 个单测从不拦回归）；`app/build.gradle` 自动把代理环境变量注入测试 JVM（修 `tools/verify.sh` 在代理环境下必挂）；修两处写死版本号（`DeveloperActivity`/`OperitDrawer` 曾硬编码 v1.24.0）；删除误入库的临时脚本（含明文 PAT） |
+- **待发行**：无
 - **流水线寿命**：2026-09-07 00:00（时间戳 `1788739200`）自动停止
 
 ---
@@ -59,7 +63,7 @@
 ├── app/
 │   ├── build.gradle                ← 版本发版入口：versionCode / versionName
 │   └── src/main/
-│       ├── java/com/digitallife/   ← 全部源码（77 个 java 文件）
+│       ├── java/com/digitallife/   ← 全部源码（118 个 java 文件）
 │       ├── res/
 │       │   ├── drawable/           ← 只有 drawable，没有 layout！
 │       │   ├── values/ colors.xml  ← 配色定义
@@ -73,7 +77,7 @@
 │   ├── genpatch.py                 ← 机械改进补丁生成器
 │   └── mkpatch.py                  ← 安全补丁生成助手（隔离区工作流）
 ├── tools/local-build.sh            ← 【v1.113.0】本地构建（免 Android Studio）
-├── app/src/test/java/              ← 【v1.113.0】harness 内核单测（85 个）
+├── app/src/test/java/              ← 【v1.113.0】harness 内核单测（138 个 / 12 类）
 └── AGENTS.md                       ← 本文件
 ```
 
@@ -83,7 +87,7 @@
 
 ```sh
 ./tools/local-build.sh                # 编译 Java（增量约 10 秒）
-./tools/local-build.sh testDebugUnitTest   # 跑 85 个单测
+./tools/local-build.sh testDebugUnitTest   # 跑 138 个单测
 ./tools/local-build.sh assembleDebug       # 出 APK
 ```
 
@@ -107,6 +111,7 @@
 **模拟器为什么不可用**：容器是 Firecracker microVM，无 `/dev/kvm`、CPU 无 `vmx/svm` 标志，硬件加速模拟器起不来。
 **Robolectric 陷阱**：`testOptions.unitTests.returnDefaultValues = true` 会把 Android 方法桩成返回默认值，与 Robolectric 的真实实现冲突，已移除；测试类加 `@RunWith(RobolectricTestRunner.class)` + `@Config(sdk = 33)` 即可。
 **首次运行慢**：Robolectric 需下载 `android-all-instrumented` jar（约 13 分钟），之后走缓存约 15 秒。
+**代理环境（v1.118.0 起）**：测试 worker 是独立 JVM，不继承 shell 的 `HTTP_PROXY`，会把 Robolectric 卡在拉包上。`app/build.gradle` 已把代理环境变量转成测试 JVM 系统属性（地址不写死），所以有代理时 `tools/verify.sh` 直接可用；CI 侧另加了 `~/.m2/repository/org/robolectric` 缓存。
 
 ### 2.2 最关键的几个源文件
 
