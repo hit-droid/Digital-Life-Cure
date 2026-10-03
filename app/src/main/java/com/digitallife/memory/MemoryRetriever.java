@@ -2,6 +2,7 @@ package com.digitallife.memory;
 
 import android.content.Context;
 
+import com.digitallife.util.MemoryRelevance;
 import com.digitallife.util.MemoryStore;
 
 import java.util.ArrayList;
@@ -52,14 +53,16 @@ public class MemoryRetriever {
             all.add(new ScoredEntry(e, scoreTime(now, m.timestamp) + 0.3));
         }
 
-        // 2) 关键词维度：facts 表搜索
+        // 2) 关键词维度：facts 表相关度召回（v1.121.0 起改用共享关键词提取，
+        //    原先用「整句 query 做 contains」，中文几乎必然召回为空）
         if (query != null && !query.trim().isEmpty()) {
-            String q = query.toLowerCase(java.util.Locale.ROOT);
-            List<MemoryStore.Fact> facts = store.getAllFacts();
-            int matched = 0;
-            for (MemoryStore.Fact f : facts) {
-                if (f.content == null) continue;
-                if (f.content.toLowerCase(java.util.Locale.ROOT).contains(q)) {
+            List<String> keywords = MemoryRelevance.extractKeywords(query);
+            if (!keywords.isEmpty()) {
+                List<ScoredEntry> hits = new ArrayList<>();
+                for (MemoryStore.Fact f : store.getAllFacts()) {
+                    if (f.content == null) continue;
+                    int h = MemoryRelevance.countHits(keywords, f.content);
+                    if (h == 0) continue;
                     MemoryEntry e = new MemoryEntry();
                     e.id = f.id;
                     e.content = f.content;
@@ -67,15 +70,28 @@ public class MemoryRetriever {
                     e.timestamp = f.lastConfirmed;
                     e.weight = f.confidence;
                     e.source = "auto";
-                    all.add(new ScoredEntry(e, 0.8 + f.confidence * 0.2));
-                    matched++;
-                    if (matched >= KEYWORD_LIMIT) break;
+                    double rel = Math.min(1.0, h / (double) keywords.size());
+                    hits.add(new ScoredEntry(e, 0.7 + 0.4 * rel + 0.1 * f.confidence));
                 }
+                java.util.Collections.sort(hits, new Comparator<ScoredEntry>() {
+                    @Override
+                    public int compare(ScoredEntry a, ScoredEntry b) {
+                        return Double.compare(b.score, a.score);
+                    }
+                });
+                for (int i = 0; i < hits.size() && i < KEYWORD_LIMIT; i++) all.add(hits.get(i));
             }
         }
 
-        // 3) 高重要度：facts.confidence > 0.7
+        // 3) 高重要度：confidence 最高的 5 条
+        //    （getAllFacts 按 last_confirmed 排序，直接取前 5 实为"最近的高权重"，与注释不符）
         List<MemoryStore.Fact> allFacts = store.getAllFacts();
+        java.util.Collections.sort(allFacts, new Comparator<MemoryStore.Fact>() {
+            @Override
+            public int compare(MemoryStore.Fact a, MemoryStore.Fact b) {
+                return Double.compare(b.confidence, a.confidence);
+            }
+        });
         int highW = 0;
         for (MemoryStore.Fact f : allFacts) {
             if (f.confidence >= 0.7) {
