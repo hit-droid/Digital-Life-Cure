@@ -45,7 +45,7 @@ public class SettingsTabView extends LinearLayout {
     private final Settings settings;
     private final ApiManager apiManager;
 
-    private Switch swVoice, swProactive;
+    private Switch swVoice, swProactive, swEdgeDock;
     private EditText etPetName, etChat;
     private TextView tvStatus, tvVoiceDiag, tvMemoryDebug, tvCrashPath, tvModelList;
 
@@ -146,6 +146,7 @@ public class SettingsTabView extends LinearLayout {
         etPetName = UiKit.input(activity, cSwitch, "角色名字（默认 小汐）", settings.getPetName());
         swVoice = UiKit.switchRow(activity, cSwitch, "语音互动（说话+发声）", settings.isVoiceEnabled());
         swProactive = UiKit.switchRow(activity, cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
+        swEdgeDock = UiKit.switchRow(activity, cSwitch, "贴边停靠（松手吸附到屏幕边缘）", settings.isEdgeDockEnabled());
 
         Button btnAccessibility = UiKit.button(activity, cSwitch, "无障碍感知权限（可选，增强互动）");
         btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
@@ -314,6 +315,7 @@ public class SettingsTabView extends LinearLayout {
         settings.setPetName(etPetName != null ? etPetName.getText().toString().trim() : settings.getPetName());
         settings.setVoiceEnabled(swVoice.isChecked());
         settings.setProactiveEnabled(swProactive.isChecked());
+        settings.setEdgeDockEnabled(swEdgeDock.isChecked());
         modelSection.saveCurrentProfile();
         PetService svc = PetService.getInstance();
         if (svc != null) {
