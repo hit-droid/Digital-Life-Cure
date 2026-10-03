@@ -28,7 +28,7 @@ import com.digitallife.tools.ToolUsageLog;
  */
 public class AgentConsoleActivity extends Activity {
 
-    private TextView txtActivity, txtTools, txtPlan, txtBrain;
+    private TextView txtActivity, txtTools, txtPlan, txtBrain, txtSubagents;
     private TextView[] tabs;
     private View[] tabBodies;
     private ScrollView[] tabScrolls;
@@ -83,7 +83,7 @@ public class AgentConsoleActivity extends Activity {
         topBar.addView(title, tlp);
 
         TextView stat = new TextView(this);
-        stat.setText("v1.115.0");
+        stat.setText(appVersion());
         stat.setTextSize(12f);
         stat.setTextColor(android.graphics.Color.WHITE);
         topBar.addView(stat);
@@ -95,13 +95,15 @@ public class AgentConsoleActivity extends Activity {
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         tabBar.setBackgroundColor(UiKit.color(this, R.color.operit_surface));
         tabBar.setPadding(dp(12), dp(12), dp(12), dp(12));
-        String[] names = {"活动", "工具日志", "计划", "脑日志"};
+        String[] names = {"活动", "工具日志", "计划", "脑日志", "多智能体"};
         tabs = new TextView[names.length];
         for (int i = 0; i < names.length; i++) {
             TextView tab = new TextView(this);
             tab.setText(names[i]);
             tab.setTextSize(13);
-            tab.setPadding(dp(14), dp(8), dp(14), dp(8));
+            // 5 个 Tab 后单格更窄，收窄横向内边距并锁单行，避免「工具日志」被挤成两行
+            tab.setPadding(dp(6), dp(8), dp(6), dp(8));
+            tab.setMaxLines(1);
             tab.setTextColor(UiKit.color(this, R.color.operit_text_secondary));
             tab.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -119,9 +121,9 @@ public class AgentConsoleActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        tabBodies = new View[4];
-        tabScrolls = new ScrollView[4];
-        for (int i = 0; i < 4; i++) {
+        tabBodies = new View[names.length];
+        tabScrolls = new ScrollView[names.length];
+        for (int i = 0; i < names.length; i++) {
             ScrollView sv = new ScrollView(this);
             sv.setFillViewport(true);
             LinearLayout inner = new LinearLayout(this);
@@ -171,6 +173,7 @@ public class AgentConsoleActivity extends Activity {
         txtTools = (TextView) tabBodies[1];
         txtPlan = (TextView) tabBodies[2];
         txtBrain = (TextView) tabBodies[3];
+        txtSubagents = (TextView) tabBodies[4];
         showTab(0);
         return root;
     }
@@ -328,12 +331,47 @@ public class AgentConsoleActivity extends Activity {
             }
             txtBrain.setText(bl.toString());
 
+            // 5) 多智能体：子智能体协作台账（v1.128.0）
+            StringBuilder sa = new StringBuilder();
+            com.digitallife.harness.subagent.SubagentLedger ledger =
+                    com.digitallife.harness.subagent.SubagentLedger.getInstance();
+            int subTotal = ledger.total();
+            if (subTotal == 0) {
+                sa.append("(暂无子智能体执行记录)\n\n");
+                sa.append("让对话大脑做需要委派的任务即可看到，例如：\n");
+                sa.append("\"同时查一下 A 和 B 两件事\"（并行）\n");
+                sa.append("\"先调研、再写稿、再校订\"（依赖链）");
+            } else {
+                sa.append("共 ").append(subTotal).append(" 次 · 成功 ")
+                        .append(ledger.okCount()).append(" · 失败 ")
+                        .append(ledger.failCount()).append("\n");
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(
+                        "HH:mm:ss", java.util.Locale.getDefault());
+                java.util.List<com.digitallife.harness.subagent.SubagentLedger.Entry> runs =
+                        ledger.recent(80);
+                for (int i = runs.size() - 1; i >= 0; i--) {
+                    com.digitallife.harness.subagent.SubagentLedger.Entry e = runs.get(i);
+                    sa.append(sdf.format(new java.util.Date(e.timestamp)))
+                            .append(' ').append(e.ok ? "✓" : "✗")
+                            .append(' ').append(e.agent.isEmpty() ? "?" : e.agent)
+                            .append("  ").append(e.durationMs).append("ms\n");
+                    if (!e.task.isEmpty()) {
+                        sa.append("    ").append(e.task).append('\n');
+                    }
+                    if (!e.ok) {
+                        sa.append("    ↳ ").append(e.error).append('\n');
+                    }
+                }
+            }
+            txtSubagents.setText(sa.toString());
+
             // ===== 更新 tab 角标：数字后缀 =====
-            if (tabs != null && tabs.length == 4) {
+            if (tabs != null && tabs.length >= 5) {
                 tabs[0].setText(activityBadge(activityScore, isBusy));
                 tabs[1].setText(countBadge("工具日志", toolTotal));
                 tabs[2].setText(countBadge("计划", planScore));
                 tabs[3].setText(countBadge("脑日志", brainCount));
+                tabs[4].setText(countBadge("多智能体", subTotal));
             }
         } catch (Exception e) {
             // ignore
@@ -374,5 +412,15 @@ public class AgentConsoleActivity extends Activity {
 
     private int dp(int v) {
         return (int) (v * getResources().getDisplayMetrics().density);
+    }
+
+    /** 顶栏版本号：读真实 versionName（此前写死 v1.115.0，发版后不会更新） */
+    private String appVersion() {
+        try {
+            return "v" + getPackageManager()
+                    .getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "";
+        }
     }
 }

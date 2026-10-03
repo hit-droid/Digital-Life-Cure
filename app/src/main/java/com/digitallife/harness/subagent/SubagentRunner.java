@@ -91,6 +91,19 @@ public final class SubagentRunner {
      */
     static Result run(String presetName, String task, String progressTask, Tools host,
                       LlmFactory factory, ProgressListener progress, int timeoutSec) {
+        // v1.128.0：统一埋点。串行 / 并行 / 依赖链三条路径最终都汇到这里，
+        // 因此只在这一处记录，控制台台账就不会漏掉任何一种委派方式。
+        long startedAt = System.currentTimeMillis();
+        Result r = runInternal(presetName, task, progressTask, host, factory, progress, timeoutSec);
+        SubagentLedger.getInstance().record(
+                presetName,
+                (progressTask == null || progressTask.isEmpty()) ? task : progressTask,
+                r.ok(), r.error, System.currentTimeMillis() - startedAt);
+        return r;
+    }
+
+    private static Result runInternal(String presetName, String task, String progressTask, Tools host,
+                                      LlmFactory factory, ProgressListener progress, int timeoutSec) {
         final int timeout = timeoutSec > 0 ? timeoutSec : TIMEOUT_SEC;
         final String displayTask = (progressTask == null || progressTask.isEmpty()) ? task : progressTask;
         SubagentPreset preset = SubagentPresets.get(presetName);
