@@ -81,7 +81,18 @@ public final class SubagentRunner {
      */
     public static Result run(String presetName, String task, Tools host,
                              LlmFactory factory, ProgressListener progress, int timeoutSec) {
+        return run(presetName, task, task, host, factory, progress, timeoutSec);
+    }
+
+    /**
+     * @param progressTask 用于 UI 事件（卡片按「agent + 任务原文」配对）的任务文本。
+     *                     依赖链编排会把「前序结论」拼进喂给模型的 task，但卡片仍应显示
+     *                     用户可读的步骤原文，故把两者拆开；不传时与 task 相同。
+     */
+    static Result run(String presetName, String task, String progressTask, Tools host,
+                      LlmFactory factory, ProgressListener progress, int timeoutSec) {
         final int timeout = timeoutSec > 0 ? timeoutSec : TIMEOUT_SEC;
+        final String displayTask = (progressTask == null || progressTask.isEmpty()) ? task : progressTask;
         SubagentPreset preset = SubagentPresets.get(presetName);
         if (preset == null) {
             return new Result(null, "未知子智能体：" + presetName
@@ -107,7 +118,7 @@ public final class SubagentRunner {
         List<com.digitallife.brain.LLMClient.ChatMessage> seed = new ArrayList<>();
         seed.add(new com.digitallife.brain.LLMClient.ChatMessage("user", task));
 
-        if (progress != null) progress.onTeamStep(preset.name, task, "start", task);
+        if (progress != null) progress.onTeamStep(preset.name, displayTask, "start", displayTask);
 
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] text = new String[1];
@@ -271,6 +282,64 @@ public final class SubagentRunner {
                     }
                     return SubagentTeam.run(tasks, host, factory, progress).render();
                 });
+        // 同属「团队编排」能力：并行（互不依赖）+ 依赖链（有先后）。一并装配，
+        // 调用方（ChatActivity）无需改动即可获得 delegate_pipeline。
+        installPipelineDelegateTool(host, factory, progress);
+    }
+
+    /**
+     * 注册 delegate_pipeline：编排一条**有序依赖链**——逐步串行执行，每一步都能看到
+     * 前序步骤的结论，适合「先调研 → 再写稿 → 再校订」这类后一步依赖前一步产出的任务。
+     */
+    public static void installPipelineDelegateTool(Tools host, LlmFactory factory,
+                                                   ProgressListener progress) {
+        if (host == null) return;
+        host.register("delegate_pipeline",
+                "当多个子任务之间有先后依赖、必须按顺序做（后一步要用前一步的结论）时，"
+                        + "用本工具编排一条依赖链：逐步串行执行，每一步都能看到前序步骤的结论。"
+                        + "例如「先调研 → 再基于调研写稿 → 再校订」。"
+                        + "互相独立、可以同时做的任务请改用 delegate_parallel。"
+                        + "参数 steps 是有序步骤数组，一条链最多 " + SubagentPipeline.MAX_STEPS + " 步。"
+                        + "可选子智能体：" + SubagentPresets.describeAll(),
+                new String[]{"steps"},
+                args -> {
+                    List<SubagentPipeline.Step> steps = parseSteps(args);
+                    if (steps.isEmpty()) {
+                        throw new RuntimeException(
+                                "steps 为空：请给出至少一个 {\"agent\":\"...\",\"task\":\"...\"} 步骤");
+                    }
+                    if (steps.size() > SubagentPipeline.MAX_STEPS) {
+                        throw new RuntimeException("一条依赖链最多 " + SubagentPipeline.MAX_STEPS
+                                + " 步，请拆分");
+                    }
+                    return SubagentPipeline.run(steps, host, factory, progress).render();
+                });
+    }
+
+    /** 解析 delegate_pipeline 的 steps 参数；兼容模型把数组序列化成字符串的情况 */
+    private static List<SubagentPipeline.Step> parseSteps(JSONObject args) {
+        List<SubagentPipeline.Step> out = new ArrayList<>();
+        if (args == null) return out;
+        JSONArray arr = args.optJSONArray("steps");
+        if (arr == null) {
+            String raw = args.optString("steps", "").trim();
+            if (raw.startsWith("[")) {
+                try {
+                    arr = new JSONArray(raw);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (arr == null) return out;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.optJSONObject(i);
+            if (o == null) continue;
+            String agent = o.optString("agent", "").trim();
+            String task = o.optString("task", "").trim();
+            if (agent.isEmpty() && task.isEmpty()) continue;
+            out.add(new SubagentPipeline.Step(agent, task));
+        }
+        return out;
     }
 
     /** 解析 delegate_parallel 的 tasks 参数；兼容模型把数组序列化成字符串的情况 */
