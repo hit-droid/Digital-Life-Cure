@@ -37,6 +37,7 @@ import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 import com.digitallife.util.ThoughtStore;
 import com.digitallife.ui.PetOverlayView;
+import com.digitallife.ui.pet.EmotionExpression;
 import com.digitallife.ui.pet.PetQuickMenu;
 import com.digitallife.ui.pet.PetTouchReaction;
 import com.digitallife.render.Live2DNative;
@@ -95,6 +96,13 @@ public class PetService extends Service implements AICore.Output,
     /** v1.135.0：手动换表情的当前表情，菜单里点一次切下一个 */
     private String currentExpression = "F01";
 
+    /** v1.140.0（Issue #48）：把 EmotionState 映射为待机表情，带迟滞与最短停留 */
+    private final EmotionExpression emotionExpression = new EmotionExpression();
+    /** 最近一次用户/对话交互时刻；自主表情在此后 OVERRIDE_COOLDOWN_MS 内让位 */
+    private long lastInteractionMs = 0L;
+    /** 交互后自主表情让位时长：期间不抢用户/对话刚设的表情 */
+    private static final long OVERRIDE_COOLDOWN_MS = 6000L;
+
     private final STTEngine.Listener sttListener = new STTEngine.Listener() {
         @Override
         public void onListeningStart() {
@@ -134,8 +142,9 @@ public class PetService extends Service implements AICore.Output,
         public void run() {
             if (!vitalsTicking) return;
             if (vitals != null) vitals.tick(PetVitalsManager.currentHour(), touching);
-            // v1.24.0：每 30 分钟巡检一次主动行为
             long now = System.currentTimeMillis();
+            applyAutonomousExpression(now);
+            // v1.24.0：每 30 分钟巡检一次主动行为
             if (proactiveEngine != null
                     && now - lastProactiveTickMs > com.digitallife.brain.ProactiveEngine.INTERVAL_MS) {
                 lastProactiveTickMs = now;
@@ -448,6 +457,26 @@ public class PetService extends Service implements AICore.Output,
         mainHandler.postDelayed(vitalsTickRunnable, 1000L);
     }
 
+    /**
+     * v1.140.0（Issue #48）：情绪外显。
+     *
+     * <p>只在「没有其它东西在演」时接管待机表情：L2 状态机非 IDLE（犯困/无聊/生气/高兴
+     * 各有姿态）、有动作在播、或刚发生过用户/对话交互的冷却期内，都让位不抢。
+     * 真正切换仍交给 {@link EmotionExpression} 的迟滞 + 最短停留判定；变了才写 UI，
+     * 顺带按表情配一个自主小动作。</p>
+     */
+    private void applyAutonomousExpression(long now) {
+        if (aiCore == null || overlayView == null) return;
+        if (vitals != null && vitals.getState() != PetState.IDLE) return;
+        if (overlayView.isMotionPlaying()) return;
+        if (now - lastInteractionMs < OVERRIDE_COOLDOWN_MS) return;
+        String changed = emotionExpression.update(aiCore.getEmotion(), now);
+        if (changed == null) return;
+        overlayView.setExpression(changed);
+        String motion = EmotionExpression.motionFor(changed);
+        if (motion != null) overlayView.setMotion(motion);
+    }
+
     // ================= 悬浮窗交互 =================
 
     @Override
@@ -486,6 +515,10 @@ public class PetService extends Service implements AICore.Output,
         // v1.137.0（Issue #37）：摸头 / 戳身子的差异化反馈。
         // 只读调用 EmotionState 公开方法，不改 brain/ 内部算法；表情与动作已在 PetOverlayView 落定。
         PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
+        // 表情由 PetOverlayView 落定；这里同步内部状态，避免冷却期一过就抢回旧表情
+        if (reaction.expression != null) {
+            emotionExpression.syncCurrent(reaction.expression, System.currentTimeMillis());
+        }
         if (aiCore != null) {
             if (reaction.intimacy != 0f) {
                 aiCore.getEmotion().addIntimacy(reaction.intimacy);
@@ -505,6 +538,7 @@ public class PetService extends Service implements AICore.Output,
         aiCore.onUserInteraction();
         noteUserInteraction();
         overlayView.setExpression("F02");
+        emotionExpression.syncCurrent("F02", System.currentTimeMillis());
         overlayView.showBubble("嘿嘿~ 戳我干嘛呀！", 2f);
     }
 
@@ -526,6 +560,7 @@ public class PetService extends Service implements AICore.Output,
         switch (index) {
             case PetQuickMenu.ITEM_EXPRESSION:
                 currentExpression = PetQuickMenu.nextExpression(currentExpression);
+                emotionExpression.syncCurrent(currentExpression, System.currentTimeMillis());
                 if (overlayView != null) {
                     overlayView.setExpression(currentExpression);
                     overlayView.showBubble("表情：" + PetQuickMenu.expressionLabel(currentExpression), 1.6f);
@@ -951,10 +986,12 @@ public class PetService extends Service implements AICore.Output,
     public PetOverlayView getOverlayView() { return overlayView; }
     public boolean isVoiceEnabled() { return voiceEnabled; }
 
-    /** 用户交互登记：喂饱生理状态机、重置独白空闲计时 */
+    /** 用户交互登记：喂饱生理状态机、重置独白空闲计时、让自主表情让位 */
     private void noteUserInteraction() {
         if (vitals != null) vitals.noteInteraction();
         if (thoughtLoop != null) thoughtLoop.noteInteraction();
+        // v1.140.0（Issue #48）：交互后的冷却期内不抢表情（AI 回复也会经此触发）
+        lastInteractionMs = System.currentTimeMillis();
     }
 
     /** 语音引擎诊断文本（供配置页显示） */
