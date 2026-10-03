@@ -108,4 +108,35 @@ public final class ChatTextOps {
         }
         return new SimpleDateFormat("yyyy/M/d HH:mm", locale).format(new Date(ts));
     }
+
+    // ==================== 引用回复 ====================
+
+    /** 引用块默认最多引用的行数（超出补一行「> …」） */
+    public static final int QUOTE_MAX_LINES = 4;
+
+    /**
+     * 生成引用块：每行加 {@code "> "} 前缀，超长按行截断并补 {@code "> …"}。
+     * <p>纯逻辑（不依赖 Android 类），便于单测。引用前先剥掉折叠提示后缀，
+     * 否则「▸ 展开全文」会被一起引用进输入框。</p>
+     */
+    public static String buildQuote(String text) {
+        return buildQuote(text, QUOTE_MAX_LINES);
+    }
+
+    public static String buildQuote(String text, int maxLines) {
+        if (text == null) return "";
+        String t = stripCollapseHint(text).trim();
+        if (t.isEmpty()) return "";
+        int limit = maxLines <= 0 ? QUOTE_MAX_LINES : maxLines;
+        String[] lines = t.split("\n", -1);
+        int n = Math.min(lines.length, limit);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            sb.append("> ").append(lines[i].trim());
+            if (i < n - 1) sb.append('\n');
+        }
+        if (lines.length > n) sb.append('\n').append("> …");
+        sb.append('\n');
+        return sb.toString();
+    }
 }
