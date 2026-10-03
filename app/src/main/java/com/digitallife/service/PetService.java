@@ -37,6 +37,7 @@ import com.digitallife.util.MemoryStore;
 import com.digitallife.util.Settings;
 import com.digitallife.util.ThoughtStore;
 import com.digitallife.ui.PetOverlayView;
+import com.digitallife.ui.pet.PetQuickMenu;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.render.ContinuousMotionEngine;
@@ -88,6 +89,10 @@ public class PetService extends Service implements AICore.Output,
     private volatile boolean touching = false;
     private boolean vitalsTicking = false;
     private long lastDragTime = 0;
+    /** v1.135.0（Issue #27）：长按菜单里的「锁定位置」状态；锁拖拽，不锁点击 */
+    private boolean positionLocked = false;
+    /** v1.135.0：手动换表情的当前表情，菜单里点一次切下一个 */
+    private String currentExpression = "F01";
 
     private final STTEngine.Listener sttListener = new STTEngine.Listener() {
         @Override
@@ -184,6 +189,7 @@ public class PetService extends Service implements AICore.Output,
         int overlayH = (int) (size.y * 0.57f * scale);
 
         overlayView = new PetOverlayView(this, this);
+        positionLocked = settings.isPetLocked();
         Live2DNative.init(this);
         // 恢复上次导入的模型到 C++ 动态模型列表
         ModelManager.registerImportedModels(this);
@@ -474,7 +480,64 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onLongPress() {
-        openSettings();
+        // v1.135.0（Issue #27 第 2 条）：长按不再直接跳设置，改为弹快捷菜单
+        if (overlayView == null) return;
+        noteUserInteraction();
+        overlayView.showQuickMenu(PetQuickMenu.items(positionLocked), new PetOverlayView.MenuCallback() {
+            @Override
+            public void onItem(int index) {
+                onQuickMenuItem(index);
+            }
+        });
+    }
+
+    /** 长按菜单的动作分发；索引取 {@link PetQuickMenu} 的常量，不靠文案匹配 */
+    private void onQuickMenuItem(int index) {
+        switch (index) {
+            case PetQuickMenu.ITEM_EXPRESSION:
+                currentExpression = PetQuickMenu.nextExpression(currentExpression);
+                if (overlayView != null) {
+                    overlayView.setExpression(currentExpression);
+                    overlayView.showBubble("表情：" + PetQuickMenu.expressionLabel(currentExpression), 1.6f);
+                }
+                break;
+            case PetQuickMenu.ITEM_DOCK_EDGE:
+                // 用户明确点了贴边，就把开关打开并立刻吸附（几何复用 #26 的 OverlayDock）
+                if (settings != null) settings.setEdgeDockEnabled(true);
+                snapToEdgeIfNeeded();
+                break;
+            case PetQuickMenu.ITEM_CENTER:
+                moveOverlayToCenter();
+                break;
+            case PetQuickMenu.ITEM_LOCK:
+                positionLocked = !positionLocked;
+                if (settings != null) settings.setPetLocked(positionLocked);
+                if (overlayView != null) {
+                    overlayView.showBubble(positionLocked ? "位置锁好啦，拖不动我" : "解锁啦，可以拖了", 1.6f);
+                }
+                break;
+            case PetQuickMenu.ITEM_SETTINGS:
+            default:
+                openSettings();
+                break;
+        }
+    }
+
+    /** 「回到中间」：把窗口挪回屏幕正中并持久化 */
+    private void moveOverlayToCenter() {
+        if (windowManager == null || overlayView == null || overlayParams == null) return;
+        try {
+            Point size = new Point();
+            windowManager.getDefaultDisplay().getRealSize(size);
+            int x = PetQuickMenu.centerX(overlayParams.width, size.x);
+            int y = PetQuickMenu.centerY(overlayParams.height, size.y);
+            if (x == overlayParams.x && y == overlayParams.y) return;
+            overlayParams.x = x;
+            overlayParams.y = y;
+            windowManager.updateViewLayout(overlayView, overlayParams);
+            if (settings != null) settings.setOverlayPos(x, y);
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
@@ -515,7 +578,10 @@ public class PetService extends Service implements AICore.Output,
                 gl.setParamTarget("ParamAngleZ", 0f);
                 gl.setParamTarget("ParamBodyAngleX", 0f);
             }
-            snapToEdgeIfNeeded(); // v1.132.0：松手吸附到最近的左/右边缘
+            // v1.132.0：松手吸附到最近的左/右边缘。
+            // v1.135.0：菜单刚弹出时不要吸附，否则长按出菜单的瞬间窗口会跳一下；
+            // 锁了位置也不能吸附，否则「锁定」形同虚设
+            if (!positionLocked && !overlayView.isQuickMenuShowing()) snapToEdgeIfNeeded();
         }
     }
 
@@ -543,6 +609,7 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onDragged(float dx, float dy) {
+        if (positionLocked) return; // v1.135.0：锁定位置时不再跟随手指（点击/长按照常，菜单里能解锁）
         overlayParams.x += dx;
         overlayParams.y += dy;
         if (overlayParams.x < 0) overlayParams.x = 0;

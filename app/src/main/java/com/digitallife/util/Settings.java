@@ -58,6 +58,10 @@ public class Settings {
     public boolean isPetEnabled() { return sp.getBoolean("pet_enabled", false); }
     public void setPetEnabled(boolean v) { sp.edit().putBoolean("pet_enabled", v).apply(); }
 
+    /** 桌宠位置是否锁定（v1.135.0，默认不锁；锁拖拽不锁点击，长按菜单里可解锁） */
+    public boolean isPetLocked() { return sp.getBoolean("pet_locked", false); }
+    public void setPetLocked(boolean v) { sp.edit().putBoolean("pet_locked", v).apply(); }
+
     public float getOverlayX() { return sp.getFloat("overlay_x", -1f); }
     public float getOverlayY() { return sp.getFloat("overlay_y", -1f); }
     public void setOverlayPos(float x, float y) { sp.edit().putFloat("overlay_x", x).putFloat("overlay_y", y).apply(); }
