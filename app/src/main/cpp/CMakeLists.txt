@@ -53,4 +53,12 @@ target_link_libraries(maidendungeon
     log
 )
 
+# Android 15 起系统支持 16 KB 内存页，Android 16（API 36）设备默认启用。
+# 按 4 KB 对齐链接出的 .so 在这些设备上会直接加载失败，表现为「装上打不开 / 启动即崩」。
+# 这里显式要求 16 KB 对齐：16 KB 对齐的库在 4 KB 页设备上同样可用，二者通吃。
+# （NDK r27+ 已默认 16 KB，此参数对高版本 NDK 无副作用，作为兼容低版本 NDK 的兜底。）
+target_link_options(maidendungeon PRIVATE
+    "-Wl,-z,max-page-size=16384"
+)
+
 target_compile_definitions(maidendungeon PRIVATE CSM_TARGET_ANDROID_ES2)
