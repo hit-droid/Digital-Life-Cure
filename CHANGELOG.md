@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.140.0 (2026-10-03)
+
+本轮合并两个 PR：#49（API Key 加密存储 + 收紧备份 + 数据导出/一键清除，Closes #47）与 #50（情绪外显——情绪驱动待机表情 + 自主小动作，Closes #48），均由 trae 提交，发布负责人 trae 统一 bump 发版。
+
+### API Key 加密存储 + 收紧备份 + 数据导出 / 一键清除
+
+**问题**：API Key 以明文躺在 `shared_prefs` 里，且 `allowBackup` 默认 `true`，会被系统云备份带出；用户也没有任何「把数据拿走 / 清干净」的手段。
+
+- **`util/SecureCrypto`**（纯逻辑，JVM 可测）：AES/GCM/NoPadding，密文格式 `enc:v1:<hex(iv || ciphertext+tag)>`；hex 手写编解码，避开 `java.util.Base64`（API 26+）/`android.util.Base64`（JVM 不可用）的版本与可测性问题。无前缀的历史明文读取时原样返回，天然兼容旧数据。
+- **`util/SecureStore`**：密钥生成/保存在 Android Keystore（不外泄、不随备份导出）；API < 23 无 Keystore AES 时降级明文并在设置页明确提示，不牺牲老机型可用性。密钥解析一次后静态缓存，避免每次读写都过 Keystore。
+- **`util/Settings`**：`getApiKey` 首次读到明文即透明加密回写（迁移无感）；`setApiKey` 一律加密写入。新增 `isSecureStorageSupported()` 供 UI 展示状态。
+- **`AndroidManifest`**：`android:allowBackup="false"`，含密文的 prefs 不再被云备份带出；数据迁移改由设置页的导出/清除提供。
+- **`storage/DataPort`**（纯逻辑，传 `File` 根目录便于单测）：导出把 `shared_prefs/`、`databases/`、`files/` 打成 zip，**排除体积大的 `files/models/`**（否则包会被撑爆、清除后还要重新导入模型）；清除即删除同一范围并保留模型，供「一键清除」复用。
+- **`ui/SettingsTabView`**：新增「数据与隐私」卡——加密状态说明、SAF `ACTION_CREATE_DOCUMENT` 导出、二次确认后清除、隐私说明弹窗。
+- 新增 **18 单测**：`SecureCrypto`（往返 / 随机 IV / 换密钥 / 篡改 GCM tag / hex）、`DataPort`（导出条目 / 递归打包 / 清除保留模型 / 缺目录容错）。
+
+### 情绪外显：情绪驱动待机表情 + 自主小动作（#48）
+
+**问题**：`EmotionState` 一直在演化，但除触摸/对话瞬时设一下表情外，待机时桌宠始终是同一张脸——有内部情绪却不外显。
+
+- **`ui/pet/EmotionExpression`**（纯逻辑，JVM 可测）：把情绪向量映射为 `F01`~`F06`，并做**两层防抖**避免边界抖动——最短停留 4s；切换迟滞要求目标情绪比「当前表情对应情绪」高出 `0.12`；平静值占优或主要情绪低于 `0.5` 时回落 `F01`。另提供 `expressionFor`/`dimOf` 双向映射与 `motionFor` 配套小动作。
+- **`service/PetService`**：接入 1Hz vitals tick，仅在 L2 状态机为 `IDLE`、无动作在播、且距上次交互超过 6s 冷却时接管待机表情；切换时顺带播一个匹配的自主小动作。用户点击/长按/手动换表情会 `syncCurrent` 对齐内部状态，冷却期一过不抢回旧表情。
+- 新增 **12 单测**：目标判定阈值、迟滞挡近似切换、最短停留、交互同步、静态映射。
+
+### 验证
+
+新增 30 单测（SecureCrypto 11 + DataPort 7 + EmotionExpression 12），单测总数 **424 / 35 个测试类**，失败 0、错误 0；本地 `verify.sh --quick` 三关全绿（compile / test / lint，lint 0 error）。
+
 ## v1.139.0 (2026-10-03)
 
 形象管理页补上「从本地文件导入模型」（PR #46，Closes #45）。
