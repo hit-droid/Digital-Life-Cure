@@ -192,6 +192,22 @@ public class SubagentTest {
         String desc = SubagentPresets.describeAll();
         assertTrue(desc.contains("researcher"));
         assertTrue(desc.contains("secretary"));
+        assertTrue("撰稿/审校应可被委派（供「研究→写稿→审校」链条使用）", desc.contains("writer"));
+        assertTrue("撰稿/审校应可被委派（供「研究→写稿→审校」链条使用）", desc.contains("critic"));
+    }
+
+    @Test
+    public void writerAndCriticPresetsAreRegisteredAndReadOnly() {
+        for (String name : new String[]{"writer", "critic"}) {
+            SubagentPreset p = SubagentPresets.get(name);
+            assertNotNull(name + " 必须注册进 preset 注册表", p);
+            assertTrue(name + " 不应带写操作/联网工具",
+                    !p.tools.contains("web_search") && !p.tools.contains("schedule_task"));
+            for (String t : p.tools) {
+                assertFalse(name + " 不该有委派工具：" + t, "delegate_task".equals(t));
+            }
+            assertTrue(name + " 步数应受限", p.maxSteps >= 1 && p.maxSteps <= 3);
+        }
     }
 
     @Test
