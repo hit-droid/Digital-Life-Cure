@@ -6,6 +6,16 @@ android {
     namespace 'com.digitallife'
     compileSdk 34
 
+    // v1.150.0：显式固定 NDK 版本，消除「修了又炸」的环境漂移。
+    // 此前不指定 ndkVersion，实际用的 NDK 由「AGP 8.5.0 的默认值 + runner 现场下载」共同决定，
+    // 会随 AGP/镜像更新而变——同一份源码在不同时间编出的 .so 对齐可能不同，
+    // 这正是 Android 16 闪退修复「上次修好、这次又炸」在工具链层面的来源。
+    // 固定为 r27.3.13750724：既与 GitHub runner 预装版本一致（无需现场下载），
+    // 又因 r27+ 默认即 16 KB 对齐（max/common-page-size 均 16384），与本项目 CMakeLists 的显式链接项叠成双保险。
+    // 注意：改这里与 CMakeLists 注释里的「r26.1」不一致，故同步更新了注释；如需留在 r26 线，
+    // 亦可改为 "26.3.11579264"（runner 亦预装），16 KB 仍由 CMakeLists 的两个链接参数保证。
+    ndkVersion "27.3.13750724"
+
     defaultConfig {
         applicationId "com.digitallife"
         minSdk 21
