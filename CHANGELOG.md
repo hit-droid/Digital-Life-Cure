@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.144.0 (2026-10-04)
+
+本版为**工程化重构**：把 `care/CareTools` 里不依赖 Android 的纯文件/文本逻辑下沉到新类 `CareFileOps` 并补单测，行为不变。
+
+### CareTools 上帝类下沉（护理包可测性）
+
+**问题**：`care/CareTools` 是 1400+ 行的护理工具集，zip 解压 / 模型分析 / 动作编辑全混在一起；其中 `safeResolve`（Zip Slip 防护）、`stripModelJsonSuffix`、`sanitizeDirName`、`formatSize`、`relPath`、`firstFile`、`countFiles`、`readFile`、`deleteRecursive`、`copyRecursive`、`copyFile` 都是无状态纯逻辑，却埋在 Android 依赖里，安全相关的 Zip Slip 防护此前**零测试覆盖**。
+
+- 新增 `care/CareFileOps`（纯 Java 工具类，不依赖 Android API），承接上述方法。
+- `care/CareTools` 一律改走 `CareFileOps.*`，只保留业务编排，瘦身约 190 行。
+- 新增 `CareFileOpsTest`（纯 JVM 单测，14 例）：覆盖 Zip Slip 边界（绝对路径 / `..` 穿越 / 空路径）、后缀剥离大小写、目录名净化、尺寸与相对路径格式化、递归统计/复制/删除。
+
+### 验证
+
+纯迁移，无行为变更。`testDebugUnitTest` 单测门禁通过后合并；push main 后由 workflow 出 `app-release.apk` 并发行 Release。
+
 ## v1.143.0 (2026-10-04)
 
 本版为**发行与安全加固**（P0 打包）：发行包从 debug 构建切到正式 release 构建、MCP 鉴权令牌加密落盘、收紧组件导出。由发布负责人 trae 完成后 bump。
