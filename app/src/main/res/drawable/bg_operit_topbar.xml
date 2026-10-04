@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 顶栏背景：品牌紫自顶部向下渐隐融入页面底色（Operit AI 风格「hero header」）。
+     纵向渐变到 operit_bg，使顶栏与内容区无缝衔接，而不是一块突兀的纯色条。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
-        android:startColor="#6D5BBA"
-        android:endColor="#4A3A8A"
-        android:angle="90" />
+        android:angle="90"
+        android:startColor="@color/operit_header_start"
+        android:endColor="@color/operit_bg"
+        android:type="linear" />
 </shape>

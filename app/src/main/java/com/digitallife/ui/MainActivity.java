@@ -43,8 +43,9 @@ public class MainActivity extends Activity {
     private TextView tvTitle;
     private TextView tvSubtitle;
     private FrameLayout content;
-    private LinearLayout navBar;
-    private LinearLayout[] navItems = new LinearLayout[5];
+
+    // 主壳底部 5 Tab 导航（仿 Operit AI）
+    private com.digitallife.ui.shell.OperitBottomNav bottomNav;
 
     // v1.23.0 Operit 侧栏
     private OperitDrawer operitDrawer;
@@ -93,17 +94,35 @@ public class MainActivity extends Activity {
         }
         apiManager.syncCurrentToSettings(ApiManager.SCOPE_CHAT, settings);
 
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        buildUi();
+        // 必须在 buildUi()（内部 setContentView）之后调用：此时 decorView 必然已创建
+        applySystemBars();
+        registerShortcuts();
+    }
+
+    /**
+     * 沉浸式系统栏：状态栏透明、内容用浅色图标（顶栏是深紫）。
+     *
+     * 关键：先取一次 {@code getWindow().getDecorView()}（内部会 installDecor），再取
+     * insetsController。Android 16 的 {@code PhoneWindow.getInsetsController()} 直接解引用
+     * mDecor、不再内部补建 decor，decor 尚未创建时会抛 NullPointerException —— 这正是
+     * v1.148.0 及以前「Android 16 点开即闪退、且时好时坏」的真凶（见 CrashHandler 抓到的日志：
+     * PhoneWindow.getInsetsController → MainActivity.onCreate）。这里既保证顺序、也做空值兜底。
+     */
+    private void applySystemBars() {
+        android.view.Window window = getWindow();
+        window.setStatusBarColor(Color.TRANSPARENT);
+        android.view.View decor = window.getDecorView();   // 触发 installDecor，避免 mDecor 为空
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            getWindow().getInsetsController().setSystemBarsAppearance(0,
-                    android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+            android.view.WindowInsetsController c = window.getInsetsController();
+            if (c != null) {
+                c.setSystemBarsAppearance(0,
+                        android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+            }
         } else {
-            getWindow().getDecorView().setSystemUiVisibility(
+            decor.setSystemUiVisibility(
                     android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE | android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         }
-
-        buildUi();
-        registerShortcuts();
     }
 
     /**
@@ -191,30 +210,27 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
-        // ===== 顶部标题栏（大标题 + 副标题） =====
-        // v1.23.0: 仿 Operit AI 深色紫色顶栏 56dp
+        // ===== 顶部 AppBar（Operit AI 风格：紫色自顶向下渐隐 + 圆形菜单按钮） =====
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundColor(getColorCompat(R.color.brand_operit));
-        topBar.setElevation(dp(4));
-        topBar.setPadding(dp(8), statusBarHeight() + dp(8), dp(20), dp(12));
+        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
+        topBar.setPadding(dp(8), statusBarHeight() + dp(10), dp(14), dp(12));
 
-        // v1.23.0 顶栏左侧汉堡按钮（仿 Operit TopAppBar navigationIcon）
-        TextView btnMenu = new TextView(this);
-        btnMenu.setText("\u2630");
-        btnMenu.setTextSize(22f);
-        btnMenu.setTextColor(Color.WHITE);
-        btnMenu.setPadding(dp(8), dp(8), dp(16), dp(8));
-        btnMenu.setIncludeFontPadding(false);
-        topBar.addView(btnMenu, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // 顶栏左侧导航菜单按钮（矢量图标 + 圆形涟漪）
+        ImageView btnMenu = new ImageView(this);
+        btnMenu.setImageResource(R.drawable.ic_menu);
+        btnMenu.setColorFilter(Color.WHITE);
+        btnMenu.setScaleType(ImageView.ScaleType.CENTER);
+        btnMenu.setContentDescription("打开侧栏导航");
+        btnMenu.setBackgroundResource(R.drawable.operit_icon_button_ripple);
+        topBar.addView(btnMenu, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         tvTitle = new TextView(this);
         tvTitle.setText(TAB_TITLES[0]);
-        tvTitle.setTextSize(22f);
+        tvTitle.setTextSize(21f);
         tvTitle.setTextColor(Color.WHITE);
         tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tvTitle.setIncludeFontPadding(false);
@@ -223,16 +239,37 @@ public class MainActivity extends Activity {
         tvSubtitle = new TextView(this);
         tvSubtitle.setText(TAB_SUBTITLES[0]);
         tvSubtitle.setTextSize(11f);
-        tvSubtitle.setTextColor(Color.WHITE);
-        tvSubtitle.setAlpha(0.82f);
-        tvSubtitle.setLetterSpacing(0.04f);
+        tvSubtitle.setTextColor(0xCCFFFFFF);
         tvSubtitle.setIncludeFontPadding(false);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        slp.topMargin = dp(3);
+        slp.topMargin = dp(4);
         titles.addView(tvSubtitle, slp);
-        topBar.addView(titles, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams titlesLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titlesLp.leftMargin = dp(6);
+        topBar.addView(titles, titlesLp);
+
+        // 顶栏右侧：小汐头像 + 在线点（与侧栏头部同一视觉语言）
+        FrameLayout avatarWrap = new FrameLayout(this);
+        ImageView avatar = new ImageView(this);
+        avatar.setImageResource(R.mipmap.ic_launcher);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setClipToOutline(true);
+        avatar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, android.graphics.Outline o) {
+                o.setOval(0, 0, v.getWidth(), v.getHeight());
+            }
+        });
+        avatarWrap.addView(avatar, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View onlineDot = new View(this);
+        onlineDot.setBackgroundResource(R.drawable.bg_operit_online_dot);
+        avatarWrap.addView(onlineDot, new FrameLayout.LayoutParams(
+                dp(10), dp(10), Gravity.BOTTOM | Gravity.END));
+        topBar.addView(avatarWrap, new LinearLayout.LayoutParams(dp(34), dp(34)));
+
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -277,6 +314,7 @@ public class MainActivity extends Activity {
                 });
         navController.addListener((old, newRoute) -> {
             operitDrawer.setSelected(newRoute);
+            if (bottomNav != null) bottomNav.setSelected(newRoute);
             tvTitle.setText(newRoute.titleRes);
             // 副标题：5 个主壳 Tab 用原副标题，高级路由显示简短提示
             switch (newRoute) {
@@ -312,6 +350,18 @@ public class MainActivity extends Activity {
 
         root.addView(shell, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        // 底部 5 Tab 导航：主 Tab 的唯一入口；记忆/护理等高级路由仍在左侧侧栏
+        // 左右 + 底部留边距，配合四角圆角背景，呈现为页面底部「浮起的一枚胶囊」
+        bottomNav = new com.digitallife.ui.shell.OperitBottomNav(this, route -> {
+            if (navController != null) navController.navigate(route);
+        });
+        LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        navLp.leftMargin = dp(12);
+        navLp.rightMargin = dp(12);
+        navLp.bottomMargin = dp(10);
+        root.addView(bottomNav, navLp);
 
         setContentView(root);
         // v1.23.0: 初次按 last_route 启动（默认 CHAT）
