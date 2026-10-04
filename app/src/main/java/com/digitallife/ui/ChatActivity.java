@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.View;
@@ -1588,15 +1589,19 @@ public class ChatActivity extends Activity {
     /** 在气泡文本末尾追加「展开 / 收起」提示（用次要色 + 小字） */
     private void appendCollapseHint(TextView bubble, CharSequence fullText, boolean expanded) {
         String hint = expanded ? "\n\n▾ 收起" : "\n\n▸ 展开全文";
-        SpannableString ss = new SpannableString(fullText.toString() + hint);
-        ss.setSpan(new android.text.style.ForegroundColorSpan(
+        // v1.142.0（#66）：用 SpannableStringBuilder 拼接，保留 AI 气泡的 Markdown span。
+        // 原先 fullText.toString() 会把加粗/代码/链接 span 冲成纯文本，
+        // 长 AI 消息一折叠就退化成纯文本、展开也回不来。
+        SpannableStringBuilder ssb = new SpannableStringBuilder(fullText);
+        int start = ssb.length();
+        ssb.append(hint);
+        int end = ssb.length();
+        ssb.setSpan(new android.text.style.ForegroundColorSpan(
                         getColorCompat(R.color.operit_accent)),
-                fullText.length(), ss.length(),
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        ss.setSpan(new android.text.style.RelativeSizeSpan(0.9f),
-                fullText.length(), ss.length(),
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        bubble.setText(ss);
+                start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ssb.setSpan(new android.text.style.RelativeSizeSpan(0.9f),
+                start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        bubble.setText(ssb);
     }
 
     // ==================== v1.36.0：会话内搜索 ====================
