@@ -3037,6 +3037,13 @@ public class ChatActivity extends Activity {
             handler.removeCallbacks(thinkingUpdater);
             thinkingUpdater = null;
         }
+        // v1.145.0（#77）：清掉本 Activity 私有 handler 上所有待执行回调。
+        // 此前只 remove 了 thinkingUpdater，漏了输入建议的 suggestionDebounce
+        // （输入框聚焦/清空后 postDelayed 1s）。用户在该窗口内退出会话时，
+        // 延迟任务仍会触发 requestSuggestions()，对已销毁的 Activity 发起一次
+        // 无效的 LLM 网络请求，并在回调里操作已 detach 的 suggestionBar。
+        // handler 仅本 Activity 使用，removeCallbacksAndMessages(null) 一次清干净。
+        handler.removeCallbacksAndMessages(null);
         if (scrollWatcher != null) {
             try {
                 scroll.getViewTreeObserver().removeOnScrollChangedListener(scrollWatcher);
