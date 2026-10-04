@@ -367,7 +367,8 @@ public final class UiKit {
         dlg.show();
     }
 
-    private static void addInfoRow(Context c, LinearLayout root, String key, String val) {
+    /** 键值信息行（左键右值）。v1.157.0 起公开，供二级页复用，避免各自重实现（issue #100） */
+    public static void addInfoRow(Context c, LinearLayout root, String key, String val) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, dp(c, 6), 0, dp(c, 6));

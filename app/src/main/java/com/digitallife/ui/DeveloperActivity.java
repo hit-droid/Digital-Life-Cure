@@ -4,14 +4,11 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.graphics.Typeface;
 import android.os.Bundle;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.TextView;
 
 import com.digitallife.R;
 import com.digitallife.tools.HookRunner;
@@ -47,27 +44,27 @@ public class DeveloperActivity extends Activity {
                 UiKit.dp(this, 16), UiKit.dp(this, 16));
 
         // ===== 版本信息 =====
-        content.addView(buildSection("版本信息"));
-        content.addView(buildInfoRow("App", appVersionText()));
-        content.addView(buildInfoRow("角色", "小汐"));
-        content.addView(buildInfoRow("智能体", "已启用（工具/记忆/角色/计划/控制台）"));
-        content.addView(buildInfoRow("Java", System.getProperty("java.version")));
-        content.addView(buildInfoRow("Android", android.os.Build.VERSION.RELEASE
-                + " (API " + android.os.Build.VERSION.SDK_INT + ")"));
+        LinearLayout versionCard = UiKit.card(this, content, "版本信息");
+        UiKit.addInfoRow(this, versionCard, "App", appVersionText());
+        UiKit.addInfoRow(this, versionCard, "角色", "小汐");
+        UiKit.addInfoRow(this, versionCard, "智能体", "已启用（工具/记忆/角色/计划/控制台）");
+        UiKit.addInfoRow(this, versionCard, "Java", System.getProperty("java.version"));
+        UiKit.addInfoRow(this, versionCard, "Android", android.os.Build.VERSION.RELEASE
+                + " (API " + android.os.Build.VERSION.SDK_INT + ")");
 
         // ===== 智能体状态 =====
-        content.addView(buildSection("智能体状态"));
-        content.addView(buildInfoRow("Hook Runner",
+        LinearLayout statusCard = UiKit.card(this, content, "智能体状态");
+        UiKit.addInfoRow(this, statusCard, "Hook Runner",
                 "pre=" + HookRunner.getInstance().preCount()
                         + " post=" + HookRunner.getInstance().postCount()
-                        + " err=" + HookRunner.getInstance().errCount()));
-        content.addView(buildInfoRow("脑日志",
-                com.digitallife.brain.BrainLog.getInstance().recent(0).size() + " 条"));
-        content.addView(buildInfoRow("工具调用",
-                new com.digitallife.tools.ToolUsageLog(this).all().size() + " 条"));
+                        + " err=" + HookRunner.getInstance().errCount());
+        UiKit.addInfoRow(this, statusCard, "脑日志",
+                com.digitallife.brain.BrainLog.getInstance().recent(0).size() + " 条");
+        UiKit.addInfoRow(this, statusCard, "工具调用",
+                new com.digitallife.tools.ToolUsageLog(this).all().size() + " 条");
 
         // ===== 操作 =====
-        content.addView(buildSection("调试操作"));
+        UiKit.sectionTitle(this, content, "调试操作", null);
 
         Button exportBrain = mkButton("导出脑日志到剪贴板");
         exportBrain.setOnClickListener(v -> {
@@ -120,16 +117,6 @@ public class DeveloperActivity extends Activity {
         setContentView(root);
     }
 
-    private View buildSection(String title) {
-        TextView tv = new TextView(this);
-        tv.setText(title);
-        tv.setTextSize(14f);
-        tv.setTypeface(Typeface.DEFAULT_BOLD);
-        tv.setTextColor(0xFF6366F1);
-        tv.setPadding(0, UiKit.dp(this, 12), 0, UiKit.dp(this, 6));
-        return tv;
-    }
-
     /** 版本号从 PackageManager 实时读取，避免界面写死版本随发版过期 */
     private String appVersionText() {
         try {
@@ -139,25 +126,6 @@ public class DeveloperActivity extends Activity {
         } catch (Exception e) {
             return "未知";
         }
-    }
-
-    private View buildInfoRow(String key, String value) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        TextView k = new TextView(this);
-        k.setText(key);
-        k.setTextSize(13f);
-        k.setTextColor(UiKit.color(this, R.color.operit_text_hint));
-        row.addView(k, new LinearLayout.LayoutParams(
-                UiKit.dp(this, 90), ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView v = new TextView(this);
-        v.setText(value);
-        v.setTextSize(13f);
-        v.setTypeface(Typeface.MONOSPACE);
-        v.setTextColor(UiKit.color(this, R.color.operit_text_primary));
-        row.addView(v, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return row;
     }
 
     private Button mkButton(String text) {
