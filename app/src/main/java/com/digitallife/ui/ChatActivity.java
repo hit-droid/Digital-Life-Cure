@@ -275,6 +275,33 @@ public class ChatActivity extends Activity {
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        // ===== 搜索导航条（v1.142.0 #63）：命中时浮在顶栏下方 =====
+        {
+            searchNavBar = new LinearLayout(this);
+            searchNavBar.setOrientation(LinearLayout.HORIZONTAL);
+            searchNavBar.setGravity(Gravity.CENTER_VERTICAL);
+            searchNavBar.setBackgroundColor(getColorCompat(R.color.operit_surface));
+            searchNavBar.setElevation(dp(2));
+            searchNavBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+            TextView prev = navButton("‹ 上一处");
+            prev.setOnClickListener(v -> { UiKit.flash(v); gotoHit(searchHitIndex - 1); });
+            searchNavLabel = new TextView(this);
+            searchNavLabel.setTextSize(13f);
+            searchNavLabel.setTextColor(getColorCompat(R.color.operit_text_primary));
+            searchNavLabel.setPadding(dp(12), 0, dp(12), 0);
+            TextView next = navButton("下一处 ›");
+            next.setOnClickListener(v -> { UiKit.flash(v); gotoHit(searchHitIndex + 1); });
+            TextView close = navButton("✕");
+            close.setOnClickListener(v -> { UiKit.flash(v); closeSearch(); });
+            searchNavBar.addView(prev);
+            searchNavBar.addView(searchNavLabel);
+            searchNavBar.addView(next);
+            searchNavBar.addView(close);
+            searchNavBar.setVisibility(View.GONE);
+            root.addView(searchNavBar, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
         // ===== 消息列表 =====
         scroll = new ScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
@@ -1573,6 +1600,14 @@ public class ChatActivity extends Activity {
     private java.util.List<Integer> searchHits = new java.util.ArrayList<>();
     private int searchHitIndex = 0;
 
+    /** v1.142.0（#63）：搜索「上一处 / 下一处」浮动导航条（顶栏下方），替代原先只 toast 的占位实现 */
+    private LinearLayout searchNavBar = null;
+    private TextView searchNavLabel = null;
+    /** 当前高亮命中的气泡，以及叠加在它文本上的高亮 span——导航/关闭时移除，恢复 Markdown 格式 */
+    private TextView searchHiBubble = null;
+    private final java.util.ArrayList<android.text.style.BackgroundColorSpan> searchHiSpans =
+            new java.util.ArrayList<>();
+
     /** 弹搜索框，输入关键词后定位到第一处命中 */
     private void showSearchDialog() {
         final EditText input = new EditText(this);
@@ -1602,6 +1637,7 @@ public class ChatActivity extends Activity {
         searchQuery = query;
         searchHits.clear();
         searchHitIndex = 0;
+        clearSearchHighlight();   // 换关键词时先清掉上一次的高亮（即便本次没命中）
         String lower = query.toLowerCase(java.util.Locale.ROOT);
         for (int i = 0; i < listContainer.getChildCount(); i++) {
             android.view.View child = listContainer.getChildAt(i);
@@ -1616,9 +1652,8 @@ public class ChatActivity extends Activity {
             return;
         }
         gotoHit(0);
-        Toast.makeText(this, "找到 " + searchHits.size() + " 处，点击「下一处」继续",
+        Toast.makeText(this, "找到 " + searchHits.size() + " 处（用顶部导航条上下翻）",
                 Toast.LENGTH_SHORT).show();
-        showNextHitControl();
     }
 
     /** 滚动到第 index 处命中并高亮闪一下 */
@@ -1627,6 +1662,7 @@ public class ChatActivity extends Activity {
         if (index < 0) index = 0;
         if (index >= searchHits.size()) index = 0;   // 循环
         searchHitIndex = index;
+        clearSearchHighlight();   // 先复原上一条命中的高亮（含其 Markdown 格式）
         int childIndex = searchHits.get(index);
         android.view.View child = listContainer.getChildAt(childIndex);
         if (child == null) return;
@@ -1639,29 +1675,92 @@ public class ChatActivity extends Activity {
         if (bubble != null) {
             highlightText(bubble, searchQuery);
         }
+        showSearchNavBar();
     }
 
-    /** 命中关键词染成品牌色，搜索词变更时重绘即可复原（setText 会重建 span） */
+    /** 移除上一次叠加的高亮 span，把气泡文本复原（AI 气泡的 Markdown 格式一并恢复） */
+    private void clearSearchHighlight() {
+        if (searchHiBubble != null) {
+            CharSequence cs = searchHiBubble.getText();
+            if (cs instanceof Spannable) {
+                Spannable sp = (Spannable) cs;
+                for (android.text.style.BackgroundColorSpan s : searchHiSpans) sp.removeSpan(s);
+            }
+            searchHiBubble = null;
+        }
+        searchHiSpans.clear();
+    }
+
+    /**
+     * 命中关键词染成品牌色。
+     * v1.142.0（#63）：在气泡「已有文本」上叠加高亮 span，不再重建文本——
+     * AI 气泡的文本是 markdown Spannable，原先 {@code tv.setText(ss)} 会把加粗 / 代码 /
+     * 链接等格式全冲掉，搜索完一条 AI 消息就退化成纯文本。导航 / 关闭时由
+     * {@link #clearSearchHighlight()} 把叠加的 span 移除即可复原。
+     */
     private void highlightText(TextView tv, String query) {
         if (tv == null || query == null || query.isEmpty()) return;
-        String text = tv.getText() == null ? "" : tv.getText().toString();
+        CharSequence cur = tv.getText();
+        final Spannable sp;
+        if (cur instanceof Spannable) {
+            sp = (Spannable) cur;
+        } else {
+            sp = new SpannableString(cur == null ? "" : cur.toString());
+            tv.setText(sp);
+        }
+        String text = sp.toString();
         String lower = text.toLowerCase(java.util.Locale.ROOT);
         String q = query.toLowerCase(java.util.Locale.ROOT);
-        SpannableString ss = new SpannableString(text);
         int from = 0;
         while (true) {
             int idx = lower.indexOf(q, from);
             if (idx < 0) break;
-            ss.setSpan(new android.text.style.BackgroundColorSpan(0x446C5CE7),
-                    idx, idx + q.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            android.text.style.BackgroundColorSpan s = new android.text.style.BackgroundColorSpan(0x446C5CE7);
+            sp.setSpan(s, idx, idx + q.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            searchHiSpans.add(s);
             from = idx + q.length();
         }
-        tv.setText(ss);
+        searchHiBubble = tv;
     }
 
-    /** 显示一个可重复使用的「下一处/关闭」浮动条 */
-    private void showNextHitControl() {
-        Toast.makeText(this, "再次点击顶栏「搜索」可跳转下一处", Toast.LENGTH_LONG).show();
+    /** 显示搜索导航条并刷新「第 i/n 处」文案 */
+    private void showSearchNavBar() {
+        if (searchNavBar == null) return;
+        updateSearchNavLabel();
+        searchNavBar.setVisibility(View.VISIBLE);
+    }
+
+    private void hideSearchNavBar() {
+        if (searchNavBar != null) searchNavBar.setVisibility(View.GONE);
+    }
+
+    private void updateSearchNavLabel() {
+        if (searchNavLabel == null) return;
+        searchNavLabel.setText("第 " + (searchHitIndex + 1) + "/" + searchHits.size() + " 处");
+    }
+
+    /** 关闭搜索：清高亮（恢复 Markdown 格式）、收起导航条、重置搜索状态 */
+    private void closeSearch() {
+        clearSearchHighlight();
+        hideSearchNavBar();
+        searchQuery = null;
+        searchHits.clear();
+        searchHitIndex = 0;
+    }
+
+    /** 导航条上的小按钮（与 chip 风格区分：用 surface 底色） */
+    private TextView navButton(String label) {
+        TextView b = new TextView(this);
+        b.setText(label);
+        b.setTextSize(13f);
+        b.setTextColor(getColorCompat(R.color.operit_text_primary));
+        b.setBackgroundResource(R.drawable.bg_chip_outline);
+        b.setPadding(dp(12), dp(6), dp(12), dp(6));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(6);
+        b.setLayoutParams(lp);
+        return b;
     }
 
     /**
