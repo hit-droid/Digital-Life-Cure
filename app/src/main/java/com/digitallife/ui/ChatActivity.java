@@ -34,6 +34,7 @@ import com.digitallife.brain.LLMClient;
 import com.digitallife.care.CareAI;
 import com.digitallife.harness.ToolApprovalPolicy;
 import com.digitallife.service.PetService;
+import com.digitallife.ui.chat.ChatLayoutOps;
 import com.digitallife.ui.chat.ChatTextOps;
 import com.digitallife.ui.chat.FailoverPolicy;
 import com.digitallife.ui.chat.HistoryBudget;
@@ -203,7 +204,8 @@ public class ChatActivity extends Activity {
     }
 
     private void buildUi() {
-        maxBubbleWidth = (int) (getResources().getDisplayMetrics().widthPixels * 0.82f);
+        maxBubbleWidth = ChatLayoutOps.maxBubbleWidthPx(
+                getResources().getDisplayMetrics().widthPixels);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(getColorCompat(R.color.operit_bg));
@@ -212,17 +214,20 @@ public class ChatActivity extends Activity {
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        // v1.26.0：护理大脑用专属深绿顶栏，区分普通对话
+        // v1.152.x（#96）：统一到 Operit hero header —— 顶栏自顶部向下渐隐融入页面底色，
+        // 与已落地的 UiKit.pageTopBar 同一语言；护理模式保留专属薄荷渐变做入口区分。
+        // 去掉旧顶栏的 elevation：渐隐 hero header 本就该与内容区无缝衔接，不该有投影边界。
         topBar.setBackgroundResource(isCare
-                ? R.drawable.bg_top_bar_care
-                : R.drawable.bg_top_bar);
-        topBar.setElevation(dp(4));
-        topBar.setPadding(dp(4), statusBarHeight() + dp(8), dp(4), dp(12));
+                ? R.drawable.bg_chat_topbar_care
+                : R.drawable.bg_operit_topbar);
+        topBar.setPadding(dp(8), ChatLayoutOps.topBarPaddingTopPx(
+                        statusBarHeight(), dp(ChatLayoutOps.TOP_BAR_BASE_PADDING_DP)),
+                dp(14), dp(ChatLayoutOps.TOP_BAR_BASE_PADDING_DP));
 
         ImageButton btnBack = iconButton(R.drawable.ic_back);
         btnBack.setContentDescription("返回");
         btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, btnLp(40, 40));
+        topBar.addView(btnBack, iconLp());
 
         TextView tvTitle = new TextView(this);
         tvTitleRef = tvTitle;   // v1.32.0：供自动标题更新
@@ -251,12 +256,12 @@ public class ChatActivity extends Activity {
 
         btnModel = new Button(this);
         btnModel.setTextSize(12f);
-        btnModel.setTextColor(Color.WHITE);
+        btnModel.setTextColor(getColorCompat(R.color.operit_accent));
         btnModel.setAllCaps(false);
         btnModel.setMaxWidth(dp(150));
         btnModel.setMaxLines(1);
         btnModel.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        btnModel.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnModel.setBackgroundResource(R.drawable.bg_pill_accent);
         btnModel.setPadding(dp(10), dp(4), dp(10), dp(4));
         UiKit.pressScale(btnModel);
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
@@ -274,7 +279,7 @@ public class ChatActivity extends Activity {
         btnMore.setTextSize(18f);
         btnMore.setTextColor(Color.WHITE);
         btnMore.setAllCaps(false);
-        btnMore.setBackgroundResource(R.drawable.bg_btn_glass);
+        btnMore.setBackgroundResource(R.drawable.operit_icon_button_ripple);
         btnMore.setPadding(dp(10), dp(2), dp(10), dp(2));
         btnMore.setMinWidth(dp(40));
         UiKit.pressScale(btnMore);
@@ -453,8 +458,8 @@ public class ChatActivity extends Activity {
         // .json/.java 等文本文件本就能读进上下文）——唯独按钮没建，等于死代码。
         btnAttach = new ImageButton(this);
         btnAttach.setImageResource(R.drawable.ic_attach);
-        btnAttach.setColorFilter(getColorCompat(R.color.brand));
-        btnAttach.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnAttach.setColorFilter(getColorCompat(R.color.operit_accent));
+        btnAttach.setBackgroundResource(R.drawable.operit_icon_button_ripple);
         btnAttach.setScaleType(ImageView.ScaleType.CENTER);
         btnAttach.setPadding(dp(10), dp(10), dp(10), dp(10));
         btnAttach.setContentDescription("附加文件");   // v1.37.0 无障碍
@@ -485,10 +490,15 @@ public class ChatActivity extends Activity {
                 etInput.setMaxLines(java.lang.Math.min(lines, INPUT_MAX_LINES));
             }
         });
-        etInput.setBackgroundResource(R.drawable.bg_input);
-        etInput.setPadding(dp(14), dp(10), dp(14), dp(10));
-        etInput.setOnFocusChangeListener((v, has) -> v.setBackgroundResource(
-                has ? R.drawable.bg_input_focused : R.drawable.bg_input));
+        etInput.setBackgroundResource(R.drawable.bg_chat_input);
+        // #96：输入框底色改为 Operit 深色 surface 后，必须显式给浅色正文与 hint ——
+        // 沿用 EditText 默认的黑色会在深色底上看不见。
+        etInput.setTextColor(getColorCompat(R.color.operit_text_primary));
+        etInput.setHintTextColor(getColorCompat(R.color.operit_text_hint));
+        etInput.setPadding(dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP),
+                dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP));
+        // #96：此处原本连着注册了两个 setOnFocusChangeListener，后者会覆盖前者，而两者
+        // 做的背景切换完全一致 —— 删掉注定被覆盖的那一个，避免以后以为改了却没生效。
         // v1.27.0：输入监听 → 触发输入建议
         etInput.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -505,7 +515,7 @@ public class ChatActivity extends Activity {
             }
         });
         etInput.setOnFocusChangeListener((v, has) -> {
-            v.setBackgroundResource(has ? R.drawable.bg_input_focused : R.drawable.bg_input);
+            v.setBackgroundResource(has ? R.drawable.bg_chat_input_focused : R.drawable.bg_chat_input);
             if (has && (etInput.getText() == null || etInput.getText().toString().trim().isEmpty())) {
                 handler.removeCallbacks(suggestionDebounce);
                 handler.postDelayed(suggestionDebounce, SUGGESTION_DEBOUNCE_MS);
@@ -521,8 +531,8 @@ public class ChatActivity extends Activity {
         btnVoice.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnVoiceRef = btnVoice;
         btnVoice.setImageResource(R.drawable.ic_mic);
-        btnVoice.setColorFilter(getColorCompat(R.color.operit_text_secondary));
-        btnVoice.setBackgroundResource(R.drawable.bg_btn_secondary);
+        btnVoice.setColorFilter(getColorCompat(R.color.operit_accent));
+        btnVoice.setBackgroundResource(R.drawable.operit_icon_button_ripple);
         btnVoice.setScaleType(ImageView.ScaleType.CENTER);
         btnVoice.setPadding(dp(10), dp(10), dp(10), dp(10));
         UiKit.pressScale(btnVoice);
@@ -536,7 +546,7 @@ public class ChatActivity extends Activity {
         btnSendView.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         btnSend = btnSendView;
         btnSend.setImageResource(R.drawable.ic_send);
-        btnSend.setBackgroundResource(R.drawable.bg_send);
+        btnSend.setBackgroundResource(R.drawable.bg_chat_send);
         btnSend.setScaleType(ImageView.ScaleType.CENTER);
         btnSend.setPadding(dp(10), dp(10), dp(10), dp(10));
         btnSend.setElevation(dp(2));
@@ -645,7 +655,7 @@ public class ChatActivity extends Activity {
         TextView chip = new TextView(this);
         chip.setText(label);
         chip.setTextSize(13f);
-        chip.setTextColor(getColorCompat(R.color.brand));
+        chip.setTextColor(getColorCompat(R.color.operit_accent));
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(12), dp(7), dp(12), dp(7));
         chip.setBackgroundResource(R.drawable.bg_btn_secondary);
@@ -1556,7 +1566,8 @@ public class ChatActivity extends Activity {
         b.setTextSize(15f);
         b.setTextColor(getColorCompat(R.color.operit_text_primary));
         b.setLineSpacing(3f, 1f);
-        b.setPadding(dp(12), dp(10), dp(12), dp(10));
+        b.setPadding(dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP),
+                dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP));
         b.setMaxWidth(maxBubbleWidth);
         b.setElevation(dp(2));
         // v1.26.0：护理大脑用专属绿色气泡背景
@@ -2055,12 +2066,15 @@ public class ChatActivity extends Activity {
         // v1.147.0（#83）：登记原始 Markdown 原文（用户输入即原文，用于「复制为 Markdown」）
         rawMarkdown.put(bubble, text == null ? "" : text);
         bubble.setTextSize(15f);
-        bubble.setTextColor(Color.WHITE);
+        // #96：用户气泡换成 operit_accent 亮紫底，文字随之改为深色保证可读；
+        // AI 气泡保持深紫底浅字（bg_bubble_ai 已是 Operit 语言），两侧对比清晰可辨。
+        bubble.setTextColor(getColorCompat(R.color.operit_bg));
         bubble.setLineSpacing(3f, 1f);
-        bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
+        bubble.setPadding(dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP),
+                dp(ChatLayoutOps.BUBBLE_PADDING_H_DP), dp(ChatLayoutOps.BUBBLE_PADDING_V_DP));
         bubble.setMaxWidth(maxBubbleWidth);
         bubble.setElevation(dp(2));
-        bubble.setBackgroundResource(R.drawable.bg_bubble_user);
+        bubble.setBackgroundResource(R.drawable.bg_chat_bubble_user);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(4);
@@ -2195,7 +2209,7 @@ public class ChatActivity extends Activity {
             listening = true;
             // 录音中：麦克风染成品牌色作为状态提示
             if (btnVoiceRef != null) {
-                btnVoiceRef.setColorFilter(getColorCompat(R.color.brand));
+                btnVoiceRef.setColorFilter(getColorCompat(R.color.operit_accent));
                 UiKit.flash(btnVoiceRef);
             }
             Toast.makeText(this, "请说话…", Toast.LENGTH_SHORT).show();
@@ -2559,7 +2573,7 @@ public class ChatActivity extends Activity {
                 + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty);
         String statusLine = "\n\n状态：执行中 🔄";
         SpannableString ss = new SpannableString(head + statusLine);
-        ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.brand)),
+        ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.operit_accent)),
                 head.length() + "\n\n状态：".length(), ss.length(),
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         b.setText(ss);
@@ -2636,7 +2650,8 @@ public class ChatActivity extends Activity {
         card.addView(row, rowLp);
 
         final boolean[] answered = {false};
-        int brand = getColorCompat(R.color.brand);
+        // #96：旧 brand 紫 → Operit accent（变量名沿用，减少改动面）
+        int brand = getColorCompat(R.color.operit_accent);
         int muted = getColorCompat(R.color.operit_text_secondary);
         row.addView(makeApprovalButton("仅这次允许", ToolApprovalPolicy.Outcome.ALLOW_ONCE,
                 answered, card, sink, brand));
@@ -2917,7 +2932,9 @@ public class ChatActivity extends Activity {
         ImageButton b = new ImageButton(this);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
         b.setImageResource(res);
-        b.setBackgroundColor(Color.TRANSPARENT);
+        // #96：由「透明方形」改为 Operit 圆形涟漪按钮，与 UiKit.pageTopBar 的返回按钮同源
+        b.setBackgroundResource(R.drawable.operit_icon_button_ripple);
+        b.setColorFilter(Color.WHITE);
         b.setScaleType(ImageView.ScaleType.CENTER);
         b.setPadding(dp(8), dp(8), dp(8), dp(8));
         // v1.37.0：无障碍描述（当前工厂仅用于返回键）
@@ -3012,6 +3029,17 @@ public class ChatActivity extends Activity {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Operit 圆形图标按钮的布局参数：正方形，直径取 {@link ChatLayoutOps#ICON_BUTTON_DP}，
+     * 与 {@code UiKit.pageTopBar} 的返回按钮一致。
+     */
+    private LinearLayout.LayoutParams iconLp() {
+        int size = dp(ChatLayoutOps.ICON_BUTTON_DP);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        lp.setMargins(dp(2), 0, dp(2), 0);
+        return lp;
     }
 
     private LinearLayout.LayoutParams btnLp(int w, int h) {
