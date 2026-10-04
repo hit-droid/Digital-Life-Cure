@@ -6,12 +6,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -80,21 +82,36 @@ public final class DataPort {
      * 把条目打包成 zip（递归目录）。调用方负责关闭 {@code out}（SAF 流由系统管理），
      * 这里只 {@code finish()} 写完中央目录。
      *
-     * @return 写入的文件数（不含目录条目）
+     * <p>末尾会追加一个 {@link BackupManifest#ENTRY_NAME 清单条目}（记录每个数据文件的
+     * size 与 CRC32），供恢复前做完整性校验；清单不计入返回值。</p>
+     *
+     * @return 写入的数据文件数（不含目录与清单条目）
      */
     public static int exportZip(OutputStream out, List<Entry> entries) throws IOException {
-        ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(out));
-        int[] count = {0};
-        for (Entry e : entries) {
-            addToZip(zip, e.path, e.file, count);
-        }
-        zip.finish();
-        zip.flush();
-        return count[0];
+        return exportZip(out, entries, System.currentTimeMillis());
     }
 
-    private static void addToZip(ZipOutputStream zip, String path, File f, int[] count)
+    /** 同上，但可指定清单里的创建时间（便于测试与复现） */
+    public static int exportZip(OutputStream out, List<Entry> entries, long createdAt)
             throws IOException {
+        ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(out));
+        List<BackupManifest.Item> items = new ArrayList<>();
+        if (entries != null) {
+            for (Entry e : entries) {
+                addToZip(zip, e.path, e.file, items);
+            }
+        }
+        // 清单最后写：写数据时已顺便算好 size/CRC，无需二次读盘
+        zip.putNextEntry(new ZipEntry(BackupManifest.ENTRY_NAME));
+        zip.write(BackupManifest.build(createdAt, items).getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+        zip.finish();
+        zip.flush();
+        return items.size();
+    }
+
+    private static void addToZip(ZipOutputStream zip, String path, File f,
+                                 List<BackupManifest.Item> items) throws IOException {
         if (f.isDirectory()) {
             File[] children = f.listFiles();
             if (children == null || children.length == 0) {
@@ -104,20 +121,24 @@ public final class DataPort {
             }
             Arrays.sort(children, (a, b) -> a.getName().compareTo(b.getName()));
             for (File c : children) {
-                addToZip(zip, path + "/" + c.getName(), c, count);
+                addToZip(zip, path + "/" + c.getName(), c, items);
             }
             return;
         }
         zip.putNextEntry(new ZipEntry(path));
+        CRC32 crc = new CRC32();
+        long size = 0;
         try (InputStream in = new FileInputStream(f)) {
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) {
+                crc.update(buf, 0, n);
+                size += n;
                 zip.write(buf, 0, n);
             }
         }
         zip.closeEntry();
-        count[0]++;
+        items.add(new BackupManifest.Item(path, size, crc.getValue()));
     }
 
     /** 清除导出范围内的全部用户数据，保留 {@code files/models/}。返回删除的文件/目录数 */

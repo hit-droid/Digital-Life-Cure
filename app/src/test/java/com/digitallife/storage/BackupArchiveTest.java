@@ -10,12 +10,16 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 /**
@@ -160,5 +164,112 @@ public class BackupArchiveTest {
         } catch (java.io.IOException expected) {
             // 预期
         }
+    }
+
+    // ---------- 清单完整性校验 ----------
+
+    private static void writeFile(File f, String content) throws Exception {
+        File parent = f.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        try (OutputStream os = new java.io.FileOutputStream(f)) {
+            os.write(content.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /** 用 DataPort 正常导出一份带清单的备份 */
+    private byte[] exportSample() throws Exception {
+        File filesDir = tmp.newFolder("src-files");
+        File prefsDir = tmp.newFolder("src-prefs");
+        File dbDir = tmp.newFolder("src-db");
+        writeFile(new File(filesDir, "a.txt"), "aaa");
+        writeFile(new File(new File(filesDir, "sub"), "c.txt"), "ccc");
+        writeFile(new File(prefsDir, "pet.xml"), "<prefs/>");
+        writeFile(new File(dbDir, "memory.db"), "sqlite");
+
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        List<DataPort.Entry> entries = DataPort.exportEntries(filesDir, prefsDir, dbDir);
+        DataPort.exportZip(bos, entries, 1700000000000L);
+        return bos.toByteArray();
+    }
+
+    /** 重打 zip：可替换某条目内容、或丢弃某条目（用于模拟损坏/截断的包，清单原样保留） */
+    private static byte[] rebuild(byte[] original, String tamperName, String tamperContent,
+                                  String dropName) throws Exception {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        try (ZipOutputStream zos = new ZipOutputStream(bos);
+             ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(original))) {
+            ZipEntry e;
+            while ((e = in.getNextEntry()) != null) {
+                if (e.isDirectory()) continue;
+                if (e.getName().equals(dropName)) continue;
+                ByteArrayOutputStream c = new ByteArrayOutputStream();
+                int n;
+                while ((n = in.read(buf)) > 0) c.write(buf, 0, n);
+                byte[] data = e.getName().equals(tamperName)
+                        ? tamperContent.getBytes(StandardCharsets.UTF_8)
+                        : c.toByteArray();
+                zos.putNextEntry(new ZipEntry(e.getName()));
+                zos.write(data);
+                zos.closeEntry();
+            }
+        }
+        return bos.toByteArray();
+    }
+
+    @Test
+    public void restore_exportedBackup_roundTrip() throws Exception {
+        byte[] z = exportSample();
+        File[] r = roots();
+
+        BackupArchive.Result res = BackupArchive.restore(z, r[0], r[1], r[2]);
+
+        assertEquals(4, res.restored);
+        assertEquals("aaa", read(new File(r[0], "a.txt")));
+        assertEquals("ccc", read(new File(r[0], "sub/c.txt")));
+        assertEquals("<prefs/>", read(new File(r[1], "pet.xml")));
+        assertEquals("sqlite", read(new File(r[2], "memory.db")));
+    }
+
+    @Test
+    public void restore_tamperedContent_rejectsWithoutWriting() throws Exception {
+        byte[] z = rebuild(exportSample(), "shared_prefs/pet.xml", "<hacked/>", null);
+        File[] r = roots();
+
+        try {
+            BackupArchive.restore(z, r[0], r[1], r[2]);
+            org.junit.Assert.fail("内容被篡改应拒绝");
+        } catch (java.io.IOException expected) {
+            assertTrue(expected.getMessage().contains("损坏")
+                    || expected.getMessage().contains("大小不符"));
+        }
+        assertFalse("校验失败不能写入任何文件", new File(r[1], "pet.xml").exists());
+        assertFalse(new File(r[0], "a.txt").exists());
+    }
+
+    @Test
+    public void restore_missingDeclaredEntry_rejectsWithoutWriting() throws Exception {
+        byte[] z = rebuild(exportSample(), null, null, "databases/memory.db");
+        File[] r = roots();
+
+        try {
+            BackupArchive.restore(z, r[0], r[1], r[2]);
+            org.junit.Assert.fail("缺条目应拒绝");
+        } catch (java.io.IOException expected) {
+            assertTrue(expected.getMessage().contains("缺少条目"));
+        }
+        assertFalse("校验失败不能写入任何文件", new File(r[2], "memory.db").exists());
+        assertFalse(new File(r[0], "a.txt").exists());
+    }
+
+    @Test
+    public void restore_legacyBackupWithoutManifest_stillWorks() throws Exception {
+        File[] r = roots();
+        byte[] z = zip(new String[]{"files/a.txt"}, new String[]{"aaa"});
+
+        BackupArchive.Result res = BackupArchive.restore(z, r[0], r[1], r[2]);
+
+        assertEquals("无清单旧包跳过强校验，照常恢复", 1, res.restored);
+        assertEquals("aaa", read(new File(r[0], "a.txt")));
     }
 }

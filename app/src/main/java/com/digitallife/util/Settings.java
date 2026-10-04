@@ -30,6 +30,17 @@ public class Settings {
     public void setApiBase(String v) { sp.edit().putString("api_base", v).apply(); }
 
     /**
+     * 上次「从备份恢复」的结果（由 {@code com.digitallife.App} 在启动恢复后写入：
+     * 成功为 {@code ok|<文件数>}，失败为 {@code fail|<原因>}；空串表示无待汇报结果）。
+     * 恢复发生在启动早期、界面还没起来，只能先存这里，等设置页读一次后清除。
+     */
+    public String getRestoreResult() { return sp.getString("restore_result", ""); }
+    public void setRestoreResult(String v) {
+        sp.edit().putString("restore_result", v == null ? "" : v).apply();
+    }
+    public void clearRestoreResult() { sp.edit().remove("restore_result").apply(); }
+
+    /**
      * 读取 API Key。磁盘上是密文（{@code enc:v1:...}）；读到旧明文时透明迁移为密文，
      * 迁移只在设备支持加密时执行，且幂等（迁移后前缀存在，不再重复写）。
      */
