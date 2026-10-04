@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.147.0 (2026-10-04)
+
+本版补上**备份包的完整性校验**（#86）：v1.146.0 的恢复是边解压边写盘，包被截断或损坏时会写坏一半才失败，等于**静默损坏用户数据**；且恢复发生在下次启动、界面尚未起来，成功与失败用户都不可知。
+
+### 恢复前整体校验，损坏包一个字节都不写
+
+**问题**：`BackupArchive.restore` 边解压边覆盖 `shared_prefs/` 与 `databases/`，而截断的 zip 往往不报错、只是少了末尾几条。
+
+- 新增纯逻辑 `storage/BackupManifest`：清单构建 / 解析 / 校验（格式版本、创建时间、条目数、逐条 `path` + `size` + `CRC32`），用 `org.json`。
+- `storage/DataPort.exportZip`：写条目时同步算 `size`/`CRC32`，全部写完后追加最后一个 zip 条目 `dlc-manifest.json`；返回的文件数仍只算数据文件（不含清单）。
+- `storage/BackupArchive.restore`：先做一遍**只读校验**（条目集合完全一致 + size/CRC 全对），任一不符抛 `IOException`、目标目录**不产生任何文件**；无清单的旧包走弱校验，保持向后兼容。
+
+### 恢复结果回传
+
+**问题**：恢复要重启后在 `Application.onCreate` 完成，此时界面还没起来，用户不知道到底成没成。
+
+- `App` 应用待恢复后把结果写入 `Settings`（`ok|文件数` / `fail|原因`）；`ui/SettingsTabView` 首次打开时汇报一次并清除，弹出「恢复完成 / 恢复失败」。
+
+### 验证
+
+`./tools/verify.sh` 全绿（compile / test / lint / apk），单测总数 524、失败 0。新增覆盖：清单构建/解析往返、CRC 不符、缺条目、多条目、旧包兼容；`BackupArchiveTest` 断言篡改/截断包恢复时目标目录不落盘。
+
 ## v1.146.0 (2026-10-04)
 
 本版补上**可移植的口令加密备份与恢复**（#81）：此前「数据与隐私」只能导出**明文** zip、且**没有导入入口**，而 `allowBackup=false` 之后跨机迁移等于断了路。
