@@ -139,4 +139,39 @@ public class ChatTextOpsTest {
         assertEquals("2025/12/31 23:59",
                 ChatTextOps.formatDividerTime(at(2025, 12, 31, 23, 59), now, Locale.CHINA));
     }
+
+    // ==================== toMarkdownForCopy（#83）====================
+
+    @Test
+    public void toMarkdownForCopy_nullBecomesEmpty() {
+        assertEquals("", ChatTextOps.toMarkdownForCopy(null));
+    }
+
+    @Test
+    public void toMarkdownForCopy_keepsCodeFence() {
+        String md = "看这段：\n\n```java\nint x = 1;\n```\n";
+        assertEquals(md, ChatTextOps.toMarkdownForCopy(md));
+    }
+
+    @Test
+    public void toMarkdownForCopy_keepsTableAndLink() {
+        String md = "| a | b |\n|---|---|\n| 1 | 2 |\n\n[链接](https://x.com)";
+        assertEquals(md, ChatTextOps.toMarkdownForCopy(md));
+    }
+
+    @Test
+    public void toMarkdownForCopy_stripsCollapseHintAndInterruptMark() {
+        String raw = "正文\n\n▸ 展开全文" + ChatTextOps.INTERRUPT_MARK;
+        assertEquals("正文", ChatTextOps.toMarkdownForCopy(raw));
+    }
+
+    @Test
+    public void toMarkdownForCopy_normalizesCrlf() {
+        assertEquals("a\nb\nc", ChatTextOps.toMarkdownForCopy("a\r\nb\rc"));
+    }
+
+    @Test
+    public void toMarkdownForCopy_menuLabelStable() {
+        assertEquals("复制为 Markdown", ChatTextOps.MENU_COPY_MARKDOWN);
+    }
 }
