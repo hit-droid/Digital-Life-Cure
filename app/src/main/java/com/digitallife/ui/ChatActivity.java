@@ -93,6 +93,8 @@ public class ChatActivity extends Activity {
     private final ArrayList<TextView> aiBubbles = new ArrayList<>();
     /** v1.142.0（#59）：记录每个被折叠气泡的完整文本，长按复制/分享/朗读/引用优先用 */
     private final WeakHashMap<TextView, CharSequence> fullTexts = new WeakHashMap<>();
+    // v1.143.0：每条气泡关联其数据库 rowid，支持删除任意一条（不再只限最后一条）
+    private final WeakHashMap<TextView, Long> msgIds = new WeakHashMap<>();
     private TextView btnScrollBottom;
     private android.view.ViewTreeObserver.OnScrollChangedListener scrollWatcher;
     private LinearLayout listContainer;
@@ -574,14 +576,16 @@ public class ChatActivity extends Activity {
         }
         for (ChatStore.StoredMsg m : msgs) {
             if ("user".equals(m.role)) {
-                appendUserBubble(m.content, m.timestamp);
+                TextView ub = appendUserBubble(m.content, m.timestamp);
+                msgIds.put(ub, m.id);
             } else if ("tool".equals(m.role)) {
                 markLastToolResult(null, null, m.content);
             } else if (m.toolCalls != null && !m.toolCalls.isEmpty()) {
                 appendToolBubble(ChatTextOps.parseToolName(m.toolCalls),
                         ChatTextOps.parseToolArgs(m.toolCalls));
             } else if (m.content != null && !m.content.isEmpty()) {
-                appendAiBubble(m.content, m.timestamp);
+                TextView ab = appendAiBubble(m.content, m.timestamp);
+                msgIds.put(ab, m.id);
             }
         }
         // v1.142.0（#55）：历史渲染完两件事——
@@ -666,8 +670,9 @@ public class ChatActivity extends Activity {
         if (isCare && hasFile) {
             String display = pendingFileName == null || pendingFileName.isEmpty() ? "model.zip" : pendingFileName;
             String bubble = text.isEmpty() ? "📦 " + display : text + "\n📦 " + display;
-            appendUserBubble(bubble);
-            chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            TextView ub = appendUserBubble(bubble);
+            long uid = chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            msgIds.put(ub, uid);
             final String filePath = pendingFilePath;
             clearPendingFile();
             if (careAI == null) careAI = CareAI.getInstance(this);
@@ -687,8 +692,9 @@ public class ChatActivity extends Activity {
             String display = pendingFileName == null || pendingFileName.isEmpty()
                     ? "附件" : pendingFileName;
             String bubble = text.isEmpty() ? "📄 " + display : text + "\n📄 " + display;
-            appendUserBubble(bubble);
-            chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            TextView ub = appendUserBubble(bubble);
+            long uid = chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
+            msgIds.put(ub, uid);
             rememberUser(text.isEmpty() ? display : text);
             scrollToBottom();
             final String filePath = pendingFilePath;
@@ -753,8 +759,9 @@ public class ChatActivity extends Activity {
             return;
         }
         aborting = false;
-        appendUserBubble(text);
-        chatStore.addMessage(sessionKey, "user", text, null, null, System.currentTimeMillis());
+        TextView ub = appendUserBubble(text);
+        long uid = chatStore.addMessage(sessionKey, "user", text, null, null, System.currentTimeMillis());
+        msgIds.put(ub, uid);
         scrollToBottom();
         if (isCare) {
             if (careAI == null) careAI = CareAI.getInstance(this);
@@ -826,8 +833,9 @@ public class ChatActivity extends Activity {
         if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
             // 中断回复：末尾附加「⏹ 已中断」角标，并随消息一起持久化
             String finalText = curAssistantText + ChatTextOps.INTERRUPT_MARK;
-            chatStore.addMessage(sessionKey, "assistant", finalText,
+            long mid = chatStore.addMessage(sessionKey, "assistant", finalText,
                     null, null, System.currentTimeMillis());
+            msgIds.put(curAssistantBubble, mid);
             rememberAssistant(curAssistantText);
             markInterrupted(curAssistantBubble);
             // v1.28.0：完成后对长消息应用折叠
@@ -1117,8 +1125,9 @@ public class ChatActivity extends Activity {
             thinking = false;
             updateSendButton();
             String msg = "还没有可用的模型配置，请到「设置 → 模型配置」添加对话大脑模型。";
-            appendAiBubble(msg);
-            chatStore.addMessage(sessionKey, "assistant", msg, null, null, System.currentTimeMillis());
+            TextView eb = appendAiBubble(msg);
+            long mid = chatStore.addMessage(sessionKey, "assistant", msg, null, null, System.currentTimeMillis());
+            msgIds.put(eb, mid);
             scrollToBottom();
             return;
         }
@@ -1241,18 +1250,20 @@ public class ChatActivity extends Activity {
                             }
                             maybeAutoTitle();
                             if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
-                                chatStore.addMessage(sessionKey, "assistant", curAssistantText,
+                                long mid = chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                         null, null, System.currentTimeMillis());
+                                msgIds.put(curAssistantBubble, mid);
                                 rememberAssistant(curAssistantText);
                                 applyCollapse(curAssistantBubble);
                                 curAssistantBubble = null;
                                 curAssistantText = "";
                             } else if (fullText != null && !fullText.isEmpty()) {
-                                chatStore.addMessage(sessionKey, "assistant", fullText,
+                                long mid = chatStore.addMessage(sessionKey, "assistant", fullText,
                                         null, null, System.currentTimeMillis());
                                 rememberAssistant(fullText);
                                 hideThinkingDot();
-                                appendAiBubble(fullText);
+                                TextView nb = appendAiBubble(fullText);
+                                msgIds.put(nb, mid);
                             }
                             hideThinkingDot();
                             thinking = false;
@@ -1382,17 +1393,19 @@ public class ChatActivity extends Activity {
                     // v1.32.0：首轮完成后自动命名会话
                     maybeAutoTitle();
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
-                        chatStore.addMessage(sessionKey, "assistant", curAssistantText,
+                        long mid = chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
+                        msgIds.put(curAssistantBubble, mid);
                         // v1.28.0：完成后对长消息应用折叠
                         applyCollapse(curAssistantBubble);
                         curAssistantBubble = null;
                         curAssistantText = "";
                     } else if (fullText != null && !fullText.isEmpty()) {
-                        chatStore.addMessage(sessionKey, "assistant", fullText,
+                        long mid = chatStore.addMessage(sessionKey, "assistant", fullText,
                                 null, null, System.currentTimeMillis());
                         hideThinkingDot();
-                        appendAiBubble(fullText);
+                        TextView nb = appendAiBubble(fullText);
+                        msgIds.put(nb, mid);
                     }
                     hideThinkingDot();
                     thinking = false;
@@ -1956,6 +1969,7 @@ public class ChatActivity extends Activity {
         // 气泡（历史 / 流式回复都是）移除后仍留在 aiBubbles 里，会被当成「最后一条」
         aiBubbles.remove(v);
         fullTexts.remove(v);
+        msgIds.remove(v);
         android.view.ViewParent p = v.getParent();
         if (p instanceof View && p != listContainer && p.getParent() == listContainer) {
             listContainer.removeView((View) p);
@@ -2001,12 +2015,12 @@ public class ChatActivity extends Activity {
         return null;
     }
 
-    private void appendUserBubble(String text) {
-        appendUserBubble(text, System.currentTimeMillis());
+    private TextView appendUserBubble(String text) {
+        return appendUserBubble(text, System.currentTimeMillis());
     }
 
     /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
-    private void appendUserBubble(String text, long ts) {
+    private TextView appendUserBubble(String text, long ts) {
         appendTimeDividerIfNeeded(ts);
         LinearLayout row = new LinearLayout(this);
         // v1.130.0：纵向——气泡在上、时间戳在下；gravity=END 让两者一起靠右
@@ -2053,14 +2067,15 @@ public class ChatActivity extends Activity {
                     .show();
             return true;
         });
+        return bubble;
     }
 
-    private void appendAiBubble(String text) {
-        appendAiBubble(text, System.currentTimeMillis());
+    private TextView appendAiBubble(String text) {
+        return appendAiBubble(text, System.currentTimeMillis());
     }
 
     /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
-    private void appendAiBubble(String text, long ts) {
+    private TextView appendAiBubble(String text, long ts) {
         appendTimeDividerIfNeeded(ts);
         TextView b = newTextViewBubble();
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
@@ -2099,6 +2114,7 @@ public class ChatActivity extends Activity {
                     .show();
             return true;
         });
+        return b;
     }
 
     /**
@@ -2396,22 +2412,21 @@ public class ChatActivity extends Activity {
         Toast.makeText(this, "已重新生成", Toast.LENGTH_SHORT).show();
     }
 
-    /** v1.29.0：删除单条气泡（同时从数据库移除） */
+    /** v1.143.0：删除单条气泡（按数据库 rowid 删任意一条，不再只限最后一条） */
     private void deleteBubble(TextView bubble) {
-        // v1.142.0（#57）：数据库侧只有「删最后一条 assistant」的接口，中间某条
-        // 删了界面却删不掉库——重开会话被删的那条又回来了，原本最后一条反没了。
-        // 不是最后一条就明确提示，宁可不支持，也不制造界面与数据库不一致。
-        if (!isLastAssistantBubble(bubble)) {
-            Toast.makeText(this, "目前只能删除最后一条回复", Toast.LENGTH_SHORT).show();
+        Long id = msgIds.get(bubble);
+        if (id == null) {
+            // v1.142.0（#57）：拿不到关联 id 的气泡（如工具气泡）暂不支持删除
+            Toast.makeText(this, "该消息暂不支持删除", Toast.LENGTH_SHORT).show();
             return;
         }
         new android.app.AlertDialog.Builder(this)
                 .setTitle("删除这条消息？")
                 .setMessage("删除后无法恢复。")
                 .setPositiveButton("删除", (d, w) -> {
-                    ChatStore.StoredMsg removed = chatStore.deleteLastAssistantMessage(sessionKey);
+                    int n = chatStore.deleteMessage(sessionKey, id);
                     removeBubble(bubble);
-                    Toast.makeText(this, removed != null ? "已删除" : "已从界面移除",
+                    Toast.makeText(this, n > 0 ? "已删除" : "已从界面移除",
                             Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("取消", null)
