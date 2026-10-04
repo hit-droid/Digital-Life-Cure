@@ -5,10 +5,10 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -51,40 +51,44 @@ public class ConversationTabView extends LinearLayout {
     }
 
     private void buildUi() {
-        // 新建会话入口
-        LinearLayout bar = new LinearLayout(activity);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 8),
-                UiKit.dp(activity, 12), UiKit.dp(activity, 4));
+        // 区域标题 + 紧凑新建入口（Operit 风格：强调色小节标题 + 右侧文字 chip，
+        // 不再是「会话列表」纯文字 + 大号实心按钮那套旧观感）
+        LinearLayout header = new LinearLayout(activity);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(UiKit.dp(activity, 16), UiKit.dp(activity, 12),
+                UiKit.dp(activity, 12), UiKit.dp(activity, 6));
 
-        TextView tip = new TextView(activity);
-        tip.setText("会话列表");
-        tip.setTextSize(13f);
-        tip.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
-        bar.addView(tip, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView section = new TextView(activity);
+        section.setText("最近对话");
+        section.setTextSize(13f);
+        section.setTypeface(Typeface.DEFAULT_BOLD);
+        section.setLetterSpacing(0.04f);
+        section.setTextColor(UiKit.color(activity, R.color.operit_accent));
+        section.setIncludeFontPadding(false);
+        header.addView(section, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Button btnNew = new Button(activity);
-        btnNew.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnNew.setContentDescription("新建");   // 自动生成：a11y
-        btnNew.setText("＋ 新建会话");
+        TextView btnNew = new TextView(activity);
+        btnNew.setHapticFeedbackEnabled(true);
+        btnNew.setContentDescription("新建会话");
+        btnNew.setText("＋ 新建");
         btnNew.setTextSize(13f);
-        btnNew.setTextColor(Color.WHITE);
-        btnNew.setAllCaps(false);
-        btnNew.setBackgroundResource(R.drawable.bg_btn_primary);
-        btnNew.setPadding(UiKit.dp(activity, 14), 0,
-                UiKit.dp(activity, 14), 0);
+        btnNew.setTextColor(UiKit.color(activity, R.color.operit_accent));
+        btnNew.setGravity(Gravity.CENTER);
+        btnNew.setBackgroundResource(R.drawable.bg_chip_outline);
+        btnNew.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 6),
+                UiKit.dp(activity, 12), UiKit.dp(activity, 6));
         UiKit.pressScale(btnNew);
         btnNew.setOnClickListener(v -> showNewSessionDialog());
-        bar.addView(btnNew, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 34)));
-        addView(bar, UiKit.lp(activity, 0));
+        header.addView(btnNew);
+        addView(header, UiKit.lp(activity, 0));
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setVerticalScrollBarEnabled(false);
         listContainer = new LinearLayout(activity);
         listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 6),
+        listContainer.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 4),
                 UiKit.dp(activity, 12), UiKit.dp(activity, 12));
         scroll.addView(listContainer, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -146,8 +150,8 @@ public class ConversationTabView extends LinearLayout {
         emptyBox.addView(emptyIcon);
 
         TextView empty = new TextView(activity);
-        // 文案与右上角按钮的实际文案对齐（按钮是「＋ 新建会话」，此前写成「新建对话」）
-        empty.setText("还没有对话\n点右上角「＋ 新建会话」开始\n或打开通讯录，与某个模型单独聊聊");
+        // 文案与实际入口对齐（入口 chip 现为「＋ 新建」）
+        empty.setText("还没有对话\n点上方「＋ 新建」开始\n或打开通讯录，与某个模型单独聊聊");
         empty.setTextSize(13f);
         empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         empty.setGravity(Gravity.CENTER);
@@ -166,7 +170,7 @@ public class ConversationTabView extends LinearLayout {
         LinearLayout chips = new LinearLayout(activity);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setGravity(Gravity.CENTER);
-        chips.addView(guideChip("＋ 新建会话", v -> showNewSessionDialog()));
+        chips.addView(guideChip("＋ 新建", v -> showNewSessionDialog()));
         chips.addView(guideChip("✦ 打开护理大脑", v -> {
             if (listener != null) {
                 listener.onOpenSession(ChatStore.SESSION_CARE, "护理大脑",
@@ -200,18 +204,17 @@ public class ConversationTabView extends LinearLayout {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setElevation(UiKit.dp(activity, 2));
-        card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
-                UiKit.dp(activity, 8), UiKit.dp(activity, 10));
+        card.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 12),
+                UiKit.dp(activity, 14), UiKit.dp(activity, 12));
         UiKit.ripple(activity, card, activity.getDrawable(R.drawable.bg_card), 20);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         clp.bottomMargin = UiKit.dp(activity, 8);
         card.setLayoutParams(clp);
 
-        // 头像（色块 + 首字/类型图标）
+        // 头像（圆形色块 + 首字/类型字）
         TextView avatar = new TextView(activity);
-        avatar.setTextSize(20f);
+        avatar.setTextSize(18f);
         avatar.setTypeface(Typeface.DEFAULT_BOLD);
         avatar.setTextColor(Color.WHITE);
         avatar.setGravity(Gravity.CENTER);
@@ -224,18 +227,12 @@ public class ConversationTabView extends LinearLayout {
         // 中间信息列
         LinearLayout info = new LinearLayout(activity);
         info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(UiKit.dp(activity, 10), 0, 0, 0);
+        info.setPadding(UiKit.dp(activity, 12), 0, UiKit.dp(activity, 8), 0);
 
         LinearLayout titleRow = new LinearLayout(activity);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(activity);
-        title.setText(s.title == null || s.title.isEmpty() ? "未命名对话" : s.title);
-        title.setTextSize(15f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
-        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        // v1.147.0（#82）：置顶会话在标题左侧加一枚小角标
+        // 置顶角标放标题左侧（此前 addView 顺序把它挤到了右侧）
         if (s.pinned) {
             TextView pin = new TextView(activity);
             pin.setText("置顶");
@@ -249,6 +246,14 @@ public class ConversationTabView extends LinearLayout {
             plp.rightMargin = UiKit.dp(activity, 6);
             titleRow.addView(pin, plp);
         }
+        TextView title = new TextView(activity);
+        title.setText(s.title == null || s.title.isEmpty() ? "未命名对话" : s.title);
+        title.setTextSize(15f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
+        title.setMaxLines(1);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         TextView tag = new TextView(activity);
         tag.setText(typeLabel(s.type));
         tag.setTextSize(10f);
@@ -269,36 +274,17 @@ public class ConversationTabView extends LinearLayout {
         lastTv.setTextSize(13f);
         lastTv.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         lastTv.setMaxLines(1);
+        lastTv.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(lastTv, UiKit.lp(activity, 2));
         card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        // 时间 + 删除
-        LinearLayout right = new LinearLayout(activity);
-        right.setOrientation(LinearLayout.VERTICAL);
-        right.setGravity(Gravity.CENTER_VERTICAL);
-
+        // 右侧只留时间；删除等操作移到长按菜单，避免每张卡片都挂一个红色按钮
         TextView time = new TextView(activity);
         time.setText(formatTime(s.updatedAt));
-        time.setTextSize(10f);
+        time.setTextSize(11f);
         time.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
-        time.setGravity(Gravity.END);
-        right.addView(time);
-
-        Button btnDel = new Button(activity);
-        btnDel.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnDel.setContentDescription("btnDel");   // 自动生成：a11y
-        btnDel.setText("删除");
-        btnDel.setTextSize(11f);
-        btnDel.setAllCaps(false);
-        btnDel.setTextColor(UiKit.color(activity, R.color.danger));
-        btnDel.setBackgroundResource(R.drawable.bg_btn_secondary);
-        btnDel.setPadding(UiKit.dp(activity, 10), 0, UiKit.dp(activity, 10), 0);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 30));
-        dlp.topMargin = UiKit.dp(activity, 4);
-        btnDel.setOnClickListener(v -> confirmDelete(s));
-        right.addView(btnDel, dlp);
-        card.addView(right);
+        time.setIncludeFontPadding(false);
+        card.addView(time);
 
         card.setOnClickListener(v -> {
             if (listener != null) {
@@ -314,7 +300,8 @@ public class ConversationTabView extends LinearLayout {
 
     /**
      * v1.147.0（#82）：会话卡片长按菜单。
-     * <p>护理会话只能「重命名」（实为给出提示）；自建会话可选重命名 / 置顶或取消置顶。</p>
+     * <p>护理会话只能「重命名」（实为给出提示）；自建会话可选重命名 / 置顶或取消置顶 / 删除。</p>
+     * <p>v1.150.0：卡片右侧的「删除」按钮移入此菜单，列表更干净。</p>
      */
     private void showCardMenu(ChatStore.SessionInfo s) {
         boolean isCare = ChatStore.SESSION_CARE.equals(s.id);
@@ -324,17 +311,19 @@ public class ConversationTabView extends LinearLayout {
             return;
         }
         final String[] items = s.pinned
-                ? new String[]{"重命名", "取消置顶"}
-                : new String[]{"重命名", "置顶"};
+                ? new String[]{"重命名", "取消置顶", "删除"}
+                : new String[]{"重命名", "置顶", "删除"};
         new android.app.AlertDialog.Builder(activity)
                 .setTitle(s.title == null || s.title.isEmpty() ? "未命名对话" : s.title)
                 .setItems(items, (d, w) -> {
                     if (w == 0) {
                         showRenameDialog(s);
-                    } else {
+                    } else if (w == 1) {
                         if (chatStore.setPinned(s.id, !s.pinned)) {
                             refresh();
                         }
+                    } else {
+                        confirmDelete(s);
                     }
                 })
                 .show();
@@ -440,8 +429,8 @@ public class ConversationTabView extends LinearLayout {
             color = UiKit.color(activity, R.color.tag_chat);
         }
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
-        g.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        g.setCornerRadius(UiKit.dp(activity, 12));
+        // v1.150.0：会话头像改圆形，贴合聊天列表的惯例，也和旧版圆角色块区分开
+        g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         g.setColor(color);
         return g;
     }
