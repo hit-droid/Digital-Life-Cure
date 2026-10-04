@@ -1207,6 +1207,9 @@ public class ChatActivity extends Activity {
                     @Override
                     public void onDelta(String t) {
                         runOnUiThread(() -> {
+                            // v1.145.0（#74）：本轮已结束（如用户点了「停止」）后到达的迟到 delta
+                            // 直接丢弃，避免复活出一颗幽灵气泡 / 把残留文本入库。
+                            if (!thinking) return;
                             if (curAssistantBubble == null) {
                                 hideThinkingDot();
                                 curAssistantText = "";
@@ -1240,6 +1243,9 @@ public class ChatActivity extends Activity {
                     public void onDone(String fullText) {
                         runOnUiThread(() -> {
                             if (consumeAbort()) return;
+                            // v1.145.0（#74）：本轮已结束（如用户已点「停止」）后迟到的 onDone
+                            // 不再入库，避免重复/残留一条 assistant 消息。
+                            if (!thinking) return;
                             if ((fullText == null || fullText.isEmpty())
                                     && harness != null && harness.endedOnTool()) {
                                 appendAiBubble("（工具调用次数较多，已自动收尾，有需要可以再问我）");
@@ -1359,6 +1365,9 @@ public class ChatActivity extends Activity {
             @Override
             public void onDelta(String text) {
                 runOnUiThread(() -> {
+                    // v1.145.0（#74）：本轮已结束（如用户点了「停止」）后到达的迟到 delta
+                    // 直接丢弃，避免复活出一颗幽灵气泡 / 把残留文本入库。
+                    if (!thinking) return;
                     if (curAssistantBubble == null) {
                         hideThinkingDot();
                         curAssistantText = "";
@@ -1390,6 +1399,9 @@ public class ChatActivity extends Activity {
             public void onDone(String fullText) {
                 runOnUiThread(() -> {
                     if (consumeAbort()) return;
+                    // v1.145.0（#74）：本轮已结束（如用户已点「停止」）后迟到的 onDone
+                    // 不再入库，避免重复/残留一条 assistant 消息。
+                    if (!thinking) return;
                     // v1.32.0：首轮完成后自动命名会话
                     maybeAutoTitle();
                     if (curAssistantBubble != null && !curAssistantText.isEmpty()) {
