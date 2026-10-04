@@ -478,3 +478,12 @@ python3 /tmp/opencode/mkpatch.py finish 052-my-feature \
 - 同文件冲突：以**先认领者**为准，后到者 rebase 到其分支之上再提。
 - 出现坏版本：优先 `git revert` 回滚，再定位根因；**不做 force push**。
 - 对本文档的修改本身也走 PR，避免两个 agent 同时改同一段。
+
+### 9.7 历史重写事故与重新同步（2026-10-04，一次性）
+- 起因：本仓库曾把明文 PAT（`ghp_n7p…`）误入库（见 9.4）。2026-10-04 由 trae 做了一次**全量历史重写**：用 `git filter-repo --replace-text` 替换该 token，**全部 11 个分支 + 161 个 tag 的 SHA 均已改变**并强推覆盖远端。本次经用户明确批准，是 9.4「禁止 force push」的一次性例外。
+- **新基线**：`main = 204e1a1`（v1.144.0）。
+- **所有其他写入者（workbuddy 等）必须重新同步**，否则一 push 就会把旧历史带回来：
+  `git fetch --all --prune && git reset --hard origin/<你的分支>`，或直接重新 clone。
+- 泄露的 token 已确认失效（API 返回 401）；本仓库的 `secret_scanning` 与 `secret_scanning_push_protection` 已开启。
+- 残留：GitHub 托管的 `refs/pull/*/head` 仍可能指向旧提交，git 改不了；如需彻底清除，须向 GitHub Support 提「purge cached views」请求。
+- 再次强调：**严禁**把 token / PAT 写入源码、脚本或提交（9.4）。
