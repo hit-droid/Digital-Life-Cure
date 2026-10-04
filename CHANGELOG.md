@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.148.0 (2026-10-04)
+
+本版为 `ui/` 聊天与页面体验合集：新增**会话置顶**、**复制为 Markdown**、**运行环境自检**、**联系人搜索**四项功能（#82 / #83 / #87 / #88），并回补此前三项聊天修复（#72 / #75 / #78）。
+
+### 会话列表支持置顶 / 取消置顶（#82）
+
+**问题**：会话列表长按只有「重命名」，仅护理大脑会话恒置顶；自建会话一多，常用的钉不到顶部。
+
+- `util/ChatStore`：`sessions` 表新增 `pinned` 列，**`DB_VERSION` 2 → 3**，`onUpgrade` 用 `ALTER TABLE` 补列；旧记录一律视为未置顶（**无需手动清理，自动迁移**）。新增 `setPinned()`；`getSession()` / `getSessions()` 读取该列；`SessionInfo` 增 `pinned` 字段并**保留旧 7 参构造**，兼容既有调用。
+- 新增纯逻辑 `ui/chat/ConversationOrder`：排序规则统一收拢在此（**护理会话恒第一 → 置顶优先 → 组内按最近更新降序 → id 兜底稳定**），SQL 只负责取数，避免两处排序规则漂移。
+- `ui/ConversationTabView`：长按菜单改为 `重命名 / 置顶·取消置顶`；置顶会话标题行前显示「置顶」角标。
+
+### 消息长按菜单新增「复制为 Markdown」（#83）
+
+**问题**：原「复制」拿到的是**渲染后的纯文本**，代码块围栏、表格 `|`、链接语法全丢；折叠态还只能拿到截断摘要。
+
+- `ui/ChatActivity`：新增 `rawMarkdown` 登记（气泡 → 原始 Markdown），与既有 `fullTexts` 同生命周期。**用户气泡 / AI 气泡 / 历史恢复 / 流式增量回复四条路径全部登记原文**，折叠态同样可复制完整原文。
+- `ui/chat/ChatTextOps`：新增 `toMarkdownForCopy()`——只剥离界面附加的折叠提示与中断角标、统一行尾为 LF，**不破坏 ``` / 表格 / 链接语法**。
+- 两处长按菜单各加一项，其后索引顺延：用户 `朗读 / 复制 / 复制为 Markdown / 引用回复 / 重新发送 / 分享`；AI `朗读 / 复制 / 复制为 Markdown / 引用回复 / 分享 / 重新生成 / 删除`。普通「复制」行为不变。
+
+### 「关于」页新增「运行环境自检」卡片（#87）
+
+**问题**：用户报障（如 Android 16 上 16 KB 内存页与 4 KB 对齐 native 库不兼容）时，我们拿不到对方机型信息，只能靠猜。
+
+- 新增纯逻辑 `util/EnvFacts`（不依赖 Android API）：Android 版本+API 级别、ABI 列表、内存页大小、16 KB 页面判定，以及供复制用的多行报告。
+- `ui/AboutActivity`：版本信息下方新增卡片 +「复制环境信息」按钮；页大小取 `Os.sysconf(_SC_PAGESIZE)`（API 21+，取不到时显示「未知」）。
+
+### 模型联系人页支持按名字搜索过滤（#88）
+
+**问题**：导入的模型一多，联系人列表平铺后找不到。
+
+- 新增纯逻辑 `ui/contacts/ContactFilter`：大小写不敏感（`Locale.ROOT`）、去首尾空白、空查询返回全部、按名字子串匹配。
+- `ui/ContactsTabView`：头部新增搜索框，输入即过滤；无命中时显示「没有匹配的模型联系人」空态。
+
+### 回补：聊天修复三项（#72 / #75 / #78）
+
+上列三项此前已合并进 main 但未记入版本段，随本版一并回补：
+
+- **#72 删除任意一条消息**：`ChatStore` 增加 `id`（rowid）与 `deleteMessage(sessionKey, msgId)`，`ChatActivity` 用 `msgIds` 关联气泡与行，长按可删除任意一条（原先只能删最后一条）。
+- **#75 停止生成后丢弃迟到回调**：点「停止」后到达的 `onDelta` / `onDone` 直接丢弃，修复「幽灵助手气泡复活 / 残留文本入库」竞态。
+- **#78 `onDestroy` 清理防抖回调**：新增 `handler.removeCallbacksAndMessages(null)`，修复 `suggestionDebounce` 在页面销毁后仍触发建议请求的泄漏。
+
+### 验证
+
+新增纯逻辑单测 32 例，全部通过：`ConversationOrderTest` 9 例、`EnvFactsTest` 12 例、`ContactFilterTest` 11 例；`ChatTextOpsTest` 扩充至 24 例（含「复制为 Markdown」5 例）。CI 单测门禁通过后合并；push main 后由 workflow 出包并发行 Release。
+
 ## v1.147.0 (2026-10-04)
 
 本版补上**备份包的完整性校验**（#86）：v1.146.0 的恢复是边解压边写盘，包被截断或损坏时会写坏一半才失败，等于**静默损坏用户数据**；且恢复发生在下次启动、界面尚未起来，成功与失败用户都不可知。
