@@ -140,6 +140,30 @@ public final class ChatTextOps {
         return sb.toString();
     }
 
+    // ==================== 复制为 Markdown ====================
+
+    /**
+     * v1.147.0（#83）：准备「复制为 Markdown」的剪贴板文本。
+     *
+     * <p>与普通「复制」（拿到渲染后的纯文本）不同，这里要保留原始 Markdown 语法
+     * （代码围栏 ``` 、表格 {@code |} 、链接 {@code [](}) ）。本方法只做两件**不破坏语法**的
+     * 清洗：剥离界面附加的折叠提示 / 中断角标，并把行尾统一为 LF——因为提示与角标是
+     * UI 层拼上去的，不属于用户原文；其余内容一律原样保留。</p>
+     *
+     * @param raw 原始 Markdown 文本（可能为 null）
+     * @return 可直接写入剪贴板的 Markdown 文本；入参为 null 时返回空串
+     */
+    public static String toMarkdownForCopy(String raw) {
+        if (raw == null) return "";
+        String t = stripCollapseHint(raw);
+        // 行尾统一为 LF，避免 CRLF 混入导致粘贴到部分编辑器出现多余空行
+        t = t.replace("\r\n", "\n").replace('\r', '\n');
+        return t;
+    }
+
+    /** 复制为 Markdown 的菜单项文案（两处菜单共用，避免拼写漂移） */
+    public static final String MENU_COPY_MARKDOWN = "复制为 Markdown";
+
     // ==================== 气泡时间戳 ====================
 
     /** 气泡时间戳格式：24 小时制 {@code HH:mm} */

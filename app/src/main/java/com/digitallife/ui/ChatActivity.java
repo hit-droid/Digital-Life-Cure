@@ -93,6 +93,12 @@ public class ChatActivity extends Activity {
     private final ArrayList<TextView> aiBubbles = new ArrayList<>();
     /** v1.142.0（#59）：记录每个被折叠气泡的完整文本，长按复制/分享/朗读/引用优先用 */
     private final WeakHashMap<TextView, CharSequence> fullTexts = new WeakHashMap<>();
+    /**
+     * v1.147.0（#83）：记录每个气泡绑定消息的**原始 Markdown**（入库/渲染前原文）。
+     * 长按「复制为 Markdown」用它，保证折叠态也能拿到完整原文、且保留 ``` 与表格语法。
+     * 与 {@link #fullTexts} 同款生命周期：登记于气泡创建、随气泡回收由 WeakHashMap 释放。
+     */
+    private final WeakHashMap<TextView, CharSequence> rawMarkdown = new WeakHashMap<>();
     // v1.143.0：每条气泡关联其数据库 rowid，支持删除任意一条（不再只限最后一条）
     private final WeakHashMap<TextView, Long> msgIds = new WeakHashMap<>();
     private TextView btnScrollBottom;
@@ -1220,6 +1226,9 @@ public class ChatActivity extends Activity {
                                 trackAssistant(curAssistantBubble);
                             }
                             curAssistantText += t;
+                            // v1.147.0（#83）：流式气泡的原始 Markdown 同步刷新，
+                            // 保证「复制为 Markdown」拿到的是当前完整原文（而非建立时的空串）
+                            rawMarkdown.put(curAssistantBubble, curAssistantText);
                             curAssistantBubble.setText(mdRenderer != null
                                     ? mdRenderer.render(curAssistantText) : curAssistantText);
                             scrollToBottom();
@@ -1378,6 +1387,8 @@ public class ChatActivity extends Activity {
                         trackAssistant(curAssistantBubble);
                     }
                     curAssistantText += text;
+                    // v1.147.0（#83）：流式气泡的原始 Markdown 同步刷新（同 chat 监听器）
+                    rawMarkdown.put(curAssistantBubble, curAssistantText);
                     curAssistantBubble.setText(mdRenderer != null
                             ? mdRenderer.render(curAssistantText) : curAssistantText);
                     scrollToBottom();
@@ -1982,6 +1993,7 @@ public class ChatActivity extends Activity {
         aiBubbles.remove(v);
         fullTexts.remove(v);
         msgIds.remove(v);
+        rawMarkdown.remove(v);   // v1.147.0（#83）：原始 Markdown 登记同步清理
         android.view.ViewParent p = v.getParent();
         if (p instanceof View && p != listContainer && p.getParent() == listContainer) {
             listContainer.removeView((View) p);
@@ -2040,6 +2052,8 @@ public class ChatActivity extends Activity {
         row.setGravity(Gravity.END);
         TextView bubble = new TextView(this);
         bubble.setText(text);
+        // v1.147.0（#83）：登记原始 Markdown 原文（用户输入即原文，用于「复制为 Markdown」）
+        rawMarkdown.put(bubble, text == null ? "" : text);
         bubble.setTextSize(15f);
         bubble.setTextColor(Color.WHITE);
         bubble.setLineSpacing(3f, 1f);
@@ -2063,14 +2077,18 @@ public class ChatActivity extends Activity {
                     .setTitle("消息操作")
                     // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
-                    .setItems(new String[]{"朗读", "复制", "引用回复", "重新发送", "分享"}, (d, w) -> {
+                    // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
+                    .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
+                            "引用回复", "重新发送", "分享"}, (d, w) -> {
                         if (w == 0) {
                             speakText(txt);
                         } else if (w == 1) {
                             copyToClipboard(txt);
                         } else if (w == 2) {
-                            quoteIntoInput(txt);
+                            copyMarkdown(bubble);
                         } else if (w == 3) {
+                            quoteIntoInput(txt);
+                        } else if (w == 4) {
                             sendRaw(txt);
                         } else {
                             shareText(txt);
@@ -2090,6 +2108,8 @@ public class ChatActivity extends Activity {
     private TextView appendAiBubble(String text, long ts) {
         appendTimeDividerIfNeeded(ts);
         TextView b = newTextViewBubble();
+        // v1.147.0（#83）：登记原始 Markdown 原文，供「复制为 Markdown」使用
+        rawMarkdown.put(b, text == null ? "" : text);
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
         // v1.130.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
         listContainer.addView(wrapBubble(b, ts, false));
@@ -2107,17 +2127,21 @@ public class ChatActivity extends Activity {
                     .setTitle("消息操作")
                     // v1.29.0：新增「重新生成」「删除」
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
-                    .setItems(new String[]{"朗读", "复制", "引用回复", "分享", "重新生成", "删除"},
+                    // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
+                    .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
+                                    "引用回复", "分享", "重新生成", "删除"},
                             (d, w) -> {
                         if (w == 0) {
                             speakText(clean);
                         } else if (w == 1) {
                             copyToClipboard(clean);
                         } else if (w == 2) {
-                            quoteIntoInput(clean);
+                            copyMarkdown(b);
                         } else if (w == 3) {
-                            shareText(clean);
+                            quoteIntoInput(clean);
                         } else if (w == 4) {
+                            shareText(clean);
+                        } else if (w == 5) {
                             regenerateLast(b);
                         } else {
                             deleteBubble(b);
@@ -2497,6 +2521,29 @@ public class ChatActivity extends Activity {
         }
     }
 
+    /**
+     * v1.147.0（#83）：复制该气泡的**原始 Markdown**（保留 ``` 围栏 / 表格 / 链接）。
+     * <p>优先取 {@link #rawMarkdown} 登记原文；拿不到时退化为当前显示文本，
+     * 经 {@link ChatTextOps#toMarkdownForCopy} 去掉界面拼上的折叠提示。</p>
+     */
+    private void copyMarkdown(TextView bubble) {
+        if (bubble == null) return;
+        CharSequence raw = rawMarkdown.get(bubble);
+        String src = raw != null ? raw.toString()
+                : (bubble.getText() == null ? "" : bubble.getText().toString());
+        String md = ChatTextOps.toMarkdownForCopy(src);
+        if (md.isEmpty()) {
+            Toast.makeText(this, "没有可复制的内容", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Markdown", md));
+            Toast.makeText(this, "已复制 Markdown 原文", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /** 工具过程卡片（完全可视化）：工具名 + 完整参数；结果回填后完整展示 */
     private void appendToolBubble(String toolName, String argsText) {
         hideThinkingDot();
@@ -2776,6 +2823,7 @@ public class ChatActivity extends Activity {
                     // v1.142.0（#57）：登记一并清空，否则清空后残留的气泡会被当成「最后一条」
                     aiBubbles.clear();
                     fullTexts.clear();   // #59：完整文本登记同步清空
+                    rawMarkdown.clear(); // v1.147.0（#83）：原始 Markdown 登记同步清空
                     // 行数归零，不然清空后 rows 一直小于旧值，未读计数再也不累加
                     lastRowCount = 0;
                     // v1.34.0：清空会话后失效建议缓存，避免复用旧建议
