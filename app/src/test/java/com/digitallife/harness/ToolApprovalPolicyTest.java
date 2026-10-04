@@ -51,6 +51,37 @@ public class ToolApprovalPolicyTest {
         assertFalse(ToolApprovalPolicy.requiresApproval(""));
     }
 
+    @Test
+    public void requiresApproval_namespacedDangerousTools() {
+        // MCP/插件工具带 namespace 前缀（gh_delete_repo）：只比整名会漏判，
+        // 必须按 '_' 边界后缀识别出危险动词
+        assertTrue(ToolApprovalPolicy.requiresApproval("gh_delete_repo"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("fs_remove_file"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("mcp_forget_person"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("mcp_restore_data"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("tool_open_app"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("x_clipboard_write"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("x_send_notification"));
+        assertTrue(ToolApprovalPolicy.requiresApproval("x_memory_forget"));
+    }
+
+    @Test
+    public void requiresApproval_namespacedReadOnlyTools_stayQuiet() {
+        assertFalse(ToolApprovalPolicy.requiresApproval("gh_list_repos"));
+        assertFalse(ToolApprovalPolicy.requiresApproval("mcp_get_weather"));
+        assertFalse(ToolApprovalPolicy.requiresApproval("fs_read_file"));
+        assertFalse(ToolApprovalPolicy.requiresApproval("mcp_web_search"));
+    }
+
+    @Test
+    public void requiresApproval_externalToolAlwaysAsks() {
+        // 第三方/MCP 远程工具来源不可信：名字再无害也要用户点头
+        assertTrue(ToolApprovalPolicy.requiresApproval("gh_list_repos", true));
+        assertTrue(ToolApprovalPolicy.requiresApproval("anything", true));
+        assertFalse("内部工具仍按名字判定",
+                ToolApprovalPolicy.requiresApproval("gh_list_repos", false));
+    }
+
     // ---------- 会话放行集 ----------
 
     @Test

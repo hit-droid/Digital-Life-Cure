@@ -21,6 +21,16 @@ public interface Tool {
      */
     String execute(JSONObject args, Progress progress) throws Exception;
 
+    /**
+     * 是否为外部/第三方工具（如 MCP 远程工具）。
+     *
+     * <p>外部工具来源不可信，工具循环默认要求用户审批（见
+     * {@code harness.ToolApprovalPolicy}）；内置与本地插件工具保持 {@code false}，避免打扰。</p>
+     */
+    default boolean isExternal() {
+        return false;
+    }
+
     interface Progress {
         void onProgress(String message);
     }

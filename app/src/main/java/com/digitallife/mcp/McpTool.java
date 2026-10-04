@@ -31,6 +31,12 @@ public class McpTool implements Tool {
         return qualifiedName;
     }
 
+    /** 远程 MCP 服务器属第三方、不可信：默认需要用户审批后才执行 */
+    @Override
+    public boolean isExternal() {
+        return true;
+    }
+
     @Override
     public JSONObject getSchema() {
         return schema;
