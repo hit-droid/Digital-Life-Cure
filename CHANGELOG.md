@@ -1,5 +1,52 @@
 # Changelog
 
+## v1.155.0 (2026-10-04)
+
+**浅色模式下界面「一半黑一半白」的根因修复：真正兑现「全 App 强制深色」。**
+
+### 症状
+
+系统切浅色模式后，聊天页的工具卡变成**纯白底 + 浅灰字，完全读不清**；
+页面其它部分是深色 —— 典型的「一半黑一半白」。逐像素采样证实：工具卡底色 `(255,255,255)`。
+
+### 根因：两套色板长期共存
+
+App 里一直有两套颜色：
+
+- `operit_*`（Operit 改造新增）：`values/` 与 `values-night/` **值完全一致**，恒深色；
+- 旧色（`page_bg` / `card_bg` / `text_primary` / `bubble_ai` / `code_bg` / `brand_*` …）：
+  `values/` 是**亮色**、`values-night/` 是**深色**，两套完全不同。
+
+新组件用 `operit_*`、旧组件还用旧色。于是：
+
+- 系统**深色**模式：旧色 = 深色 → 与 `operit_*` 一致 → 看起来统一 ✅
+- 系统**浅色**模式：旧色 = 亮色 → 与 `operit_*` 深色混杂 → **白卡白底 + 浅字** ❌
+
+工具卡正是这么翻白的：`bg_tool.xml` 的底色是旧色 `card_bg`（`values/` = `#FFFFFF`），
+而卡内文字已迁到 `operit_*` 浅灰 —— 白底浅字。
+
+（`values-night/colors.xml` 的注释其实早就写着「全 App 强制深色」，但只对 `operit_*` 兑现了，
+旧色那一半从没跟上。这条是 workbuddy 在 issue #98 里查出来的，定位准确。）
+
+### 修法（方案 A）
+
+- `values/colors.xml`：把深色那套提为**唯一色板**，废弃「亮色 values」；
+- **删除** `values-night/colors.xml` 与 `values-night/styles.xml` —— 日/夜不再有第二套，
+  从结构上杜绝再次漂移；
+- `values/styles.xml`：`AppTheme` parent `Theme.Material.Light.NoActionBar` →
+  `Theme.Material.NoActionBar`；`AppDialogTheme` 同步去掉 `Light`（顺带修掉两套 dialog parent 不一致）；
+- `styles.xml` 中残留的 `@color/brand` ×5 + `@color/brand_dark` ×1 →
+  `operit_accent` / `operit_bg`，旧品牌色不再参与系统控件着色。
+
+结果：无论系统深浅色，资源解析结果完全相同，界面恒为深色。
+
+### 说明
+
+- 本次只统一色板，**未逐个迁移**仍引用旧色名的 drawable（`bg_tool` / `bg_input` / `bg_dialog`
+  等）。它们在深色色板下已正确，逐名迁移属后续清理。
+- 已请 workbuddy 补一条 CI 护栏：`tools/check_color_parity.sh`，
+  `values/` 与 `values-night/` 同名色不同值、或 `values-night/` 目录重新出现即 fail。
+
 ## v1.154.0 (2026-10-04)
 
 真机截图（v1.153.0）逐张核对后修掉的一批视觉 bug。前三条都是「上一版自己写错」的回归。

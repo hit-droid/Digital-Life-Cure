@@ -1,21 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 全局亮色主题：品牌色贯通系统控件，状态栏沉浸式 -->
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/brand</item>
-        <item name="android:colorPrimaryDark">@color/brand_dark</item>
-        <item name="android:colorAccent">@color/brand</item>
-        <item name="android:colorControlActivated">@color/brand</item>
+    <!-- 全局主题：深色、无 ActionBar。parent 刻意不带 Light 后缀 ——
+         App 界面全套手绘深色，用 Light 主题壳会让默认控件（EditText 默认字色、
+         AlertDialog、Material 控件的 activated 态）走亮色分支，与页面撞色。
+         日/夜不再有第二套：values-night/styles.xml 已删除（见 colors.xml 顶部说明）。 -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/operit_accent</item>
+        <item name="android:colorPrimaryDark">@color/operit_bg</item>
+        <item name="android:colorAccent">@color/operit_accent</item>
+        <item name="android:colorControlActivated">@color/operit_accent</item>
         <item name="android:windowBackground">@color/page_bg</item>
         <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
-    <!-- 品牌圆角对话框 -->
-    <style name="AppDialogTheme" parent="android:Theme.Material.Light.Dialog.Alert">
+    <!-- 圆角对话框（与 AppTheme 同为深色口径，不再出现 Light/Dark 两套 parent） -->
+    <style name="AppDialogTheme" parent="android:Theme.Material.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_dialog</item>
-        <item name="android:colorAccent">@color/brand</item>
-        <item name="android:colorControlActivated">@color/brand</item>
+        <item name="android:colorAccent">@color/operit_accent</item>
+        <item name="android:colorControlActivated">@color/operit_accent</item>
     </style>
 </resources>
