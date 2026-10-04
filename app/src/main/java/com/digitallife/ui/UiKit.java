@@ -45,6 +45,57 @@ public final class UiKit {
         return c.getResources().getColor(res);
     }
 
+    /** 读取真实 versionName，避免界面里写死版本号而随发版失真 */
+    public static String appVersion(Context c) {
+        try {
+            String v = c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
+            return v == null ? "?" : v;
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    /** 系统状态栏高度（取不到时返回 0） */
+    public static int statusBarHeight(Context c) {
+        int id = c.getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return id > 0 ? c.getResources().getDimensionPixelSize(id) : 0;
+    }
+
+    /**
+     * 二级页面统一顶栏：Operit 紫色渐隐 + 圆形返回按钮 + 标题，自动留出状态栏高度。
+     * <p>此前各二级页各写一份顶栏，且部分页面漏了状态栏内边距，标题会被状态栏压住。</p>
+     */
+    public static LinearLayout pageTopBar(Activity a, String title) {
+        LinearLayout bar = new LinearLayout(a);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundResource(R.drawable.bg_operit_topbar);
+        bar.setPadding(dp(a, 8), dp(a, 10) + statusBarHeight(a), dp(a, 14), dp(a, 10));
+
+        ImageView back = new ImageView(a);
+        back.setImageResource(R.drawable.ic_back);
+        back.setColorFilter(Color.WHITE);
+        back.setScaleType(ImageView.ScaleType.CENTER);
+        back.setContentDescription("返回");
+        back.setOnClickListener(v -> a.finish());
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(0x33FFFFFF);
+        ripple(a, back, circle, 18);
+        bar.addView(back, new LinearLayout.LayoutParams(dp(a, 36), dp(a, 36)));
+
+        TextView t = new TextView(a);
+        t.setText(title);
+        t.setTextSize(18f);
+        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        t.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.leftMargin = dp(a, 10);
+        bar.addView(t, tlp);
+        return bar;
+    }
+
     public static LinearLayout.LayoutParams lp(Context c, int extra) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -52,27 +103,41 @@ public final class UiKit {
         return p;
     }
 
-    /** 圆角卡片容器 */
+    /**
+     * 内容卡片容器。
+     * <p>统一到 Operit 语言：标题移到卡片外部（强调色小节标题），卡片本身是圆角 surface 面板。
+     * 返回值仍是「可继续 addView 的容器」，对旧调用方保持兼容。</p>
+     */
     public static LinearLayout card(Context c, LinearLayout root, String title) {
+        if (title != null && !title.isEmpty()) {
+            sectionTitle(c, root, title, null);
+        }
+        return panel(c, root);
+    }
+
+    /** Operit 风格圆角内容面板（自身不含标题），配合 {@link #sectionTitle} 使用 */
+    public static LinearLayout panel(Context c, LinearLayout root) {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 16));
-        box.setElevation(dp(c, 2));
+        box.setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14));
         box.setBackgroundResource(R.drawable.bg_card);
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        blp.topMargin = dp(c, 12);
-        root.addView(box, blp);
-
-        TextView t = new TextView(c);
-        t.setText(title);
-        t.setTextSize(15f);
-        t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        t.setLetterSpacing(0.03f);
-        t.setTextColor(color(c, R.color.brand));
-        t.setPadding(0, 0, 0, dp(c, 10));
-        box.addView(t, lp(c, 0));
+        root.addView(box, lp(c, 0));
         return box;
+    }
+
+    /** Operit 风格小号 chip 操作按钮（描边胶囊），用于「卸载 / 删除 / 复制」等次级操作 */
+    public static TextView chipButton(Context c, LinearLayout root, String text, int colorRes) {
+        TextView tv = new TextView(c);
+        tv.setText(text);
+        tv.setTextSize(12f);
+        tv.setTextColor(color(c, colorRes));
+        tv.setBackgroundResource(R.drawable.bg_chip_outline);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(dp(c, 12), dp(c, 6), dp(c, 12), dp(c, 6));
+        tv.setIncludeFontPadding(false);
+        pressScale(tv);
+        root.addView(tv);
+        return tv;
     }
 
     public static EditText input(Context c, LinearLayout root, String hint, String value) {
@@ -217,8 +282,8 @@ public final class UiKit {
         t.setText(title);
         t.setTextSize(15f);
         t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        t.setLetterSpacing(0.03f);
-        t.setTextColor(color(c, R.color.brand));
+        t.setLetterSpacing(0.04f);
+        t.setTextColor(color(c, R.color.operit_accent));
         header.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         TextView arrow = new TextView(c);
@@ -282,10 +347,10 @@ public final class UiKit {
         ilp.topMargin = dp(activity, 16);
         wrap.addView(info, ilp);
 
-        addInfoRow(activity, info, "版本", "1.23.0");
+        addInfoRow(activity, info, "版本", appVersion(activity));
         addInfoRow(activity, info, "包名", "com.digitallife");
         addInfoRow(activity, info, "角色", "小汐");
-        addInfoRow(activity, info, "构建", "v1.23.0-Operit-Shell");
+        addInfoRow(activity, info, "构建", "v" + appVersion(activity) + "-Operit-Shell");
 
         Button close = button(activity, wrap, "关闭");
         close.setOnClickListener(v -> {

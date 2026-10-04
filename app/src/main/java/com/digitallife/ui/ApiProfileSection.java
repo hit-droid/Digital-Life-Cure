@@ -71,30 +71,14 @@ public class ApiProfileSection {
 
         // ==================== 卡片一：选择模型配置 ====================
         LinearLayout cardSel = sectionCard("选择模型配置");
-        LinearLayout titleRow = new LinearLayout(ctx);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = new TextView(ctx);
-        title.setText("选择模型配置");
-        title.setTextSize(15f);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        title.setTextColor(UiKit.color(ctx, R.color.brand));
-        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button btnNew = new Button(ctx);
-        btnNew.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnNew.setContentDescription("新建");   // 自动生成：a11y
-        btnNew.setText("＋ 新建");
-        btnNew.setTextSize(13f);
-        btnNew.setAllCaps(false);
-        btnNew.setTextColor(UiKit.color(ctx, R.color.brand));
-        btnNew.setBackgroundResource(R.drawable.bg_btn_secondary);
-        btnNew.setPadding(UiKit.dp(ctx, 12), 0, UiKit.dp(ctx, 12), 0);
-        UiKit.pressScale(btnNew);
+        // 「＋ 新建」右对齐（标题已由 UiKit.card 提到卡片外部，不再与之同排）
+        LinearLayout newRow = new LinearLayout(ctx);
+        newRow.setOrientation(LinearLayout.HORIZONTAL);
+        newRow.setGravity(Gravity.END);
+        TextView btnNew = UiKit.chipButton(ctx, newRow, "＋ 新建", R.color.operit_accent);
+        btnNew.setContentDescription("新建配置");
         btnNew.setOnClickListener(v -> startNewProfile());
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(ctx, 36));
-        titleRow.addView(btnNew, nlp);
-        cardSel.addView(titleRow, UiKit.lp(ctx, 0));
+        cardSel.addView(newRow, UiKit.lp(ctx, 0));
 
         // 用途 Tab（对话大脑 / 护理大脑）
         LinearLayout scopeRow = new LinearLayout(ctx);
@@ -181,19 +165,9 @@ public class ApiProfileSection {
 
     // ==================== 布局工具 ====================
 
-    /** 独立卡片容器（顶部外边距 12dp） */
+    /** 独立卡片容器：标题由 UiKit.card 渲染为强调色小节标题 + 圆角面板 */
     private LinearLayout sectionCard(String title) {
-        LinearLayout box = new LinearLayout(activity);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(UiKit.dp(activity, 16), UiKit.dp(activity, 14),
-                UiKit.dp(activity, 16), UiKit.dp(activity, 16));
-        box.setElevation(UiKit.dp(activity, 2));
-        box.setBackgroundResource(R.drawable.bg_card);
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        blp.topMargin = UiKit.dp(activity, 12);
-        root.addView(box, blp);
-        return box;
+        return UiKit.card(activity, root, title);
     }
 
     /** 带字段标签的输入行：标签在上、输入框在下（对齐 Operit SettingsTextField） */
@@ -228,7 +202,7 @@ public class ApiProfileSection {
         b.setText(text);
         b.setTextSize(13f);
         b.setAllCaps(false);
-        b.setTextColor(UiKit.color(activity, R.color.brand));
+        b.setTextColor(UiKit.color(activity, R.color.operit_accent));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setPadding(UiKit.dp(activity, 6), 0, UiKit.dp(activity, 6), 0);
         UiKit.pressScale(b);
@@ -248,7 +222,7 @@ public class ApiProfileSection {
             b.setTextColor(Color.WHITE);
             b.setBackgroundResource(R.drawable.bg_btn_primary);
         } else {
-            b.setTextColor(UiKit.color(activity, R.color.brand));
+            b.setTextColor(UiKit.color(activity, R.color.operit_accent));
             b.setBackgroundResource(R.drawable.bg_btn_secondary);
         }
     }
@@ -562,7 +536,7 @@ public class ApiProfileSection {
         b.setText(text);
         b.setTextSize(12f);
         b.setAllCaps(false);
-        b.setTextColor(UiKit.color(activity, R.color.brand));
+        b.setTextColor(UiKit.color(activity, R.color.operit_accent));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setPadding(UiKit.dp(activity, 8), 0, UiKit.dp(activity, 8), 0);
         UiKit.pressScale(b);

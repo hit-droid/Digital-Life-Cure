@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -31,30 +30,7 @@ public class AboutActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
 
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
-        topBar.setPadding(UiKit.dp(this, 8), UiKit.dp(this, 56) + statusBarHeight(), UiKit.dp(this, 16), UiKit.dp(this, 12));
-        topBar.setElevation(UiKit.dp(this, 4));
-
-        TextView btnBack = new TextView(this);
-        btnBack.setText("<");
-        btnBack.setTextSize(20f);
-        btnBack.setTextColor(0xFFFFFFFF);
-        btnBack.setPadding(UiKit.dp(this, 8), UiKit.dp(this, 8), UiKit.dp(this, 12), UiKit.dp(this, 8));
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText(R.string.route_about);
-        tvTitle.setTextSize(20f);
-        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tvTitle.setTextColor(0xFFFFFFFF);
-        topBar.addView(tvTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
+        LinearLayout topBar = UiKit.pageTopBar(this, getString(R.string.route_about));
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -144,7 +120,7 @@ public class AboutActivity extends Activity {
                 if (isNewer) {
                     downloadUrl = latest.url;
                     btn.setText("前往下载 " + latest.tag);
-                    status.setTextColor(UiKit.color(AboutActivity.this, R.color.brand));
+                    status.setTextColor(UiKit.color(AboutActivity.this, R.color.operit_accent));
                     status.setText("发现新版本 " + latest.tag + "（当前 " + curVersion + "），点上面按钮前往下载。");
                 } else {
                     btn.setText("再检查一次");
@@ -212,7 +188,7 @@ public class AboutActivity extends Activity {
         copyBtn.setText("复制环境信息");
         copyBtn.setTextSize(13f);
         copyBtn.setAllCaps(false);
-        copyBtn.setTextColor(UiKit.color(this, R.color.brand));
+        copyBtn.setTextColor(UiKit.color(this, R.color.operit_accent));
         copyBtn.setBackgroundResource(R.drawable.bg_btn_secondary);
         LinearLayout.LayoutParams cblp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(this, 34));
@@ -239,8 +215,4 @@ public class AboutActivity extends Activity {
         }
     }
 
-    private int statusBarHeight() {
-        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
-    }
 }

@@ -104,8 +104,8 @@ public class SettingsTabView extends LinearLayout {
         scroll.setVerticalScrollBarEnabled(false);
         LinearLayout root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(UiKit.dp(activity, 0), UiKit.dp(activity, 8),
-                UiKit.dp(activity, 0), UiKit.dp(activity, 20));
+        root.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 8),
+                UiKit.dp(activity, 12), UiKit.dp(activity, 20));
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -123,20 +123,16 @@ public class SettingsTabView extends LinearLayout {
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setPadding(0, UiKit.dp(activity, 10), 0, 0);
         overview.addView(chips);
-        UiKit.statChip(activity, chips, "v1.23.0");
+        UiKit.statChip(activity, chips, "v" + UiKit.appVersion(activity));
         UiKit.statChip(activity, chips, settings.isConfigured() ? "已配置" : "未配置");
 
-        // ---------- 4 个分组（v1.21.0 分组结构 + v1.23.0 Operit 色板） ----------
+        // ---------- 4 个分组（v1.21.0 分组结构 + Operit 色板） ----------
+        // 分组内容保持透明：卡片自带圆角 surface 面板（UiKit.card），
+        // 若再给分组铺一层同色底，内外面板同色，卡片边界就看不出来了。
         LinearLayout gStart = UiKit.expandableCard(activity, root, "启动与权限", true);
         LinearLayout gMain = UiKit.expandableCard(activity, root, "桌宠与功能", true);
         LinearLayout gChat = UiKit.expandableCard(activity, root, "互动", true);
         LinearLayout gDev = UiKit.expandableCard(activity, root, "开发者与调试", false);
-
-        // v1.23.0: expandableCard 内的卡片改用 operit_surface 背景
-        LinearLayout[] groups = {gStart, gMain, gChat, gDev};
-        for (LinearLayout g : groups) {
-            g.setBackgroundColor(UiKit.color(activity, R.color.operit_surface));
-        }
 
         // ---------- 启停控制 ----------
         LinearLayout cCtrl = UiKit.card(activity, gStart, "启停控制");
@@ -158,7 +154,7 @@ public class SettingsTabView extends LinearLayout {
         btnStop.setText("停止桌宠");
         btnStop.setTextSize(14f);
         btnStop.setAllCaps(false);
-        btnStop.setTextColor(UiKit.color(activity, R.color.brand));
+        btnStop.setTextColor(UiKit.color(activity, R.color.operit_accent));
         btnStop.setBackgroundResource(R.drawable.bg_btn_secondary);
         btnStop.setOnClickListener(v -> stopPet());
         rowBtn.addView(btnStop, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));

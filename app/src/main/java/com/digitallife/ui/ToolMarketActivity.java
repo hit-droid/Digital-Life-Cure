@@ -90,35 +90,7 @@ public class ToolMarketActivity extends Activity {
         root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
 
         // ===== 顶栏 =====
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
-        topBar.setPadding(UiKit.dp(this, 12), UiKit.dp(this, 12),
-                UiKit.dp(this, 12), UiKit.dp(this, 12));
-        topBar.setElevation(UiKit.dp(this, 4));
-
-        Button btnBack = new Button(this);
-        btnBack.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnBack.setContentDescription("返回");   // 自动生成：a11y
-        btnBack.setText("←");
-        btnBack.setTextSize(20f);
-        btnBack.setTextColor(Color.WHITE);
-        btnBack.setBackgroundColor(Color.TRANSPARENT);
-        btnBack.setAllCaps(false);
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, new LinearLayout.LayoutParams(
-                UiKit.dp(this, 36), UiKit.dp(this, 36)));
-
-        TextView title = new TextView(this);
-        title.setText("工具市场");
-        title.setTextSize(18f);
-        title.setTextColor(Color.WHITE);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        tlp.leftMargin = UiKit.dp(this, 8);
-        topBar.addView(title, tlp);
+        LinearLayout topBar = UiKit.pageTopBar(this, "工具市场");
 
         // 今日调用统计
         ToolUsageLog log = new ToolUsageLog(this);
@@ -170,7 +142,7 @@ public class ToolMarketActivity extends Activity {
         card.addView(buildSummaryStat("已启用", enabled + "/" + TOOLS.size(),
                 0xFF10B981));
         card.addView(buildSummaryStat("分类", "5",
-                UiKit.color(this, R.color.brand_end)));
+                UiKit.color(this, R.color.operit_accent)));
         listContainer.addView(card, 0);
     }
 

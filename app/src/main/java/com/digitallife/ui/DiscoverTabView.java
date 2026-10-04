@@ -83,7 +83,7 @@ public class DiscoverTabView extends LinearLayout {
         tvMood.setText(mood);
         tvMood.setTextSize(18f);
         tvMood.setTypeface(Typeface.DEFAULT_BOLD);
-        tvMood.setTextColor(UiKit.color(activity, R.color.brand));
+        tvMood.setTextColor(UiKit.color(activity, R.color.operit_accent));
         card.addView(tvMood, UiKit.lp(activity, 0));
 
         if (emotion != null) {
@@ -176,7 +176,7 @@ public class DiscoverTabView extends LinearLayout {
             sh.setText("最近日记");
             sh.setTextSize(13f);
             sh.setTypeface(Typeface.DEFAULT_BOLD);
-            sh.setTextColor(UiKit.color(activity, R.color.brand));
+            sh.setTextColor(UiKit.color(activity, R.color.operit_accent));
             card.addView(sh, UiKit.lp(activity, 4));
             for (MemoryStore.DailySummary s : summaries) {
                 TextView st = new TextView(activity);
@@ -194,7 +194,7 @@ public class DiscoverTabView extends LinearLayout {
             fh.setText("记住的事");
             fh.setTextSize(13f);
             fh.setTypeface(Typeface.DEFAULT_BOLD);
-            fh.setTextColor(UiKit.color(activity, R.color.brand));
+            fh.setTextColor(UiKit.color(activity, R.color.operit_accent));
             card.addView(fh, UiKit.lp(activity, 6));
             for (MemoryStore.Fact f : facts) {
                 TextView ft = new TextView(activity);

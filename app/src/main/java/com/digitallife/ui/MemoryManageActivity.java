@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,8 +13,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -59,24 +56,7 @@ public class MemoryManageActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(getColorCompat(R.color.operit_bg));
 
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
-        topBar.setPadding(dp(6), dp(12), dp(6), dp(12));
-
-        ImageButton btnBack = iconButton(R.drawable.ic_back);
-        btnBack.setContentDescription("返回");
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, btnLp(40, 40));
-
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText("记忆管理");
-        tvTitle.setTextSize(17f);
-        tvTitle.setTextColor(Color.WHITE);
-        tvTitle.setGravity(Gravity.CENTER);
-        tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        topBar.addView(tvTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout topBar = UiKit.pageTopBar(this, "记忆管理");
 
         Button btnRefresh = new Button(this);
         btnRefresh.setHapticFeedbackEnabled(true);   // 自动生成：haptic
@@ -305,7 +285,7 @@ public class MemoryManageActivity extends Activity {
         b.setText(text);
         b.setTextSize(12f);
         b.setAllCaps(false);
-        b.setTextColor(getColorCompat(R.color.brand));
+        b.setTextColor(getColorCompat(R.color.operit_accent));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setPadding(dp(14), dp(4), dp(14), dp(4));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34));
@@ -442,23 +422,6 @@ public class MemoryManageActivity extends Activity {
 
     private int dp(float v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
-    }
-
-    private ImageButton iconButton(int res) {
-        ImageButton b = new ImageButton(this);
-        b.setImageResource(res);
-        b.setBackgroundColor(Color.TRANSPARENT);
-        b.setScaleType(ImageView.ScaleType.CENTER);
-        b.setPadding(dp(8), dp(8), dp(8), dp(8));
-        // v1.37.0：无障碍描述（当前工厂仅用于返回键）
-        if (res == R.drawable.ic_back) b.setContentDescription("返回");
-        return b;
-    }
-
-    private LinearLayout.LayoutParams btnLp(int w, int h) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(w), dp(h));
-        lp.setMargins(dp(4), 0, dp(4), 0);
-        return lp;
     }
 
     @Override

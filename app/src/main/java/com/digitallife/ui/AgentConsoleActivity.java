@@ -54,33 +54,7 @@ public class AgentConsoleActivity extends Activity {
         root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
 
         // 顶栏
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
-        topBar.setPadding(dp(12), dp(12), dp(12), dp(12));
-        topBar.setElevation(dp(4));
-
-        Button btnBack = new Button(this);
-        btnBack.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnBack.setContentDescription("返回");   // 自动生成：a11y
-        btnBack.setText("←");
-        btnBack.setTextSize(20f);
-        btnBack.setTextColor(android.graphics.Color.WHITE);
-        btnBack.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        btnBack.setAllCaps(false);
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, new LinearLayout.LayoutParams(dp(36), dp(36)));
-
-        TextView title = new TextView(this);
-        title.setText("智能体控制台");
-        title.setTextSize(18f);
-        title.setTextColor(android.graphics.Color.WHITE);
-        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        tlp.leftMargin = dp(8);
-        topBar.addView(title, tlp);
+        LinearLayout topBar = UiKit.pageTopBar(this, "智能体控制台");
 
         TextView stat = new TextView(this);
         stat.setText(appVersion());

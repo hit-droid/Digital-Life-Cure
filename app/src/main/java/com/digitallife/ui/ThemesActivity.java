@@ -2,7 +2,6 @@ package com.digitallife.ui;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -21,30 +20,7 @@ public class ThemesActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
 
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_operit_topbar);
-        topBar.setPadding(UiKit.dp(this, 8), UiKit.dp(this, 56) + statusBarHeight(), UiKit.dp(this, 16), UiKit.dp(this, 12));
-        topBar.setElevation(UiKit.dp(this, 4));
-
-        TextView btnBack = new TextView(this);
-        btnBack.setText("<");
-        btnBack.setTextSize(20f);
-        btnBack.setTextColor(0xFFFFFFFF);
-        btnBack.setPadding(UiKit.dp(this, 8), UiKit.dp(this, 8), UiKit.dp(this, 12), UiKit.dp(this, 8));
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText(R.string.route_themes);
-        tvTitle.setTextSize(20f);
-        tvTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        tvTitle.setTextColor(0xFFFFFFFF);
-        topBar.addView(tvTitle, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
+        LinearLayout topBar = UiKit.pageTopBar(this, getString(R.string.route_themes));
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -64,10 +40,5 @@ public class ThemesActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         setContentView(root);
-    }
-
-    private int statusBarHeight() {
-        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return id > 0 ? getResources().getDimensionPixelSize(id) : 0;
     }
 }

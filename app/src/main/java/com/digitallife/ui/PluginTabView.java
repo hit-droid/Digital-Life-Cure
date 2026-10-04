@@ -98,17 +98,7 @@ public class PluginTabView extends LinearLayout {
                 name.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
                 row.addView(name, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-                Button btnUninstall = new Button(activity);
-                btnUninstall.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-                btnUninstall.setContentDescription("btnUninstall");   // 自动生成：a11y
-                btnUninstall.setText("卸载");
-                btnUninstall.setTextSize(11f);
-                btnUninstall.setAllCaps(false);
-                btnUninstall.setTextColor(UiKit.color(activity, R.color.brand));
-                btnUninstall.setBackgroundResource(R.drawable.bg_btn_secondary);
-                btnUninstall.setPadding(UiKit.dp(activity, 10), 0, UiKit.dp(activity, 10), 0);
-                LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 30));
+                TextView btnUninstall = UiKit.chipButton(activity, row, "卸载", R.color.operit_accent);
                 btnUninstall.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(activity)
                             .setTitle("卸载插件")
@@ -121,7 +111,6 @@ public class PluginTabView extends LinearLayout {
                             .setNegativeButton("取消", null)
                             .show();
                 });
-                row.addView(btnUninstall, ulp);
                 card.addView(row, UiKit.lp(activity, 4));
             }
         }
@@ -221,17 +210,7 @@ public class PluginTabView extends LinearLayout {
                 name.setLineSpacing(2f, 1f);
                 row.addView(name, new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-                Button btnDel = new Button(activity);
-                btnDel.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-                btnDel.setContentDescription("btnDel");   // 自动生成：a11y
-                btnDel.setText("删除");
-                btnDel.setTextSize(11f);
-                btnDel.setAllCaps(false);
-                btnDel.setTextColor(UiKit.color(activity, R.color.brand));
-                btnDel.setBackgroundResource(R.drawable.bg_btn_secondary);
-                btnDel.setPadding(UiKit.dp(activity, 10), 0, UiKit.dp(activity, 10), 0);
-                LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(activity, 30));
+                TextView btnDel = UiKit.chipButton(activity, row, "删除", R.color.danger);
                 btnDel.setOnClickListener(v -> {
                     new android.app.AlertDialog.Builder(activity)
                             .setTitle("删除 MCP 服务器")
@@ -244,7 +223,6 @@ public class PluginTabView extends LinearLayout {
                             .setNegativeButton("取消", null)
                             .show();
                 });
-                row.addView(btnDel, dlp);
                 card.addView(row, UiKit.lp(activity, 4));
             }
         }
