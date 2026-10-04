@@ -1,6 +1,8 @@
 package com.digitallife.harness;
 
 import com.digitallife.brain.Tools;
+import com.digitallife.tools.Tool;
+import com.digitallife.tools.ToolRegistry;
 
 import org.json.JSONObject;
 
@@ -103,7 +105,7 @@ public final class ToolPipeline {
      */
     private void applyApproval(Call call) {
         if (call == null || call.rejected || approvalPolicy == null) return;
-        if (!ToolApprovalPolicy.requiresApproval(call.name)) return;
+        if (!ToolApprovalPolicy.requiresApproval(call.name, isExternalTool(call.name))) return;
         if (approvalPolicy.isDeniedThisTurn(call.name)) {
             call.rejected = true;
             call.error = "用户已拒绝，本轮不再执行：" + call.name;
@@ -125,5 +127,15 @@ public final class ToolPipeline {
         approvalPolicy.markDeniedThisTurn(call.name);
         call.rejected = true;
         call.error = "用户拒绝执行该工具：" + call.name;
+    }
+
+    /**
+     * v1.145.0（#79）：外部/第三方工具（MCP 远程工具）按不可信处理，默认需要用户审批。
+     * <p>从全局注册表按名查实例；查不到（如本地宿主自带工具）视为内部，走名字判定。</p>
+     */
+    private static boolean isExternalTool(String name) {
+        if (name == null) return false;
+        Tool tool = ToolRegistry.getInstance().find(name);
+        return tool != null && tool.isExternal();
     }
 }

@@ -17,7 +17,8 @@ import java.util.Set;
  *
  * <p>这里只做「判定 + 记账 + 文案」三件事，不碰 UI：</p>
  * <ul>
- *   <li>危险工具固定集合默认需要审批，未知工具默认放行（只读工具零打扰）；</li>
+ *   <li>危险工具固定集合默认需要审批，未知的本地工具放行（只读工具零打扰）；</li>
+ *   <li>外部/第三方工具（MCP 等，{@code Tool.isExternal()}）一律需要审批；</li>
  *   <li>会话级允许集：用户选「本会话始终允许」后不再打扰；</li>
  *   <li>拒绝后本轮内不再自动重试（{@link #markDeniedThisTurn}），避免模型死循环；</li>
  *   <li>{@link #summary} 生成确认文案，敏感字段一律脱敏。</li>
@@ -49,13 +50,33 @@ public final class ToolApprovalPolicy {
     private final Set<String> sessionAllowed = new HashSet<>();
     private final Set<String> deniedThisTurn = new HashSet<>();
 
-    /** 该工具是否需要用户确认；未知工具放行（只读工具零打扰） */
+    /**
+     * 该工具是否需要用户确认。
+     *
+     * <p>{@code external=true} 表示外部/第三方工具（MCP 远程工具等，见 {@code Tool.isExternal()}）：
+     * 来源不可信，名字再「无害」也一律需要审批。</p>
+     */
+    public static boolean requiresApproval(String toolName, boolean external) {
+        if (external) return true;
+        return requiresApproval(toolName);
+    }
+
+    /** 该工具是否需要用户确认；未知的本地工具放行（只读工具零打扰） */
     public static boolean requiresApproval(String toolName) {
         if (toolName == null || toolName.isEmpty()) return false;
-        if (DANGEROUS.contains(toolName)) return true;
         String lower = toolName.toLowerCase(Locale.ROOT);
-        for (String prefix : DANGEROUS_PREFIXES) {
-            if (lower.startsWith(prefix)) return true;
+        // 从整名起、逐个 '_' 边界取后缀逐一比对。MCP/插件工具会带 namespace 前缀
+        // （如 gh_delete_repo），只比整名会漏判；按边界后缀匹配即可覆盖带前缀的情况。
+        int from = 0;
+        while (from < lower.length()) {
+            String candidate = lower.substring(from);
+            if (DANGEROUS.contains(candidate)) return true;
+            for (String prefix : DANGEROUS_PREFIXES) {
+                if (candidate.startsWith(prefix)) return true;
+            }
+            int next = lower.indexOf('_', from);
+            if (next < 0) break;
+            from = next + 1;
         }
         return false;
     }
