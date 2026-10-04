@@ -17,6 +17,7 @@ import com.digitallife.R;
 import com.digitallife.ui.UiKit;
 import com.digitallife.update.UpdateChecker;
 import com.digitallife.update.UpdateClient;
+import com.digitallife.util.EnvFacts;
 
 public class AboutActivity extends Activity {
 
@@ -85,6 +86,9 @@ public class AboutActivity extends Activity {
         version.setTextColor(UiKit.color(this, R.color.operit_text_secondary));
         content.addView(version, lp);
 
+        // v1.147.0（#87）：「运行环境自检」卡片（只读 + 一键复制环境信息）
+        addEnvFactsCard(content, curVersion);
+
         TextView desc = new TextView(this);
         desc.setText("基于 Operit AI 视觉风格重构的数字生命 App\n角色：小汐\n© 2026 hit-droid");
         desc.setTextSize(13f);
@@ -96,8 +100,7 @@ public class AboutActivity extends Activity {
         content.addView(desc, lp2);
 
         // v1.138.0（Issue #41）：应用内更新检查。手动触发，不后台轮询。
-        final TextView updateStatus = new TextView(this);
-        updateStatus.setTextSize(13f);
+        final TextView updateStatus = new TextView(this);        updateStatus.setTextSize(13f);
         updateStatus.setTextColor(UiKit.color(this, R.color.operit_text_hint));
         updateStatus.setLineSpacing(UiKit.dp(this, 3), 1f);
 
@@ -150,6 +153,81 @@ public class AboutActivity extends Activity {
                 }
             }
         });
+    }
+
+    /**
+     * v1.147.0（#87）：运行环境自检卡片。
+     * <p>Android 侧负责取值（SDK/版本/ABI/页大小），拼装与判定全部交给纯逻辑
+     * {@link EnvFacts}。用户点「复制环境信息」把多行报告写进剪贴板，方便贴到 issue。</p>
+     */
+    private void addEnvFactsCard(LinearLayout content, final String appVersion) {
+        final int sdkInt = android.os.Build.VERSION.SDK_INT;
+        final String release = android.os.Build.VERSION.RELEASE;
+        final String[] abiArr = android.os.Build.SUPPORTED_ABIS;
+        final java.util.List<String> abis = abiArr == null
+                ? java.util.Collections.<String>emptyList()
+                : java.util.Arrays.asList(abiArr);
+        long pageSize = 0L;
+        try {
+            // API 21+ 可用；取不到时保持 0（纯逻辑侧显示「未知」）
+            pageSize = android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE);
+        } catch (Throwable ignored) {
+        }
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(UiKit.dp(this, 14), UiKit.dp(this, 12),
+                UiKit.dp(this, 14), UiKit.dp(this, 12));
+        card.setElevation(UiKit.dp(this, 1));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.topMargin = UiKit.dp(this, 16);
+
+        TextView title = new TextView(this);
+        title.setText("运行环境");
+        title.setTextSize(14f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(UiKit.color(this, R.color.operit_text_primary));
+        card.addView(title);
+
+        final String body = EnvFacts.androidLine(sdkInt, release)
+                + "\nABI：" + EnvFacts.abiLine(abis)
+                + "\n内存页大小：" + EnvFacts.pageLine(pageSize)
+                + "\n16 KB 页面设备：" + (EnvFacts.compatible16k(pageSize) ? "是" : "否");
+        TextView bodyTv = new TextView(this);
+        bodyTv.setText(body);
+        bodyTv.setTextSize(13f);
+        bodyTv.setTextColor(UiKit.color(this, R.color.operit_text_secondary));
+        bodyTv.setLineSpacing(UiKit.dp(this, 3), 1f);
+        LinearLayout.LayoutParams blp2 = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp2.topMargin = UiKit.dp(this, 8);
+        card.addView(bodyTv, blp2);
+
+        Button copyBtn = new Button(this);
+        copyBtn.setHapticFeedbackEnabled(true);
+        copyBtn.setContentDescription("复制环境信息");
+        copyBtn.setText("复制环境信息");
+        copyBtn.setTextSize(13f);
+        copyBtn.setAllCaps(false);
+        copyBtn.setTextColor(UiKit.color(this, R.color.brand));
+        copyBtn.setBackgroundResource(R.drawable.bg_btn_secondary);
+        LinearLayout.LayoutParams cblp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(this, 34));
+        cblp.topMargin = UiKit.dp(this, 10);
+        copyBtn.setOnClickListener(v -> {
+            String text = EnvFacts.report(appVersion, sdkInt, release, abis, pageSize);
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("环境信息", text));
+                Toast.makeText(this, "已复制环境信息", Toast.LENGTH_SHORT).show();
+            }
+        });
+        card.addView(copyBtn, cblp);
+
+        content.addView(card, clp);
     }
 
     private void openUrl(String url) {
