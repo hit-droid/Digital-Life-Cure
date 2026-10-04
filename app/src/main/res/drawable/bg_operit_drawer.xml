@@ -2,7 +2,9 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#B32A2A2A" />
+            <!-- 必须不透明：此前 #B32A2A2A（70%）又无模糊，底层会话列表的文字会
+                 直接透到抽屉面板上（v1.153.0 真机截图证实）。 -->
+            <solid android:color="#FF2A2A2A" />
             <corners android:topLeftRadius="16dp" android:bottomLeftRadius="16dp" />
         </shape>
     </item>

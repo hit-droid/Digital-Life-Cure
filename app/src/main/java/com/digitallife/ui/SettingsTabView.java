@@ -243,7 +243,8 @@ public class SettingsTabView extends LinearLayout {
         btnPrivacy.setOnClickListener(v -> showPrivacy());
 
         // ---------- 互动（语音 + 快速聊天） ----------
-        LinearLayout cChat = UiKit.card(activity, gChat, "互动");
+        // 组头已叫「互动」，卡片内标题不能同名，否则截图上「互动」上下连着出现两次。
+        LinearLayout cChat = UiKit.card(activity, gChat, "语音与快速聊天");
         Button btnVoice = UiKit.button(activity, cChat, "按住说话（语音对话）");
         btnVoice.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {

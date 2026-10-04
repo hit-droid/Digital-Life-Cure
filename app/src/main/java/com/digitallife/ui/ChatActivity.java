@@ -470,7 +470,9 @@ public class ChatActivity extends Activity {
         inputBar.addView(btnAttach, alp);
 
         etInput = new EditText(this);
-        etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 可附带模型 zip…"
+        // 输入框高度写死 dp(48)，hint 一旦折行第二行就会被裁掉（v1.153.0 真机截图里
+        // 护理版「…可附带模型 zip…」就露出半截）。护理 hint 必须与普通版等长，别再加字。
+        etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 传模型 zip"
                 : "说点什么… ＋ 可附带文件");
         etInput.setTextSize(15f);
         // v1.47.0：改为多行输入。此前 singleLine + IME_ACTION_SEND 会让回车直接发送，

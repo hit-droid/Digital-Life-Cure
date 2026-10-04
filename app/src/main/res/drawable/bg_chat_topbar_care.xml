@@ -6,8 +6,9 @@
      薄荷绿，既保住「护理入口可辨识」，又与普通对话页同为一块渐隐 hero header。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
+    <!-- 同 bg_operit_topbar：angle=270 才是「上→下」，否则顶栏底边出现硬切边。 -->
     <gradient
-        android:angle="90"
+        android:angle="270"
         android:startColor="#2A5A4A"
         android:endColor="@color/operit_bg"
         android:type="linear" />

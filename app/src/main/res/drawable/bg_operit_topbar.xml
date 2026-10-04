@@ -3,8 +3,10 @@
      纵向渐变到 operit_bg，使顶栏与内容区无缝衔接，而不是一块突兀的纯色条。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
+    <!-- angle=270 才是「上→下」：起点色在顶部。写 90 会变成底部紫、顶部暗，
+         顶栏底边会出现一条硬切边（v1.153.0 真机截图证实）。 -->
     <gradient
-        android:angle="90"
+        android:angle="270"
         android:startColor="@color/operit_header_start"
         android:endColor="@color/operit_bg"
         android:type="linear" />
