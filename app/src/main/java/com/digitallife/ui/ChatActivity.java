@@ -52,7 +52,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.WeakHashMap;
 import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -90,8 +89,6 @@ public class ChatActivity extends Activity {
      * 界面移除所点的、数据库删掉最后的，两边对不上。这里记下顺序好做判定。</p>
      */
     private final ArrayList<TextView> aiBubbles = new ArrayList<>();
-    /** v1.142.0（#59）：记录每个被折叠气泡的完整文本，长按复制/分享/朗读/引用优先用 */
-    private final WeakHashMap<TextView, CharSequence> fullTexts = new WeakHashMap<>();
     private TextView btnScrollBottom;
     private android.view.ViewTreeObserver.OnScrollChangedListener scrollWatcher;
     private LinearLayout listContainer;
@@ -1559,8 +1556,6 @@ public class ChatActivity extends Activity {
                 }
                 // 保存完整文本
                 CharSequence full = bubble.getText();
-                // v1.142.0（#59）：记录全文，折叠态长按取用时优先用完整文本而非截断内容
-                fullTexts.put(bubble, full);
                 // 收起态
                 bubble.setMaxLines(COLLAPSE_MAX_LINES);
                 bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -1950,7 +1945,6 @@ public class ChatActivity extends Activity {
         // v1.142.0（#57）：登记必须在两个 return 分支之前清掉，否则被包在容器里的
         // 气泡（历史 / 流式回复都是）移除后仍留在 aiBubbles 里，会被当成「最后一条」
         aiBubbles.remove(v);
-        fullTexts.remove(v);
         android.view.ViewParent p = v.getParent();
         if (p instanceof View && p != listContainer && p.getParent() == listContainer) {
             listContainer.removeView((View) p);
@@ -2065,9 +2059,7 @@ public class ChatActivity extends Activity {
         // v1.28.0：长消息折叠（历史消息/非流式回复同样生效）
         applyCollapse(b);
         b.setOnLongClickListener(v -> {
-            // v1.142.0（#59）：折叠态下 b.getText() 是截断文本，优先取记录过的完整文本
-            CharSequence stored = fullTexts.get(b);
-            String txt = (stored != null ? stored : (b.getText() == null ? "" : b.getText())).toString();
+            String txt = b.getText() == null ? "" : b.getText().toString();
             // v1.28.0：去掉折叠提示尾巴，避免复制/朗读带出「▸ 展开全文」
             txt = ChatTextOps.stripCollapseHint(txt);
             final String clean = txt;
@@ -2743,7 +2735,6 @@ public class ChatActivity extends Activity {
                     listContainer.removeAllViews();
                     // v1.142.0（#57）：登记一并清空，否则清空后残留的气泡会被当成「最后一条」
                     aiBubbles.clear();
-                    fullTexts.clear();   // #59：完整文本登记同步清空
                     // 行数归零，不然清空后 rows 一直小于旧值，未读计数再也不累加
                     lastRowCount = 0;
                     // v1.34.0：清空会话后失效建议缓存，避免复用旧建议
