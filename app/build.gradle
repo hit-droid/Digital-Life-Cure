@@ -6,22 +6,22 @@ android {
     namespace 'com.digitallife'
     compileSdk 34
 
-    // v1.150.0：显式固定 NDK 版本，消除「修了又炸」的环境漂移。
+    // 构建护栏：显式固定 NDK 版本，消除「修了又炸」的环境漂移（见 issue #94）。
     // 此前不指定 ndkVersion，实际用的 NDK 由「AGP 8.5.0 的默认值 + runner 现场下载」共同决定，
     // 会随 AGP/镜像更新而变——同一份源码在不同时间编出的 .so 对齐可能不同，
-    // 这正是 Android 16 闪退修复「上次修好、这次又炸」在工具链层面的来源。
+    // 这正是 Android 16 闪退「上次修好、这次又炸」在工具链层面的来源。
     // 固定为 r27.3.13750724：既与 GitHub runner 预装版本一致（无需现场下载），
-    // 又因 r27+ 默认即 16 KB 对齐（max/common-page-size 均 16384），与本项目 CMakeLists 的显式链接项叠成双保险。
-    // 注意：改这里与 CMakeLists 注释里的「r26.1」不一致，故同步更新了注释；如需留在 r26 线，
-    // 亦可改为 "26.3.11579264"（runner 亦预装），16 KB 仍由 CMakeLists 的两个链接参数保证。
+    // 又因 r27+ 默认即 16 KB 对齐（max/common-page-size 均 16384），
+    // 与 CMakeLists 的显式链接项叠成双保险。
+    // CI 实测：runner 已预装此版；用它重编三个 ABI 的 GNU_RELRO 终点仍全部 16 KB 对齐。
     ndkVersion "27.3.13750724"
 
     defaultConfig {
         applicationId "com.digitallife"
         minSdk 21
         targetSdk 34
-        versionCode 152
-        versionName "1.149.0"
+        versionCode 153
+        versionName "1.150.0"
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86'
         }
@@ -90,20 +90,22 @@ android {
 
     packagingOptions {
         jniLibs {
-            // v1.150.0：把 native 库的打包方式**显式锁死**为压缩（legacy）。
+            // 构建护栏：把 native 库的打包方式**显式锁死**为压缩（legacy），见 issue #94。
             //
             // 背景：本项目 minSdk 21（< 23），AGP 对 minSdk 23 以下默认走 legacy——
             // .so 在 APK 内压缩存储、安装时解压到磁盘再加载，因此「APK 内未压缩 .so 的
-            // 16 KB zip 对齐」这条通道目前**不存在**（经 issue #94 与 trae 核实确认）。
+            // 16 KB zip 对齐」这条通道目前**不存在**（经 trae 实测核实，CI 也已复现
+            // SO_STORED=no 确认产物确为压缩存储）。
             //
             // 但默认值会随 minSdk 变化而**静默翻转**：一旦有人把 minSdk 提到 ≥ 23，
-            // AGP 会切成未压缩 + APK 内 mmap，zip 对齐立刻变成真实风险（16 KB 设备会
-            // 走兼容模式甚至装不上），而 CI 没人看得出来。这里显式写死，
-            // 把这个隐式行为变成显式契约，未来提高 minSdk 时也必须同步处理对齐。
+            // AGP 会切成未压缩 + APK 内 mmap，zip 对齐立刻变成真实风险
+            //（16 KB 设备会走兼容模式甚至装不上），而 CI 没人看得出来。
+            // 这里显式写死，把这个隐式行为变成显式契约：
+            // 未来若要提高 minSdk，必须同步处理 native 库的对齐方式。
             //
-            // 选择「压缩兜底」而非升级 AGP 到 8.5.1+：我们本来就在 legacy 通道，
-            // 此 diff 极小且零风险；升 AGP 的收益（支持未压缩 16 KB 对齐）用不上，
-            // 却要承担大版本升级的全量验证成本。详见 issue #94 第三节。
+            // 选择「压缩兜底」而非升级 AGP 到 8.5.1+（trae 在 issue #94 的决策）：
+            // 我们本来就在 legacy 通道，此 diff 极小且零风险；
+            // 升 AGP 的收益（支持未压缩 16 KB 对齐）当前用不上，却要承担大版本升级的全量验证成本。
             useLegacyPackaging true
         }
     }
