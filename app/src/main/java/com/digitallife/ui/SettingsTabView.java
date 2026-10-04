@@ -95,6 +95,8 @@ public class SettingsTabView extends LinearLayout {
         setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
         buildUi();
         updateStatus();
+        // 启动后若刚应用过「从备份恢复」，第一时间汇报结果（清除后不再弹）
+        handler.post(this::reportRestoreResultIfAny);
     }
 
     private void buildUi() {
@@ -363,6 +365,35 @@ public class SettingsTabView extends LinearLayout {
 
     public void onResume() {
         updateStatus();
+        reportRestoreResultIfAny();
+    }
+
+    /**
+     * 汇报「从备份恢复」的结果（由 {@code com.digitallife.App} 在启动恢复后写入
+     * {@link Settings#getRestoreResult()}），同一结果只弹一次。
+     */
+    private void reportRestoreResultIfAny() {
+        String r = settings.getRestoreResult();
+        if (r == null || r.isEmpty()) return;
+        settings.clearRestoreResult();
+
+        int sep = r.indexOf('|');
+        String kind = sep >= 0 ? r.substring(0, sep) : r;
+        String detail = sep >= 0 ? r.substring(sep + 1) : "";
+        final String title;
+        final String msg;
+        if ("ok".equals(kind)) {
+            title = "恢复完成";
+            msg = "已从备份恢复 " + detail + " 个文件，当前数据已是备份内容。";
+        } else {
+            title = "恢复失败";
+            msg = "未能从备份恢复：" + detail + "\n\n原有数据未被覆盖，可换个备份重试。";
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle(title)
+                .setMessage(msg)
+                .setPositiveButton("知道了", null)
+                .show();
     }
 
     private void saveConfig() {
