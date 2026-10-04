@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,7 +22,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 
 import com.digitallife.R;
@@ -32,9 +38,11 @@ import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.service.PetService;
 import com.digitallife.storage.DataPort;
+import com.digitallife.storage.PendingRestore;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.CrashHandler;
+import com.digitallife.util.PassphraseCrypto;
 import com.digitallife.util.Settings;
 
 /**
@@ -46,6 +54,8 @@ public class SettingsTabView extends LinearLayout {
 
     /** 导出数据（SAF 创建文档）的请求码，由 MainActivity 转发 */
     public static final int REQ_EXPORT_DATA = 7001;
+    /** 从备份恢复（SAF 打开文档）的请求码，由 MainActivity 转发 */
+    public static final int REQ_IMPORT_DATA = 7002;
 
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -59,11 +69,17 @@ public class SettingsTabView extends LinearLayout {
     private ApiProfileSection modelSection;
     private int currentModelIndex = 0;
 
-    /** 转发文件选择结果：导出数据落盘完成后提示 */
+    /** 转发文件选择结果：导出数据落盘完成后提示 / 从备份恢复 */
     public boolean handleActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQ_EXPORT_DATA) {
             if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
-                doExport(data.getData());
+                askExportPassphrase(data.getData());
+            }
+            return true;
+        }
+        if (requestCode == REQ_IMPORT_DATA) {
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                importBackup(data.getData());
             }
             return true;
         }
@@ -216,8 +232,11 @@ public class SettingsTabView extends LinearLayout {
                 : "当前系统（Android 5.x）没有密钥库加密，API Key 以明文保存，请注意。");
         cPrivacy.addView(tvSecure, UiKit.lp(activity, 0));
 
-        Button btnExport = UiKit.button(activity, cPrivacy, "导出我的数据（对话 / 记忆 / 角色 / 设置）");
+        Button btnExport = UiKit.button(activity, cPrivacy, "导出我的数据（对话 / 记忆 / 角色 / 设置，可加口令）");
         btnExport.setOnClickListener(v -> exportData());
+
+        Button btnImport = UiKit.secondaryButton(activity, cPrivacy, "从备份恢复（导入先前导出的备份）");
+        btnImport.setOnClickListener(v -> pickBackup());
 
         Button btnWipe = UiKit.secondaryButton(activity, cPrivacy, "清除全部数据（不含已导入模型）");
         btnWipe.setOnClickListener(v -> confirmClearData());
@@ -649,23 +668,195 @@ public class SettingsTabView extends LinearLayout {
         }
     }
 
-    private void doExport(final Uri uri) {
+    // ---------- 导出（v1.146.0：可选口令加密） ----------
+
+    /** 导出入口：SAF 选好保存位置后，询问是否加口令 */
+    private void askExportPassphrase(final Uri uri) {
+        new AlertDialog.Builder(activity)
+                .setTitle("导出备份")
+                .setMessage("可以给备份设置一个口令：文件即使经云盘/聊天工具转发泄露，没有口令也打不开。\n\n"
+                        + "口令不会保存在任何地方，请务必记牢——忘记将无法恢复。")
+                .setPositiveButton("设置口令", (d, w) -> promptNewPassphrase(uri))
+                .setNegativeButton("不加密", (d, w) -> doExport(uri, null))
+                .setNeutralButton("取消", null)
+                .show();
+    }
+
+    private void promptNewPassphrase(final Uri uri) {
+        final EditText input = new EditText(activity);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint("口令（至少 6 位）");
+        new AlertDialog.Builder(activity)
+                .setTitle("设置备份口令")
+                .setView(input)
+                .setPositiveButton("确定", (d, w) -> {
+                    String s = input.getText().toString();
+                    if (s.length() < 6) {
+                        toast("口令至少 6 位，请重试");
+                        promptNewPassphrase(uri);
+                        return;
+                    }
+                    doExport(uri, s.toCharArray());
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void doExport(final Uri uri, final char[] passphrase) {
         toast("正在导出…");
         new Thread(() -> {
-            int count;
+            final File tmpZip = new File(activity.getCacheDir(), "export_tmp.zip");
+            int count = 0;
             try {
-                OutputStream os = activity.getContentResolver().openOutputStream(uri);
-                if (os == null) throw new java.io.IOException("无法写入所选位置");
                 File[] d = dataDirs();
-                count = DataPort.exportZip(os, DataPort.exportEntries(d[0], d[1], d[2]));
-                os.close();
+                try (OutputStream zos = new FileOutputStream(tmpZip)) {
+                    count = DataPort.exportZip(zos, DataPort.exportEntries(d[0], d[1], d[2]));
+                }
+                byte[] payload = readFile(tmpZip);
+                if (passphrase != null) {
+                    payload = PassphraseCrypto.encrypt(passphrase, payload);
+                }
+                OutputStream os = activity.getContentResolver().openOutputStream(uri);
+                if (os == null) throw new IOException("无法写入所选位置");
+                try {
+                    os.write(payload);
+                    os.flush();
+                } finally {
+                    os.close();
+                }
             } catch (final Exception e) {
                 handler.post(() -> toast("导出失败：" + UiKit.safeMsg(e)));
                 return;
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                tmpZip.delete();
             }
             final int n = count;
-            handler.post(() -> toast("已导出 " + n + " 个文件"));
+            final boolean encrypted = passphrase != null;
+            handler.post(() -> toast(encrypted
+                    ? "已导出 " + n + " 个文件（加密备份，请牢记口令）"
+                    : "已导出 " + n + " 个文件"));
         }, "data-export").start();
+    }
+
+    // ---------- 从备份恢复（v1.146.0） ----------
+
+    private void pickBackup() {
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            activity.startActivityForResult(i, REQ_IMPORT_DATA);
+        } catch (Exception e) {
+            toast("无法打开文件选择器：" + UiKit.safeMsg(e));
+        }
+    }
+
+    private void importBackup(final Uri uri) {
+        toast("正在读取备份…");
+        new Thread(() -> {
+            final byte[] blob;
+            try {
+                blob = readUri(uri);
+            } catch (final Exception e) {
+                handler.post(() -> toast("读取备份失败：" + UiKit.safeMsg(e)));
+                return;
+            }
+            handler.post(() -> {
+                if (PassphraseCrypto.isEncrypted(blob)) {
+                    promptImportPassphrase(blob);
+                } else {
+                    confirmRestore(blob);
+                }
+            });
+        }, "backup-read").start();
+    }
+
+    private void promptImportPassphrase(final byte[] blob) {
+        final EditText input = new EditText(activity);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint("导出时设置的口令");
+        new AlertDialog.Builder(activity)
+                .setTitle("加密备份")
+                .setMessage("该备份已加密，请输入导出时设置的口令。")
+                .setView(input)
+                .setPositiveButton("解密", (d, w) ->
+                        decryptBackup(blob, input.getText().toString().toCharArray()))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void decryptBackup(final byte[] blob, final char[] passphrase) {
+        toast("正在解密…");
+        new Thread(() -> {
+            final byte[] zip;
+            try {
+                zip = PassphraseCrypto.decrypt(passphrase, blob);
+            } catch (final Exception e) {
+                handler.post(() -> toast("口令错误或备份已损坏"));
+                return;
+            }
+            handler.post(() -> confirmRestore(zip));
+        }, "backup-decrypt").start();
+    }
+
+    private void confirmRestore(final byte[] zip) {
+        new AlertDialog.Builder(activity)
+                .setTitle("从备份恢复")
+                .setMessage("将用备份内容覆盖：对话与记忆、角色设定、全部设置（含 API 配置）。\n"
+                        + "不会动已导入的模型。\n恢复需重启应用后生效，是否继续？")
+                .setPositiveButton("恢复并重启", (d, w) -> stageAndRestart(zip))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void stageAndRestart(final byte[] zip) {
+        try {
+            PendingRestore.stage(activity.getCacheDir(), zip);
+        } catch (Exception e) {
+            toast("准备恢复失败：" + UiKit.safeMsg(e));
+            return;
+        }
+        toast("已准备恢复，应用将重启以生效…");
+        restartApp();
+    }
+
+    /** 重启进程，让 {@code com.digitallife.App} 在存储打开前应用待恢复数据 */
+    private void restartApp() {
+        try {
+            Intent i = activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName());
+            if (i != null) {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                activity.startActivity(i);
+            }
+        } catch (Exception ignored) {
+            // 拉不起来就让用户手动重启
+        }
+        handler.postDelayed(() -> {
+            android.os.Process.killProcess(android.os.Process.myPid());
+            System.exit(0);
+        }, 500);
+    }
+
+    private byte[] readUri(Uri uri) throws IOException {
+        try (InputStream in = activity.getContentResolver().openInputStream(uri)) {
+            if (in == null) throw new IOException("无法读取所选文件");
+            return readAll(in);
+        }
+    }
+
+    private static byte[] readFile(File f) throws IOException {
+        try (InputStream in = new FileInputStream(f)) {
+            return readAll(in);
+        }
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        return out.toByteArray();
     }
 
     private void confirmClearData() {
