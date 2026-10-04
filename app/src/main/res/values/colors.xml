@@ -88,5 +88,9 @@
     <color name="glass_border">#28FFFFFF</color>      <!-- 玻璃描边高光：~16% 白 -->
     <color name="glass_border_soft">#14FFFFFF</color> <!-- 次级描边：~8% 白 -->
     <color name="glass_highlight">#33FFFFFF</color>   <!-- 玻璃顶部渐亮起点 -->
+    <color name="glass_sheen">#0DFFFFFF</color>       <!-- 气泡内侧顶部柔光：~5% 白 -->
+    <!-- 按下涟漪：22% 白。ripple 语义独立于 highlight(20%)，故单列一档，
+         供 operit_*_ripple 引用（issue #100）。 -->
+    <color name="glass_ripple">#38FFFFFF</color>
     <color name="glass_scrim">#B3000000</color>       <!-- 抽屉/弹窗遮罩：70% 黑 -->
 </resources>

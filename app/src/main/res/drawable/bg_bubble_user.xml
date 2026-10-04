@@ -11,7 +11,8 @@
         <inset android:insetLeft="0dp" android:insetTop="0dp"
                android:insetRight="0dp" android:insetBottom="12dp">
             <shape android:shape="rectangle">
-                <solid android:color="#0DFFFFFF" />
+                <!-- 内侧顶部柔光统一走 glass_sheen token（issue #100 护栏第 4 条：drawable 禁写死白透明度） -->
+                <solid android:color="@color/glass_sheen" />
                 <corners android:radius="16dp" />
             </shape>
         </inset>

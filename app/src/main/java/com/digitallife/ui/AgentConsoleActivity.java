@@ -67,7 +67,8 @@ public class AgentConsoleActivity extends Activity {
         // Tab 栏
         LinearLayout tabBar = new LinearLayout(this);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setBackgroundColor(UiKit.color(this, R.color.operit_surface));
+        // v1.157.0 Glass：实色平铺 → 玻璃浮层（与底部导航同语言；留边距让四角圆角读作「浮起面板」）
+        tabBar.setBackgroundResource(R.drawable.bg_glass_tile);
         tabBar.setPadding(dp(12), dp(12), dp(12), dp(12));
         String[] names = {"活动", "工具日志", "计划", "脑日志", "多智能体"};
         tabs = new TextView[names.length];
@@ -88,7 +89,10 @@ public class AgentConsoleActivity extends Activity {
             tab.setOnClickListener(v -> showTab(idx));
             tabs[i] = tab;
         }
-        root.addView(tabBar);
+        LinearLayout.LayoutParams tabBarLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tabBarLp.setMargins(dp(12), dp(4), dp(12), dp(4));
+        root.addView(tabBar, tabBarLp);
 
         // Tab 内容
         LinearLayout body = new LinearLayout(this);
@@ -119,7 +123,7 @@ public class AgentConsoleActivity extends Activity {
         // 底部操作栏
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.HORIZONTAL);
-        footer.setBackgroundColor(UiKit.color(this, R.color.operit_surface));
+        footer.setBackgroundResource(R.drawable.bg_glass_tile);
         footer.setPadding(dp(12), dp(12), dp(12), dp(12));
         Button btnProactive = mkBtn("主动互动");
         btnProactive.setOnClickListener(v -> {
@@ -141,7 +145,10 @@ public class AgentConsoleActivity extends Activity {
         footer.addView(btnProactive);
         footer.addView(btnClear);
         footer.addView(btnExport);
-        root.addView(footer);
+        LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        footerLp.setMargins(dp(12), dp(4), dp(12), dp(8));
+        root.addView(footer, footerLp);
 
         txtActivity = (TextView) tabBodies[0];
         txtTools = (TextView) tabBodies[1];
