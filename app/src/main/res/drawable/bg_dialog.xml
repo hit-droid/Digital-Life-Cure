@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/card_bg" />
-    <corners android:radius="20dp" />
-</shape>
+<!-- 弹窗背景（v1.157.0 Glass）。
+     ⚠️ 底层不透明：AlertDialog 背后是页面内容，半透明会透字（同 bg_operit_drawer 的教训）。
+     不透明 surface 打底 + 顶部玻璃高光。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/operit_surface" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/glass_highlight"
+                android:endColor="@android:color/transparent" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</layer-list>

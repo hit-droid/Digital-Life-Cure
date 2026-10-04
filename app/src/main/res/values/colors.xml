@@ -57,21 +57,36 @@
     <color name="code_bg">#2A2740</color>
     <color name="code_text">#E6EDF3</color>
 
-    <!-- ===== Operit 主题色（仿 Operit AI 深色紫色体系） ===== -->
-    <color name="brand_operit">#6D5BBA</color>
-    <color name="brand_operit_light">#8A7DD8</color>
-    <color name="brand_operit_dark">#5746A0</color>
-    <color name="operit_bg">#1A1A1A</color>
-    <color name="operit_surface">#2A2A2A</color>
-    <color name="operit_surface_variant">#3A3A3A</color>
-    <color name="operit_text_primary">#F0F0F7</color>
-    <color name="operit_text_secondary">#B0B0B8</color>
-    <color name="operit_text_hint">#7A7A82</color>
-    <color name="operit_divider">#3A3A3A</color>
-    <color name="operit_accent">#C4B5FD</color>
+    <!-- ===== Operit 主题色（仿 Operit AI 深色紫色体系） =====
+         v1.157.0「Operit Glass」：底色由中性灰 #1A1A1A 收敛为**偏紫深底**，
+         配合半透明玻璃层形成明确的层次（底 → surface → 玻璃浮层）。
+         全 App 只有这一处定义，改这里即全站生效；不要再往别处写死紫/灰。 -->
+    <color name="brand_operit">#7A66D8</color>
+    <color name="brand_operit_light">#9B8CF5</color>
+    <color name="brand_operit_dark">#5A48B0</color>
+    <color name="operit_bg">#12101A</color>
+    <color name="operit_surface">#1F1C2C</color>
+    <color name="operit_surface_variant">#2A2640</color>
+    <color name="operit_text_primary">#F1EDFB</color>
+    <color name="operit_text_secondary">#A9A1C4</color>
+    <color name="operit_text_hint">#726B8A</color>
+    <color name="operit_divider">#322D45</color>
+    <color name="operit_accent">#B9A6FF</color>
     <color name="operit_primary_container">#2A2545</color>
     <!-- 顶栏纵向渐变的起始色（向下渐隐到 operit_bg） -->
-    <color name="operit_header_start">#352C63</color>
+    <color name="operit_header_start">#2E2456</color>
     <!-- 底部导航选中态的图标胶囊底 -->
-    <color name="operit_nav_pill">#463A8F</color>
+    <color name="operit_nav_pill">#4A3D96</color>
+
+    <!-- ===== Operit Glass 玻璃层 token（v1.157.0） =====
+         Android View 无法对背后内容做真实高斯模糊（原生 Window blur 要 API 31+，
+         `RenderEffect` 只能糊自己内容），所以这里的「玻璃」＝
+         半透明白叠加 + 1dp 高光描边 + 顶部渐亮，叠在深紫底上呈磨砂质感。
+         所有玻璃组件必须引用下面这几个 token，不要在 drawable 里写死白透明度。 -->
+    <color name="glass_fill">#16FFFFFF</color>         <!-- 玻璃底：~9% 白 -->
+    <color name="glass_fill_strong">#24FFFFFF</color>  <!-- 抬升玻璃：~14% 白 -->
+    <color name="glass_border">#28FFFFFF</color>      <!-- 玻璃描边高光：~16% 白 -->
+    <color name="glass_border_soft">#14FFFFFF</color> <!-- 次级描边：~8% 白 -->
+    <color name="glass_highlight">#33FFFFFF</color>   <!-- 玻璃顶部渐亮起点 -->
+    <color name="glass_scrim">#B3000000</color>       <!-- 抽屉/弹窗遮罩：70% 黑 -->
 </resources>

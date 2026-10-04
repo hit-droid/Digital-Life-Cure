@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 侧栏抽屉（v1.157.0「Operit Glass」）。
+     ⚠️ 底层必须**不透明**：抽屉没有真实模糊，若面板半透明，底层会话列表的文字会直接透上来
+     （v1.153.0 真机截图证实）。所以这里＝不透明 surface 打底，再叠一层顶部渐亮的玻璃高光，
+     既挡住下层的字、又有玻璃的「顶光」质感。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <!-- 必须不透明：此前 #B32A2A2A（70%）又无模糊，底层会话列表的文字会
-                 直接透到抽屉面板上（v1.153.0 真机截图证实）。 -->
-            <solid android:color="#FF2A2A2A" />
-            <corners android:topLeftRadius="16dp" android:bottomLeftRadius="16dp" />
+            <solid android:color="@color/operit_surface" />
+            <corners android:topLeftRadius="20dp" android:bottomLeftRadius="20dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#0DFFFFFF" />
-            <corners android:topLeftRadius="16dp" android:bottomLeftRadius="16dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/glass_highlight"
+                android:endColor="@android:color/transparent" />
+            <corners android:topLeftRadius="20dp" android:bottomLeftRadius="20dp" />
         </shape>
     </item>
 </layer-list>

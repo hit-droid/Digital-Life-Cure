@@ -30,6 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Color system guard
+        # 色彩体系护栏（issue #98）：断言 values-night/ 不得重现、values/ 与 values-night/
+        # 同名 color 一致、styles.xml 的 AppTheme parent 不含 Light。
+        # 起因：v1.155.0「浅色模式一半黑一半白」的根因是两套色板长期共存且无人守门；
+        # 单一色板后，本步卡在「第二套重新长出来」的那一刻。PR 与 push 都跑（极快）。
+        run: bash tools/check_color_parity.sh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

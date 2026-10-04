@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 内容面板 / 卡片（v1.157.0「Operit Glass」）。
+     Android View 不能对背后内容做真实高斯模糊，所以玻璃质感＝半透明白叠加：
+     顶部偏亮（glass_highlight）向下渐隐到玻璃底（glass_fill），叠在深紫底上形成「顶光」，
+     再加 1dp 高光描边勾出边缘。全站卡片统一走这一个 drawable（UiKit.panel → 这里）。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/operit_surface" />
+    <gradient
+        android:angle="270"
+        android:startColor="@color/glass_highlight"
+        android:endColor="@color/glass_fill" />
     <corners android:radius="20dp" />
-    <stroke android:width="1dp" android:color="@color/operit_divider" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/glass_border" />
 </shape>

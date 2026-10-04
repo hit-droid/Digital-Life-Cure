@@ -340,7 +340,8 @@ public final class UiKit {
         // 信息卡片
         LinearLayout info = new LinearLayout(activity);
         info.setOrientation(LinearLayout.VERTICAL);
-        info.setBackgroundColor(color(activity, R.color.operit_surface));
+        // v1.157.0 Glass：实色平铺 → 玻璃磁贴（顶光 + 淡描边）
+        info.setBackgroundResource(R.drawable.bg_glass_tile);
         info.setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12));
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -426,7 +427,7 @@ public final class UiKit {
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackgroundColor(color(c, R.color.operit_surface));
+        card.setBackgroundResource(R.drawable.bg_glass_tile);
         card.setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -491,7 +492,7 @@ public final class UiKit {
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setBackgroundColor(color(c, R.color.operit_surface));
+        card.setBackgroundResource(R.drawable.bg_glass_tile);
         card.setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 12));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
