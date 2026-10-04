@@ -3,13 +3,28 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    # 纯文档改动不触发（省 Actions 分钟）。
+    # 发布提交必含 app/build.gradle 的 versionName 变更，不属于被忽略的 .md，仍会正常出包发版。
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   workflow_dispatch:
+
+# 同一分支被连续 push 时取消旧 run，避免排队白烧分钟。
+# 只有 PR 才取消进行中的构建；main 的发布构建改为串行排队，绝不中途打断。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
@@ -73,6 +88,8 @@ jobs:
         run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build debug APK
+        # PR 只跑单测门禁；出包 + 发版只在 push 到 main（或手动触发）时做，省 Actions 分钟
+        if: github.event_name != 'pull_request'
         run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Check if release needed
