@@ -54,6 +54,12 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-34" "build-tools;34.0.0" "platform-tools" \
             >/dev/null 2>&1 || true
+          # build-tools 35.0.0：为后面「16 KB 对齐门禁」的 zipalign -P 16 提供工具。
+          # 34 的 zipalign 不支持 -P，无法校验 16 KB zip 对齐（见门禁步骤注释）。
+          if [ ! -d "$SDK/build-tools/35.0.0" ]; then
+            echo "Installing build-tools;35.0.0"
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" >/dev/null 2>&1 || true
+          fi
           # 与 app/build.gradle 的 ndkVersion 保持一致，确保 runner 上确有此版 NDK。
           # 版本漂移会导致「同一源码、不同时间编出的 .so 对齐不同」，是 Android 16 闪退复发的工具链根因（见 issue #94）。
           # NDK_VERSION 在此集中定义；build.gradle 若改版本，这里同步改。
@@ -145,15 +151,22 @@ jobs:
             fi
           done
 
-          # ② APK zip 对齐（16 KB）
-          ZIPALIGN=$(ls "$ANDROID_HOME"/build-tools/*/zipalign 2>/dev/null | head -n1)
-          if [ -n "$ZIPALIGN" ]; then
-            echo "--- zipalign -c -P 16 -v 4 ---"
-            if ! "$ZIPALIGN" -c -P 16 -v 4 "$APK"; then
-              echo "  ✗ APK zip 未按 16 KB 对齐"; FAIL=1
-            fi
+          # ② APK zip 对齐（16 KB）。
+          # 官方校验命令（developer.android.com/guide/practices/page-sizes）：
+          #   build-tools/35.0.0/zipalign -v -c -P 16 4 APK.apk
+          # 注意 -P 需要参数 16（页大小），末尾的 4 才是 <align>；两者不可调换。
+          # -P 是 35.0.0 才加入的选项，34 的 zipalign 只认 -p（page 硬编码 4096，无法表达 16 KB），
+          # 故按版本号降序取第一个 zipalign。
+          ZIPALIGN=$(ls -1 "$ANDROID_HOME"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -n1)
+          if [ -n "$ZIPALIGN" ] && "$ZIPALIGN" --help 2>&1 | grep -q -- '-P'; then
+            echo "--- $ZIPALIGN -v -c -P 16 4 ---"
+            "$ZIPALIGN" -v -c -P 16 4 "$APK" || { echo "  ✗ APK 未按 16 KB zip 对齐"; FAIL=1; }
           else
-            echo "!! 未找到 zipalign，跳过 zip 对齐校验"
+            # 兜底：无 ≥35 的 zipalign 时降级为提示，不误拦。
+            # 主判据是上面逐 .so 的 ELF 段对齐（LOAD align 2**14 + RELRO 16 KB），
+            # 那两项与 zipalign 无关、已足够判定 16 KB 兼容性。
+            echo "!! 未找到支持 -P 的 zipalign（需 build-tools ≥ 35），跳过 zip 对齐校验"
+            echo "   （ELF 段对齐已在上一节校验；如需完整校验请确保 runner 有 build-tools 35+）"
           fi
 
           if [ "$FAIL" != "0" ]; then
