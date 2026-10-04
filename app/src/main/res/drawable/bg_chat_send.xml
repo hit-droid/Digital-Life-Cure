@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 聊天页发送 / 停止按钮（#96）：Operit 强调色实心圆。
+
+     旧 bg_send 用 brand→brand_end 渐变，属旧品牌色体系。这里换到 operit_accent 起、
+     brand_operit 收尾的同构渐变，pressed 态再压深一档，保留原有的按压反馈手感。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="oval">
+            <gradient
+                android:startColor="@color/brand_operit"
+                android:endColor="@color/brand_operit_dark"
+                android:angle="315" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:startColor="@color/operit_accent"
+                android:endColor="@color/brand_operit"
+                android:angle="315" />
+        </shape>
+    </item>
+</selector>

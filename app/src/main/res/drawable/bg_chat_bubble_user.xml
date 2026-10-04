@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 用户气泡背景（#96）：Operit 强调色丁香紫，配深色文字。
+
+     旧 bg_bubble_user 用 brand 紫 #6C5CE7 渐变 + 白字，属于旧品牌色体系。
+     这里换成 operit_accent #C4B5FD 起、到稍深的 #A78BFA 收尾，文字改为 operit_bg
+     深色（见 ChatActivity.appendUserBubble）——用户侧是「亮丁香紫 + 深字」，
+     AI 侧保持原有的「深紫丙烯tert + 浅字」（bg_bubble_ai），两侧对比清晰可辨。
+
+     底部 inset 的极淡黑色层沿用旧做法，制造气泡下沿的一点点厚度。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#C4B5FD"
+                android:endColor="#A78BFA"
+                android:angle="315" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <item>
+        <inset
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="12dp">
+            <shape android:shape="rectangle">
+                <solid android:color="#0D000000" />
+                <corners android:radius="16dp" />
+            </shape>
+        </inset>
+    </item>
+</layer-list>
