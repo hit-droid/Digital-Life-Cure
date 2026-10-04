@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.153.0 (2026-10-04)
+
+「仿 Operit AI」这条线收到**聊天页本身**——外壳（v1.150.0）、会话列表（v1.151.0）、
+主 Tab 与二级页（v1.152.0）都已换新语言，唯独一进会话又退回旧观感，割裂感最强的一块。本版收口。
+
+### 聊天页（对话大脑 / 护理大脑共用）
+
+- **顶栏**：旧品牌紫实心顶栏（带投影）改为 Operit 渐隐 hero header（`bg_operit_topbar`），
+  与 `UiKit.pageTopBar` 同一语言、与内容区无缝衔接；护理模式保留专属薄荷渐变（新增 `bg_chat_topbar_care`）做入口区分。
+- **输入框**：此前是纯白底（全站共用的 `bg_input`，在深色聊天页上是一块刺眼亮斑），
+  改为聊天页专用深色 surface（新增 `bg_chat_input` / 聚焦态 `bg_chat_input_focused`），
+  并**显式补上 `setTextColor` / `setHintTextColor`**——底色变深后不再沿用默认黑字。
+- **气泡**：用户气泡由旧品牌紫渐变换到 `operit_accent` 亮紫（新增 `bg_chat_bubble_user`）配深色文字；
+  AI 气泡保持原深紫底浅字（本就是 Operit 语言）。两侧对比清晰可辨。
+- **图标按钮**：附件 / 语音 / 返回改圆形涟漪（`operit_icon_button_ripple`），与顶栏返回同源；
+  模型按钮改描边胶囊；发送 / 停止按钮改 `operit_accent` 系渐变（新增 `bg_chat_send`）。
+- 本页残留的 `R.color.brand` 系引用（建议 chip / 录音态 / 工具状态 span / 审批按钮）统一到 `operit_accent`。
+- **顺带修一处隐患**：输入框的 `setOnFocusChangeListener` 此前被重复注册两次（后者覆盖前者），
+  删掉注定失效的那个，避免以后改这里「以为改了却没生效」。
+
+### 纯逻辑抽取
+
+- 新增 `ui/chat/ChatLayoutOps`：把散落在 3000+ 行 `ChatActivity` 里的布局魔法数收口
+  （气泡最大宽度比例、顶栏留白含状态栏、圆形按钮直径 36dp、气泡内边距），
+  配 `ChatLayoutOpsTest` 9 例，含三条跨组件契约（36dp/10dp 须与 `UiKit.pageTopBar` 同步）。
+- 既有聊天功能零删减；workbuddy PR #97，Closes #96。
+
 ## v1.152.0 (2026-10-04)
 
 「仿 Operit AI」这条线的**收尾统一**：外壳（v1.150.0）与会话列表（v1.151.0）落地后，
