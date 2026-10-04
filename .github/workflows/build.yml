@@ -87,10 +87,10 @@ jobs:
         # 单测门禁：失败则不再出包、不发 Release，防止半成品混进发行版
         run: ./gradlew testDebugUnitTest --stacktrace --no-daemon
 
-      - name: Build debug APK
+      - name: Build release APK
         # PR 只跑单测门禁；出包 + 发版只在 push 到 main（或手动触发）时做，省 Actions 分钟
         if: github.event_name != 'pull_request'
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
 
       - name: Check if release needed
         # 多写入者场景：只有 versionName 变化（tag 不存在）时才发版，
@@ -121,7 +121,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
+          APK_PATH=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           echo "APK=$APK_PATH"
           VERSION_NAME=$(grep -oE 'versionName\s+"[^"]+"' app/build.gradle | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
           if [ -z "$VERSION_NAME" ]; then

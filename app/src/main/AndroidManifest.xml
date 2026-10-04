@@ -69,10 +69,12 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- v1.143.0：以下页面均无 intent-filter、仅由 App 内部显式 Intent 拉起，
+             exported 统一收紧为 false，避免任意第三方 App 直接拉起（更早版本误设为 true）。 -->
         <!-- 护理大脑模型管理 -->
         <activity
             android:name="com.digitallife.care.CareModelsActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -80,7 +82,7 @@
         <!-- 记忆管理 -->
         <activity
             android:name="com.digitallife.ui.MemoryManageActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -88,7 +90,7 @@
         <!-- 主题设置 -->
         <activity
             android:name="com.digitallife.ui.ThemesActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -96,7 +98,7 @@
         <!-- 开发者选项 -->
         <activity
             android:name="com.digitallife.ui.DeveloperActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -104,7 +106,7 @@
         <!-- 关于 -->
         <activity
             android:name="com.digitallife.ui.AboutActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -112,7 +114,7 @@
         <!-- 工具市场 -->
         <activity
             android:name="com.digitallife.ui.ToolMarketActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -120,7 +122,7 @@
         <!-- 角色管理 -->
         <activity
             android:name="com.digitallife.ui.PersonaActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -128,7 +130,7 @@
         <!-- 智能体控制台 -->
         <activity
             android:name="com.digitallife.ui.AgentConsoleActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
@@ -136,7 +138,7 @@
         <!-- 对话大脑聊天界面（与悬浮窗对话相通） -->
         <activity
             android:name="com.digitallife.ui.ChatActivity"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
