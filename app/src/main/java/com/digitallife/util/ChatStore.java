@@ -33,18 +33,25 @@ public class ChatStore {
     public static final String TYPE_MODEL = "model";   // 绑定指定模型
 
     public static class StoredMsg {
+        public final long id;            // 数据库 rowid，用于按 id 删任意条
         public final String role;
         public final String content;
         public final String toolCalls;   // JSON 数组字符串或 null
         public final String toolCallId;  // 或 null
         public final long timestamp;
 
-        public StoredMsg(String role, String content, String toolCalls, String toolCallId, long timestamp) {
+        public StoredMsg(long id, String role, String content, String toolCalls, String toolCallId, long timestamp) {
+            this.id = id;
             this.role = role;
             this.content = content;
             this.toolCalls = toolCalls;
             this.toolCallId = toolCallId;
             this.timestamp = timestamp;
+        }
+
+        /** 旧构造（兼容历史调用与单测 helper）：id 默认 -1 */
+        public StoredMsg(String role, String content, String toolCalls, String toolCallId, long timestamp) {
+            this(-1L, role, content, toolCalls, toolCallId, timestamp);
         }
     }
 
@@ -77,7 +84,7 @@ public class ChatStore {
     }
 
     /** 添加一条消息到指定会话并裁剪上限 */
-    public synchronized void addMessage(String sessionKey, String role, String content,
+    public synchronized long addMessage(String sessionKey, String role, String content,
                                         JSONArray toolCalls, String toolCallId, long timestamp) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues v = new ContentValues();
@@ -87,9 +94,10 @@ public class ChatStore {
         v.put("tool_calls", toolCalls == null ? null : toolCalls.toString());
         v.put("tool_call_id", toolCallId);
         v.put("timestamp", timestamp);
-        db.insert("chat_messages", null, v);
+        long rowId = db.insert("chat_messages", null, v);
         touchSession(db, sessionKey, timestamp);
         trimSession(db, sessionKey);
+        return rowId;
     }
 
     // ==================== 会话元数据 ====================
@@ -174,13 +182,13 @@ public class ChatStore {
     /** 取某会话最后一条非工具消息（对话列表摘要用） */
     public synchronized StoredMsg getLastMessage(String sessionKey) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery("SELECT role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
+        Cursor c = db.rawQuery("SELECT id, role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
                 "WHERE session_key = ? AND role IN ('user','assistant') AND content != '' " +
                 "ORDER BY timestamp DESC, id DESC LIMIT 1", new String[]{sessionKey});
         try {
             if (c.moveToFirst()) {
-                return new StoredMsg(c.getString(0), c.getString(1), c.getString(2),
-                        c.getString(3), c.getLong(4));
+                return new StoredMsg(c.getLong(0), c.getString(1), c.getString(2),
+                        c.getString(3), c.getString(4), c.getLong(5));
             }
         } finally {
             c.close();
@@ -201,8 +209,8 @@ public class ChatStore {
         try {
             if (c.moveToFirst()) {
                 id = c.getLong(0);
-                last = new StoredMsg(c.getString(1), c.getString(2), c.getString(3),
-                        c.getString(4), c.getLong(5));
+                last = new StoredMsg(c.getLong(0), c.getString(1), c.getString(2),
+                        c.getString(3), c.getString(4), c.getLong(5));
             }
         } finally {
             c.close();
@@ -218,22 +226,35 @@ public class ChatStore {
         db.update("sessions", v, "id = ?", new String[]{sessionKey});
     }
 
+    /**
+     * 按数据库 rowid 删除指定会话中的任意一条消息（「删除任意条」用）。
+     * 加 session_key 约束，避免跨会话误删相同的 rowid。
+     *
+     * @return 实际删除的行数（0 表示未找到）
+     */
+    public synchronized int deleteMessage(String sessionKey, long msgId) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        return db.delete("chat_messages", "id = ? AND session_key = ?",
+                new String[]{String.valueOf(msgId), sessionKey});
+    }
+
     /** 读取指定会话最近 N 条消息（按时间正序返回） */
     public synchronized List<StoredMsg> getMessages(String sessionKey, int limit) {
         ArrayList<StoredMsg> out = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor c = db.rawQuery(
-                "SELECT role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
+                "SELECT id, role, content, tool_calls, tool_call_id, timestamp FROM chat_messages " +
                         "WHERE session_key = ? ORDER BY timestamp DESC, id DESC LIMIT ?",
                 new String[]{sessionKey, String.valueOf(Math.max(1, limit))});
         try {
             while (c.moveToNext()) {
                 out.add(0, new StoredMsg(
-                        c.getString(0),
+                        c.getLong(0),
                         c.getString(1),
                         c.getString(2),
                         c.getString(3),
-                        c.getLong(4)
+                        c.getString(4),
+                        c.getLong(5)
                 ));
             }
         } finally {
