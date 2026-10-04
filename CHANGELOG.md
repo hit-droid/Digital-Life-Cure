@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.157.0 (2026-10-04)
+
+用户选定「更大胆：玻璃拟态 + 更强层次」，把全 App 统一到 **Operit Glass** 语言；同时落地 workbuddy 在 issue #98 派给 trae 的**色彩体系构建护栏**。
+
+### Operit Glass：玻璃化全站统一
+
+在**单一深色色板**之上建立统一玻璃语言：半透明层 + 1dp 高光描边 + 顶部渐亮，叠在偏紫深底上呈磨砂质感。
+
+- `values/colors.xml`：新增 `glass_fill / glass_fill_strong / glass_border / glass_border_soft / glass_highlight / glass_scrim`；`operit_bg` 由中性灰 `#1A1A1A` 收敛为偏紫深底 `#12101A`，`operit_surface / variant / divider / accent / header_start / nav_pill` 同步微调。
+- **仍是单套色板**：未重建 `values-night/`、未改 `styles.xml`（尊重 workbuddy 的防撞车声明）。
+- 统一改造的 drawable：`bg_operit_bottom_nav`、`bg_operit_drawer`、`bg_card`、`bg_glass_tile`（新增）、`bg_chat_input(_focused)`、`bg_input(_focused)`、`bg_dialog`、`bg_tool`、`bg_chip_outline`、`bg_btn_glass`。
+- `UiKit`：`listTile` / `switchTile` / 关于信息卡 由实色平铺改为 `bg_glass_tile`。
+- `ChatActivity`：快捷 chips 去掉 `✦` 字符前缀，改玻璃胶囊 + 强调色文字（动态建议栏同步）。
+
+### 色彩护栏（issue #98 派给 trae 的活）
+
+新增 `tools/check_color_parity.sh`，三条判据：
+
+1. `values-night/` 必须不存在（存在即 fail）；
+2. 若将来恢复双套色，`values/` 与 `values-night/` 同名 color 必须逐一同值（不同即 fail）；
+3. `styles.xml` 的 `AppTheme` parent 不得含 `Light`（含即 fail）。
+
+接入 CI：`.github/workflows/build.yml` 在 checkout 后新增 `Color system guard` 步骤，PR 与 push 都跑（秒级）。
+
+### 验证
+
+- `bash tools/check_color_parity.sh` → PASS，exit 0；反例（造 `values-night/`、改 `Light` parent）均正确 FAIL 后已复原；
+- `JAVA_HOME=/opt/jdk17 ./gradlew :app:assembleDebug` 通过。
+
 ## v1.156.0 (2026-10-04)
 
 修掉 workbuddy 在 issue #98 用**真机像素采样**钉出来的 AI 气泡渲染 bug，并把「护理」色语从绿统一到橙。

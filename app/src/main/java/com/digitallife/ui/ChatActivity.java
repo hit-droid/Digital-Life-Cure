@@ -370,7 +370,7 @@ public class ChatActivity extends Activity {
         String[] chipLabels;
         String[] chipInserts;
         if (isCare) {
-            chipLabels = new String[]{"✦ 症状", "✦ 饮食", "✦ 用药", "✦ 运动", "✦ 复盘"};
+            chipLabels = new String[]{"症状", "饮食", "用药", "运动", "复盘"};
             chipInserts = new String[]{
                     "我最近有以下症状，请帮我分析：",
                     "请帮我设计一份适合我的饮食方案：",
@@ -379,7 +379,7 @@ public class ChatActivity extends Activity {
                     "请帮我复盘最近的健康数据："
             };
         } else {
-            chipLabels = new String[]{"✦ 语音", "✦ 拍照", "✦ 翻译", "✦ 总结", "✦ 联网"};
+            chipLabels = new String[]{"语音", "拍照", "翻译", "总结", "联网"};
             chipInserts = new String[]{
                     "请用语音回复我：",
                     "请看图回答：",
@@ -393,7 +393,8 @@ public class ChatActivity extends Activity {
             TextView chip = new TextView(this);
             chip.setText(chipLabels[i]);
             chip.setTextSize(12f);
-            chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            // v1.157.0 Glass：字符前缀（✦）改由玻璃胶囊底承担，文字提到强调色
+            chip.setTextColor(getColorCompat(R.color.operit_accent));
             chip.setBackgroundResource(R.drawable.bg_chip_outline);
             chip.setPadding(dp(12), dp(6), dp(12), dp(6));
             LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(
@@ -1013,9 +1014,10 @@ public class ChatActivity extends Activity {
         for (int i = 0; i < suggestions.length; i++) {
             final String text = suggestions[i];
             TextView chip = new TextView(this);
-            chip.setText("✦ " + text);
+            chip.setText(text);
             chip.setTextSize(12f);
-            chip.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            // v1.157.0 Glass：同固定 chips，字符前缀改由玻璃胶囊底承担
+            chip.setTextColor(getColorCompat(R.color.operit_accent));
             chip.setBackgroundResource(R.drawable.bg_chip_outline);
             chip.setPadding(dp(12), dp(6), dp(12), dp(6));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(

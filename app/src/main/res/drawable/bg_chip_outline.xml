@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 快捷操作 chip（聊天页「症状/饮食/用药…」）与二级页小号操作按钮。
+     v1.157.0 Glass：由「描边镂空」改为「玻璃实底胶囊」，在深紫底上更有分量，
+     与底部导航/卡片的顶光语言一致。保留涟漪反馈。 -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-        android:color="@color/ripple">
+    android:color="@color/ripple">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/operit_surface" />
-            <stroke android:width="1dp" android:color="@color/operit_divider" />
-            <corners android:radius="12dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/glass_highlight"
+                android:endColor="@color/glass_fill" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/glass_border" />
+            <corners android:radius="999dp" />
         </shape>
     </item>
 </ripple>
