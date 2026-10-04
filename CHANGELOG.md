@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.141.0 (2026-10-04)
+
+本版合并 PR #52（Android 16 兼容修复 + 危险工具确认 / 回到底部）与 PR #53（版本 bump），并含 workbuddy 的 PR #51（Markdown 行内链接 / 任务列表 / 水平线）。发布负责人 trae 统一 bump 发版。
+
+### Android 16 兼容修复：native 库 16 KB 对齐
+
+**问题**：Android 16（API 36）设备默认启用 16 KB 内存页，按 4 KB 对齐链接出的 native 库在这些设备上直接加载失败，表现为「装上打不开 / 启动即崩」。本 App 带 Live2D Cubism native 库，正好命中。
+
+- **`app/src/main/cpp/CMakeLists.txt`**：新增 `-Wl,-z,max-page-size=16384`，强制 LOAD 段 16 KB 对齐。16 KB 对齐的库在 4 KB 页设备上同样可用（16 KB 是 4 KB 的整数倍，多出的对齐只是被忽略的填充），**一个包同时覆盖 Android 10~14（4 KB 页）与 Android 15/16（16 KB 页）**。
+- **`app/build.gradle`**：`arguments '-DANDROID_STL=c++_static'`。项目用的 NDK r26 其预编译 `libc++_shared.so` 仍是 4 KB 对齐；改静态 STL 后不再打包该 .so，避免它在 16 KB 设备上拖后腿。
+- 实测发布包 v1.141.0：arm64-v8a / armeabi-v7a / x86 三个 ABI 的 LOAD 段 Align 均为 `0x4000`（16 KB）；APK 内 native 库只剩 `libmaidendungeon.so`，不含 `libc++_shared.so`。
+
+### 危险工具执行前确认（#40）
+
+**问题**：对话大脑的工具调用循环此前无条件执行任何工具，「清除数据 / 删文件」这类破坏性操作没有任何确认环节。
+
+- **`harness/ToolApprovalPolicy`**（纯逻辑，JVM 可测）：判定哪些工具需要审批、生成脱敏确认文案（敏感参数值显示 `***`）、维护会话级放行集、记录本轮拒绝。
+- **`harness/ToolPipeline`**：在 `tools/pre-execute` waterfall 之后、宿主执行之前加**唯一审批埋点**；未装配策略或非危险工具零打扰；本轮已拒绝的同一工具直接短路，防模型重复试探造成死循环。
+- **`harness/AgentLoop`**：每轮开始清空「本轮已拒绝」记账（会话放行集保留）。
+- **`ui/ChatActivity`**：确认卡片三选一「仅这次允许 / 本会话始终允许 / 拒绝」；工具循环的后台线程阻塞等待用户决定，超时按拒绝处理。
+
+### 回到底部 + 未读计数（#43）／ Markdown 三处渲染（#44）
+
+- **`ui/chat/ScrollAnchor`**（纯逻辑）：距底部超过阈值时显示「回到底部」悬浮按钮，累计未读条数（超过上限显示 `N+`）。
+- **`ui/ChatActivity`**：接入悬浮按钮与未读计数。
+- **`ui/MarkdownRenderer`**（workbuddy PR #51）：补齐行内链接 `[文字](url)`（URLSpan + 链接色）、任务列表 `[ ]`/`[x]`（☐/☑）、水平线 `---`/`***`/`___`。本版合并时与 trae 分支的同名实现去重，保留 main 版。
+
+### 验证
+
+新增 47 单测（ToolApprovalPolicy 11 + ToolPipeline 22 + ScrollAnchor 12 + Markdown 渲染补测），单测总数 **471 / 38 个测试类**，失败 0、错误 0；`./gradlew testDebugUnitTest assembleDebug` 全绿，CI 单测门禁通过后合并。
+
 ## v1.140.0 (2026-10-03)
 
 本轮合并两个 PR：#49（API Key 加密存储 + 收紧备份 + 数据导出/一键清除，Closes #47）与 #50（情绪外显——情绪驱动待机表情 + 自主小动作，Closes #48），均由 trae 提交，发布负责人 trae 统一 bump 发版。
