@@ -3,9 +3,13 @@ package com.digitallife.ui;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -15,8 +19,10 @@ import com.digitallife.R;
 import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.ui.contacts.ContactFilter;
 import com.digitallife.util.ChatStore;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,6 +39,9 @@ public class ContactsTabView extends LinearLayout {
     private final Activity activity;
     private final Listener listener;
     private LinearLayout listContainer;
+    /** v1.147.0（#88）：本地搜索框；输入即按名字过滤（无网络） */
+    private EditText etSearch;
+    private String searchQuery = "";
 
     public ContactsTabView(Activity activity, Listener listener) {
         super(activity);
@@ -51,6 +60,33 @@ public class ContactsTabView extends LinearLayout {
         header.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 10),
                 UiKit.dp(activity, 12), UiKit.dp(activity, 2));
         addView(header, UiKit.lp(activity, 0));
+
+        // v1.147.0（#88）：本地搜索框，输入即过滤
+        etSearch = new EditText(activity);
+        etSearch.setHint("搜索模型联系人");
+        etSearch.setSingleLine(true);
+        etSearch.setInputType(InputType.TYPE_CLASS_TEXT);
+        etSearch.setTextSize(14f);
+        etSearch.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
+        etSearch.setHintTextColor(UiKit.color(activity, R.color.operit_text_hint));
+        etSearch.setBackgroundResource(R.drawable.bg_input);
+        etSearch.setContentDescription("搜索模型联系人");
+        etSearch.setPadding(UiKit.dp(activity, 12), UiKit.dp(activity, 8),
+                UiKit.dp(activity, 12), UiKit.dp(activity, 8));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.leftMargin = UiKit.dp(activity, 12);
+        slp.rightMargin = UiKit.dp(activity, 12);
+        slp.topMargin = UiKit.dp(activity, 6);
+        addView(etSearch, slp);
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) { }
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) {
+                searchQuery = s == null ? "" : s.toString();
+                refresh();
+            }
+        });
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setVerticalScrollBarEnabled(false);
@@ -84,6 +120,8 @@ public class ContactsTabView extends LinearLayout {
             listContainer.addView(empty);
             return;
         }
+        // v1.147.0（#88）：先收集全部模型名，再按搜索词过滤（纯逻辑 ContactFilter）
+        List<String> allNames = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             final String name;
             try {
@@ -92,6 +130,20 @@ public class ContactsTabView extends LinearLayout {
                 continue;
             }
             if (name == null || name.isEmpty()) continue;
+            allNames.add(name);
+        }
+        List<String> names = ContactFilter.filter(allNames, searchQuery);
+        if (names.isEmpty() && ContactFilter.hasQuery(searchQuery)) {
+            TextView noHit = new TextView(activity);
+            noHit.setText("没有匹配的模型联系人");
+            noHit.setTextSize(13f);
+            noHit.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+            noHit.setGravity(Gravity.CENTER);
+            noHit.setPadding(0, UiKit.dp(activity, 40), 0, 0);
+            listContainer.addView(noHit);
+            return;
+        }
+        for (final String name : names) {
             final boolean isImported = imported.contains(name);
             final boolean hasMotions = ModelInspector.hasUsableMotions(activity, name);
             listContainer.addView(buildContactCard(name, isImported, hasMotions));
