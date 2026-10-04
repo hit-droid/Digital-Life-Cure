@@ -6,6 +6,15 @@ android {
     namespace 'com.digitallife'
     compileSdk 34
 
+    // 构建护栏：显式固定 NDK 版本，消除「修了又炸」的环境漂移（见 issue #94）。
+    // 此前不指定 ndkVersion，实际用的 NDK 由「AGP 8.5.0 的默认值 + runner 现场下载」共同决定，
+    // 会随 AGP/镜像更新而变——同一份源码在不同时间编出的 .so 对齐可能不同，
+    // 这正是 Android 16 闪退「上次修好、这次又炸」在工具链层面的来源。
+    // 固定为 r27.3.13750724：既与 GitHub runner 预装版本一致（无需现场下载），
+    // 又因 r27+ 默认即 16 KB 对齐（max/common-page-size 均 16384），
+    // 与 CMakeLists 的显式链接项叠成双保险。
+    ndkVersion "27.3.13750724"
+
     defaultConfig {
         applicationId "com.digitallife"
         minSdk 21
@@ -76,6 +85,25 @@ android {
     aaptOptions {
         // Keep the optional 4096px source textures out of the runtime APK.
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!huohuo.4096'
+    }
+
+    packagingOptions {
+        jniLibs {
+            // 构建护栏：把 native 库的打包方式**显式锁死**为压缩（legacy），见 issue #94。
+            //
+            // 背景：本项目 minSdk 21（< 23），AGP 对 minSdk 23 以下默认走 legacy——
+            // .so 在 APK 内压缩存储、安装时解压到磁盘再加载，因此「APK 内未压缩 .so 的
+            // 16 KB zip 对齐」这条通道目前**不存在**（CI 已复现 SO_STORED=no 确认产物为压缩存储）。
+            //
+            // 但默认值会随 minSdk 变化而**静默翻转**：一旦有人把 minSdk 提到 ≥ 23，
+            // AGP 会切成未压缩 + APK 内 mmap，zip 对齐立刻变成真实风险
+            //（16 KB 设备会走兼容模式甚至装不上），而 CI 没人看得出来。
+            // 这里显式写死，把这个隐式行为变成显式契约。
+            //
+            // 选择「压缩兜底」而非升级 AGP 到 8.5.1+：我们本来就在 legacy 通道，
+            // 此 diff 极小且零风险；升 AGP 的收益当前用不上，却要承担大版本升级的全量验证成本。
+            useLegacyPackaging true
+        }
     }
 
     testOptions {

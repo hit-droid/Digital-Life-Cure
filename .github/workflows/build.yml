@@ -54,6 +54,21 @@ jobs:
           "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-34" "build-tools;34.0.0" "platform-tools" \
             >/dev/null 2>&1 || true
+          # build-tools 35.0.0：为后面「16 KB 对齐门禁」的 zipalign -P 16 提供工具。
+          # 34 的 zipalign 不支持 -P，无法校验 16 KB zip 对齐（见门禁步骤注释）。
+          if [ ! -d "$SDK/build-tools/35.0.0" ]; then
+            echo "Installing build-tools;35.0.0"
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0" >/dev/null 2>&1 || true
+          fi
+          # 与 app/build.gradle 的 ndkVersion 保持一致，确保 runner 上确有此版 NDK。
+          # 版本漂移会导致「同一源码、不同时间编出的 .so 对齐不同」，是 Android 16 闪退复发的工具链根因（见 issue #94）。
+          # NDK_VERSION 在此集中定义；build.gradle 若改版本，这里同步改。
+          NDK_VERSION="27.3.13750724"
+          if [ ! -d "$SDK/ndk/$NDK_VERSION" ]; then
+            echo "Installing NDK $NDK_VERSION"
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null 2>&1 || true
+          fi
+          ls "$SDK/ndk" || true
           ls "$SDK/platforms" "$SDK/build-tools"
 
       - name: Setup signing keystore
@@ -91,6 +106,93 @@ jobs:
         # PR 只跑单测门禁；出包 + 发版只在 push 到 main（或手动触发）时做，省 Actions 分钟
         if: github.event_name != 'pull_request'
         run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: Verify 16KB page alignment (APK)
+        # 构建护栏门禁：发版前逐一校验 APK 内每个 .so 的 ELF 段对齐（三个 ABI 都要查）。
+        # 背景：Android 15+ 起 16 KB 内存页设备（Android 16 默认启用）要求
+        #   ① .so 的 LOAD 段 p_align == 0x4000；
+        #   ② GNU_RELRO 覆盖终点是 16 KB 整数倍（否则链接器 mprotect 盖住可写页 → 启动 SIGSEGV）。
+        # 历史上「装上打不开 / 点开闪退」都出在这里，且此前 CI 完全无校验，
+        # 坏产物可静默发版——本步骤即为拦住它的门禁（见 issue #94）。
+        #
+        # 关于 zip 对齐（原第 ③ 条）：经 issue #94 与 trae 核实，本项目 minSdk 21（< 23），
+        # AGP 强制 legacy 打包——.so 在 APK 内压缩存储、安装时解压再加载，
+        # 不走「APK 内 mmap 未压缩 .so」通道，故 zip 对齐对当前产物无效，不作为判据。
+        # 但该行为会随 minSdk ≥ 23 静默翻转，因此改为**条件性**：一旦检测到
+        # extractNativeLibs=false（即未压缩），便额外严格校验 zip 对齐。两条互补，不过度要求。
+        if: github.event_name != 'pull_request'
+        run: |
+          set -e
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          echo "APK=$APK"
+          FAIL=0
+
+          # ① 解出 APK 内的 .so，逐个查 ELF 对齐
+          rm -rf /tmp/apkcheck && mkdir -p /tmp/apkcheck
+          unzip -o -q "$APK" 'lib/*/*.so' -d /tmp/apkcheck || true
+          echo "--- 提取的 .so ---"
+          find /tmp/apkcheck -name '*.so' | sort
+
+          for so in $(find /tmp/apkcheck -name '*.so'); do
+            echo "== $so =="
+            # LOAD 段的 Align 列（最后一个字段）
+            for a in $(readelf -lW "$so" | awk '/^  LOAD/{print $NF}'); do
+              if [ "$a" != "0x4000" ]; then
+                echo "  ✗ LOAD 段对齐 $a != 0x4000（16 KB）"; FAIL=1
+              fi
+            done
+            # GNU_RELRO 覆盖终点必须是 16 KB 整数倍。
+            # 注意：runner 的 awk 是 mawk，无 strtonum 扩展，故用 printf 转十进制。
+            RELRO=$(readelf -lW "$so" | awk '/GNU_RELRO/{print $3, $6}')
+            if [ -n "$RELRO" ]; then
+              set -- $RELRO
+              RELRO_V=$(printf "%d" "$1"); RELRO_M=$(printf "%d" "$2")
+              RELRO_END=$((RELRO_V + RELRO_M))
+              if [ $((RELRO_END % 16384)) -ne 0 ]; then
+                printf "  ✗ GNU_RELRO 终点 0x%x 非 16 KB 整数倍\n" "$RELRO_END"; FAIL=1
+              else
+                printf "  ✓ GNU_RELRO 终点 0x%x 已 16 KB 对齐\n" "$RELRO_END"
+              fi
+            fi
+          done
+
+          # ② 【条件性】APK zip 对齐（16 KB）——仅当 native 库是**未压缩**存储时才判。
+          # 判据直接看 .so 在 zip 内的存储方式：
+          #   Stored = 未压缩 → APK 内 mmap 加载 → 16 KB zip 对齐是硬要求，须校验；
+          #   Defl   = 压缩   → 安装时解压到磁盘加载 → zip 对齐与之无关，不要求。
+          # 当前 minSdk 21 → AGP legacy 打包 → Defl（压缩），故跳过；
+          # 若将来 minSdk 提到 ≥ 23（或显式 useLegacyPackaging false）变 Stored，
+          # 本门禁会自动开始校验那条分支。
+          #
+          # 用 python zipfile 而不是 unzip -l：不同 unzip 版本的输出列不一致
+          # （有的版本 -l 根本不含 Method 列，会把日期误当成 Method），
+          # 直接读中央目录的 compress_type 才稳定。
+          SO_STORED=$(python3 -c "import zipfile,sys;z=zipfile.ZipFile(sys.argv[1]);print('yes' if any(i.filename.endswith('.so') and i.compress_type==zipfile.ZIP_STORED for i in z.infolist()) else 'no')" "$APK" 2>/dev/null || echo unknown)
+          echo "SO_STORED=$SO_STORED"
+          if [ "$SO_STORED" = "yes" ]; then
+            echo "--- .so 为未压缩（Stored）存储，须校验 16 KB zip 对齐 ---"
+            ZIPALIGN=$(ls -1 "$ANDROID_HOME"/build-tools/*/zipalign 2>/dev/null | sort -V | tail -n1)
+            if [ -n "$ZIPALIGN" ] && "$ZIPALIGN" --help 2>&1 | grep -q -- '-P'; then
+              # 官方命令（developer.android.com/guide/practices/page-sizes）：
+              # 注意 -P 的参数是 16（页大小），末尾的 4 才是 <align>，不可调换。
+              echo "--- $ZIPALIGN -v -c -P 16 4 ---"
+              "$ZIPALIGN" -v -c -P 16 4 "$APK" || { echo "  ✗ APK 未按 16 KB zip 对齐"; FAIL=1; }
+            else
+              echo "!! 未找到支持 -P 的 zipalign（需 build-tools ≥ 35），无法校验 zip 对齐"
+              FAIL=1
+            fi
+          elif [ "$SO_STORED" = "no" ]; then
+            echo "--- .so 为压缩（Defl）存储，走解压后加载，zip 对齐不适用，跳过 ---"
+            echo "    （16 KB 兼容性由上面的 ELF 段对齐保证；若将来改未压缩，本门禁自动开始校验）"
+          else
+            echo "!! 无法判定 .so 存储方式，跳过 zip 对齐校验（以 ELF 段对齐为准）"
+          fi
+
+          if [ "$FAIL" != "0" ]; then
+            echo "::error::16 KB 对齐校验未通过——该产物在 Android 15/16 上会启动崩溃或装不上，禁止发版。"
+            exit 1
+          fi
+          echo "✅ 16 KB 对齐校验通过"
 
       - name: Check if release needed
         # 多写入者场景：只有 versionName 变化（tag 不存在）时才发版，
