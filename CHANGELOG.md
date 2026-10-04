@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.146.0 (2026-10-04)
+
+本版补上**可移植的口令加密备份与恢复**（#81）：此前「数据与隐私」只能导出**明文** zip、且**没有导入入口**，而 `allowBackup=false` 之后跨机迁移等于断了路。
+
+### 导出可选口令加密
+
+**问题**：导出的是明文 zip，一旦经云盘/聊天工具转发就等同泄露全部对话、记忆与 API 配置；而想跨设备迁移时又没有任何导入入口。
+
+- 新增 `util/PassphraseCrypto`：**PBKDF2WithHmacSHA1（120,000 次迭代）派生 + AES/GCM**，容器格式 `DLP1 | salt(16) | iv(12) | ct+tag`。与设备绑定的 `SecureStore`（Android Keystore）分工明确——本类用**用户口令**现场派生密钥，密文可拷到任意设备、用同一口令解开。为兼容 minSdk 21 未用 `PBKDF2WithHmacSHA256`（API 26+）；口令错误或密文被篡改时 GCM tag 校验失败，统一报「口令错误或备份已损坏」。
+- `ui/SettingsTabView` 导出改为**两步**：SAF 选好位置后询问「设置口令 / 不加密 / 取消」，口令要求至少 6 位且不留存（忘记无法恢复，界面已明示）。不加口令时行为与旧版一致。
+
+### 从备份恢复（两阶段落地）
+
+**问题**：恢复必须覆盖 `shared_prefs/` 与 `databases/`，但这些文件在进程运行期间可能被 SharedPreferences / SQLite 占用，或写入后又被内存态覆盖。
+
+- 新增 `storage/BackupArchive`：与 `DataPort.exportZip` 互逆，只认 `files/`、`shared_prefs/`、`databases/` 三个顶层前缀，其余一律忽略；逐条目做 **Zip Slip** 校验（拒绝绝对路径、`.`/`..` 段与反斜杠穿越）；`files/models/`（已导入模型）不覆盖。
+- 新增 `storage/PendingRestore` + `App`（`Application` 入口，`AndroidManifest` 注册 `android:name=".App"`）：导入时**不立即写盘**，先把 zip 暂存到 cache；等进程**下次启动、任何存储打开之前**（`Application.onCreate`）再解压写入，避免被内存态或文件锁覆盖。无论成功失败都删除待恢复文件，防止每次启动反复失败。
+- `ui/SettingsTabView` 新增「从备份恢复」：SAF 选择文件 → 自动识别加密容器（按魔数）并弹口令 → 二次确认 → 重启应用生效。
+
+### 验证
+
+`testDebugUnitTest --tests *PassphraseCryptoTest --tests *BackupArchiveTest --tests *PendingRestoreTest` 通过，新增 23 例（加解密往返 / 空串与 null / 错口令与篡改检测 / Zip Slip 边界 / 模型不覆盖 / 两阶段暂存与清理）。总数 511。CI 单测门禁通过后合并；push main 后由 workflow 出 `app-release.apk` 并发行 Release。
+
 ## v1.145.0 (2026-10-04)
 
 本版为**工具审批防线加固**（#79）：把「外部/第三方工具」纳入默认审批，并修复带 namespace 前缀的危险工具漏判。
