@@ -11,12 +11,9 @@ import com.digitallife.util.Settings;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -217,7 +214,7 @@ public class CareTools {
             extractZip(zipFile, targetDir, sizes, counts);
             StringBuilder sb = new StringBuilder();
             sb.append("解压完成：共 ").append(counts[0]).append(" 个文件，")
-              .append(formatSize(sizes[0])).append("\n\n");
+              .append(CareFileOps.formatSize(sizes[0])).append("\n\n");
             // 识别模型文件
             List<File> modelJsons = new ArrayList<>();
             collectModelJsons(targetDir, modelJsons);
@@ -226,7 +223,7 @@ public class CareTools {
             } else {
                 sb.append("✅ 识别到模型定义文件：\n");
                 for (File mj : modelJsons) {
-                    sb.append("   - ").append(relPath(targetDir, mj)).append("\n");
+                    sb.append("   - ").append(CareFileOps.relPath(targetDir, mj)).append("\n");
                 }
             }
             sb.append("\n文件结构：\n");
@@ -251,7 +248,7 @@ public class CareTools {
                     throw new Exception("zip 总大小超限");
                 }
                 // Zip Slip 防护：拒绝绝对路径、父目录穿越，目标必须落在解压目录内
-                File out = safeResolve(targetDir, entry.getName());
+                File out = CareFileOps.safeResolve(targetDir, entry.getName());
                 if (out == null) {
                     throw new Exception("zip 包含非法路径: " + entry.getName());
                 }
@@ -262,23 +259,6 @@ public class CareTools {
                 }
                 counts[0]++;
             }
-        }
-    }
-
-    /** Zip Slip 防护：把 zip 内相对路径安全解析到 base 目录下，非法路径返回 null */
-    private static File safeResolve(File base, String name) {
-        if (name == null || name.isEmpty()) return null;
-        if (name.startsWith("/") || name.contains("..")) return null;
-        File f = new File(base, name);
-        try {
-            String basePath = base.getCanonicalPath();
-            String targetPath = f.getCanonicalPath();
-            if (!targetPath.startsWith(basePath + File.separator) && !targetPath.equals(basePath)) {
-                return null;
-            }
-            return f;
-        } catch (Exception e) {
-            return null;
         }
     }
 
@@ -309,7 +289,7 @@ public class CareTools {
                 sb.append(buildFileTree(f, prefix + "    ", depth + 1, maxDepth));
             } else {
                 sb.append("    ").append("   ").append(f.getName())
-                  .append(" (").append(formatSize(f.length())).append(")\n");
+                  .append(" (").append(CareFileOps.formatSize(f.length())).append(")\n");
             }
         }
         return sb.toString();
@@ -357,13 +337,13 @@ public class CareTools {
         report.append("📁 位置: ").append(modelDir.getAbsolutePath()).append("\n\n");
 
         // 找 model3.json
-        File model3 = firstFile(modelDir, ".model3.json");
-        File modelJson = model3 != null ? null : firstFile(modelDir, ".model.json");
+        File model3 = CareFileOps.firstFile(modelDir, ".model3.json");
+        File modelJson = model3 != null ? null : CareFileOps.firstFile(modelDir, ".model.json");
 
         if (model3 != null) {
             report.append("✅ 模型定义: ").append(model3.getName()).append("\n");
             try {
-                JSONObject root = new JSONObject(readFile(model3));
+                JSONObject root = new JSONObject(CareFileOps.readFile(model3));
                 JSONObject fr = root.optJSONObject("FileReferences");
                 if (fr != null) {
                     // Moc
@@ -410,11 +390,11 @@ public class CareTools {
 
         // 统计资源文件
         report.append("\n📦 资源统计:\n");
-        int motions = countFiles(modelDir, ".motion3.json");
-        int expressions = countFiles(modelDir, ".exp3.json");
-        int physics = countFiles(modelDir, ".physics3.json");
-        int textures = countFiles(modelDir, ".png") + countFiles(modelDir, ".jpg");
-        int moc = countFiles(modelDir, ".moc3");
+        int motions = CareFileOps.countFiles(modelDir, ".motion3.json");
+        int expressions = CareFileOps.countFiles(modelDir, ".exp3.json");
+        int physics = CareFileOps.countFiles(modelDir, ".physics3.json");
+        int textures = CareFileOps.countFiles(modelDir, ".png") + CareFileOps.countFiles(modelDir, ".jpg");
+        int moc = CareFileOps.countFiles(modelDir, ".moc3");
         report.append("   MOC3: ").append(moc).append(" 个\n");
         report.append("   纹理: ").append(textures).append(" 个\n");
         report.append("   动作: ").append(motions).append(" 个\n");
@@ -491,13 +471,13 @@ public class CareTools {
             String modelName = extractTopDirName(rootPrefix, jsonPath);
 
             // json base 名（C++ 自己拼扩展名）
-            String jsonBase = stripModelJsonSuffix(jsonPath.substring(jsonPath.lastIndexOf('/') + 1));
+            String jsonBase = CareFileOps.stripModelJsonSuffix(jsonPath.substring(jsonPath.lastIndexOf('/') + 1));
 
             File modelsDir = getModelsDirSafe();
             if (modelsDir == null) return "模型目录未初始化。";
-            File targetDir = new File(modelsDir, sanitizeDirName(modelName));
+            File targetDir = new File(modelsDir, CareFileOps.sanitizeDirName(modelName));
             if (targetDir.exists()) {
-                deleteRecursive(targetDir);
+                CareFileOps.deleteRecursive(targetDir);
             }
             if (!targetDir.exists() && !targetDir.mkdirs()) {
                 return "无法创建模型目录: " + targetDir.getName();
@@ -546,7 +526,7 @@ public class CareTools {
             if (patch == null) patch = "模型自带动作";
 
             StringBuilder sb = new StringBuilder("✅ 模型安装成功: " + targetDir.getName() + "\n");
-            sb.append("   文件数: ").append(fileCount).append("，大小: ").append(formatSize(total)).append("\n");
+            sb.append("   文件数: ").append(fileCount).append("，大小: ").append(CareFileOps.formatSize(total)).append("\n");
             sb.append("   定义文件: ").append(jsonPath).append("\n");
             sb.append("   ").append(patch).append("\n");
             sb.append("   现在可以在桌宠中切换到" ).append(targetDir.getName()).append("了。\n");
@@ -578,7 +558,7 @@ public class CareTools {
             if (parts.length > 0 && !parts[0].isEmpty()) return parts[0];
         }
         String f = jsonPath.substring(jsonPath.lastIndexOf('/') + 1);
-        return stripModelJsonSuffix(f);
+        return CareFileOps.stripModelJsonSuffix(f);
     }
 
     // ============ 模型统一管理（护理大脑） ============
@@ -637,29 +617,13 @@ public class CareTools {
             return "未找到已导入的模型: " + modelName + "（内置模型不可删除）";
         }
         String name = modelDir.getName();
-        deleteRecursive(modelDir);
+        CareFileOps.deleteRecursive(modelDir);
         // 若默认模型被删除，清除默认记录
         Settings settings = new Settings(ctx);
         if (name.equals(settings.getDefaultModelDir())) {
             settings.setDefaultModelDir("");
         }
         return "已删除模型: " + name + "。\n下次启动后将从可用列表消失。";
-    }
-
-    private String stripModelJsonSuffix(String fileName) {
-        String lower = fileName.toLowerCase(Locale.ROOT);
-        if (lower.endsWith(".model3.json")) {
-            return fileName.substring(0, fileName.length() - ".model3.json".length());
-        }
-        if (lower.endsWith(".model.json")) {
-            return fileName.substring(0, fileName.length() - ".model.json".length());
-        }
-        return fileName;
-    }
-
-    private String sanitizeDirName(String name) {
-        if (name == null || name.trim().isEmpty()) return "model";
-        return name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
     private String repairModel(String modelName) {
@@ -669,8 +633,8 @@ public class CareTools {
             return "未找到模型目录: " + modelName;
         }
         StringBuilder report = new StringBuilder("🔧 修复模型: " + modelName + "\n");
-        File model3 = firstFile(modelDir, ".model3.json");
-        File moc = firstFile(modelDir, ".moc3");
+        File model3 = CareFileOps.firstFile(modelDir, ".model3.json");
+        File moc = CareFileOps.firstFile(modelDir, ".moc3");
         if (model3 == null && moc != null) {
             String base = moc.getName().replace(".moc3", "");
             createMinimalModel3Json(modelDir, base);
@@ -679,7 +643,7 @@ public class CareTools {
         if (model3 == null && moc == null) {
             report.append("   ⚠ 缺少 .moc3 和 .model3.json，无法自动修复，请重新安装。\n");
         }
-        int textures = countFiles(modelDir, ".png") + countFiles(modelDir, ".jpg");
+        int textures = CareFileOps.countFiles(modelDir, ".png") + CareFileOps.countFiles(modelDir, ".jpg");
         if (textures == 0) {
             report.append("   ⚠ 缺少纹理文件，请补充纹理图片。\n");
         } else {
@@ -709,7 +673,7 @@ public class CareTools {
                 if (depth < maxDepth) appendFileTree(f, sb, depth + 1, maxDepth);
             } else {
                 sb.append(pad).append("   ").append(f.getName())
-                  .append(" (").append(formatSize(f.length())).append(")\n");
+                  .append(" (").append(CareFileOps.formatSize(f.length())).append(")\n");
             }
         }
     }
@@ -718,17 +682,17 @@ public class CareTools {
         File dir = findModelDir(modelName);
         if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
         if (path == null || path.trim().isEmpty()) return "请指定相对路径（如 foo.model3.json）。";
-        File f = safeResolve(dir, path);
+        File f = CareFileOps.safeResolve(dir, path);
         if (f == null) return "路径非法（不允许访问模型目录之外）: " + path;
         if (!f.exists()) return "文件不存在: " + path;
         if (f.isDirectory()) return "「" + path + "」是目录，请指定文件路径。";
         if (f.length() > 512 * 1024) return "文件过大（>512KB），拒绝读取: " + path;
         try {
-            String content = readFile(f);
+            String content = CareFileOps.readFile(f);
             if (content.length() > 8000) {
                 content = content.substring(0, 8000) + "\n...（内容过长已截断）";
             }
-            return "📄 " + path + " (" + formatSize(f.length()) + "):\n" + content;
+            return "📄 " + path + " (" + CareFileOps.formatSize(f.length()) + "):\n" + content;
         } catch (Exception e) {
             return "读取失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
@@ -739,7 +703,7 @@ public class CareTools {
         if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
         if (path == null || path.trim().isEmpty()) return "请指定相对路径。";
         if (content == null || content.trim().isEmpty()) return "写入内容为空。";
-        File f = safeResolve(dir, path);
+        File f = CareFileOps.safeResolve(dir, path);
         if (f == null) return "路径非法（不允许写入模型目录之外）: " + path;
         // json 文件校验合法性，避免写入损坏配置
         String low = path.toLowerCase(Locale.ROOT);
@@ -759,7 +723,7 @@ public class CareTools {
         if (parent != null && !parent.exists()) parent.mkdirs();
         if (f.exists()) {
             File bak = new File(f.getAbsolutePath() + ".bak");
-            copyFile(f, bak);
+            CareFileOps.copyFile(f, bak);
         }
         try (OutputStream os = new FileOutputStream(f)) {
             os.write(content.getBytes(StandardCharsets.UTF_8));
@@ -771,9 +735,9 @@ public class CareTools {
     private String fixModelReferences(String modelName) throws Exception {
         File dir = findModelDir(modelName);
         if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
-        File model3 = firstFile(dir, ".model3.json");
+        File model3 = CareFileOps.firstFile(dir, ".model3.json");
         if (model3 == null) {
-            File moc = firstFile(dir, ".moc3");
+            File moc = CareFileOps.firstFile(dir, ".moc3");
             if (moc != null) {
                 String base = moc.getName().replace(".moc3", "");
                 createMinimalModel3Json(dir, base);
@@ -781,7 +745,7 @@ public class CareTools {
             }
             return "⚠ 缺少 model3.json 与 .moc3，无法自动修复，请重新安装。";
         }
-        JSONObject root = new JSONObject(readFile(model3));
+        JSONObject root = new JSONObject(CareFileOps.readFile(model3));
         JSONObject fr = root.optJSONObject("FileReferences");
         if (fr == null) return "⚠ model3.json 缺少 FileReferences 字段，无法修复引用。";
         StringBuilder sb = new StringBuilder("🔧 引用修复结果:\n");
@@ -835,7 +799,7 @@ public class CareTools {
         } else {
             root.put("FileReferences", fr);
             File bak = new File(model3.getAbsolutePath() + ".bak");
-            copyFile(model3, bak);
+            CareFileOps.copyFile(model3, bak);
             try (OutputStream os = new FileOutputStream(model3)) {
                 os.write(root.toString(2).getBytes(StandardCharsets.UTF_8));
             }
@@ -891,10 +855,10 @@ public class CareTools {
         if (dir == null || !dir.exists()) return "未找到模型目录: " + modelName;
         File backupsRoot = new File(ctx.getCacheDir(), "care_backups");
         if (!backupsRoot.exists() && !backupsRoot.mkdirs()) return "无法创建备份目录。";
-        String dirName = sanitizeDirName(dir.getName());
+        String dirName = CareFileOps.sanitizeDirName(dir.getName());
         File target = new File(backupsRoot, dirName + "_" + System.currentTimeMillis());
         try {
-            copyRecursive(dir, target);
+            CareFileOps.copyRecursive(dir, target);
         } catch (Exception e) {
             return "备份失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
@@ -925,9 +889,9 @@ public class CareTools {
         File backup = new File(backupPath);
         if (!backup.exists()) return "备份不存在: " + backupPath;
         try {
-            deleteRecursive(dir);
+            CareFileOps.deleteRecursive(dir);
             if (!dir.mkdirs()) throw new Exception("无法创建模型目录");
-            copyRecursive(backup, dir);
+            CareFileOps.copyRecursive(backup, dir);
         } catch (Exception e) {
             return "恢复失败: " + com.digitallife.ui.UiKit.safeMsg(e);
         }
@@ -942,11 +906,11 @@ public class CareTools {
         if (m == null) return "未找到动作: " + motionName;
         JSONObject motion;
         try {
-            motion = new JSONObject(readFile(m));
+            motion = new JSONObject(CareFileOps.readFile(m));
         } catch (Exception e) {
             // 完全损坏：备份后重建最小合法结构
             File bak = new File(m.getAbsolutePath() + ".bak");
-            copyFile(m, bak);
+            CareFileOps.copyFile(m, bak);
             JSONObject rebuilt = new JSONObject();
             rebuilt.put("Version", 3);
             JSONObject meta = new JSONObject();
@@ -1000,7 +964,7 @@ public class CareTools {
         }
         if (changed) {
             File bak = new File(m.getAbsolutePath() + ".bak");
-            copyFile(m, bak);
+            CareFileOps.copyFile(m, bak);
             try (OutputStream os = new FileOutputStream(m)) {
                 os.write(motion.toString(2).getBytes(StandardCharsets.UTF_8));
             }
@@ -1009,28 +973,6 @@ public class CareTools {
             report.append("   动作文件结构正常，无需修复 ✅\n");
         }
         return report.toString();
-    }
-
-    private static void copyRecursive(File src, File dst) throws Exception {
-        if (src.isDirectory()) {
-            if (!dst.exists() && !dst.mkdirs()) throw new Exception("无法创建目录: " + dst);
-            File[] files = src.listFiles();
-            if (files != null) {
-                for (File f : files) copyRecursive(f, new File(dst, f.getName()));
-            }
-        } else {
-            copyFile(src, dst);
-        }
-    }
-
-    private static void copyFile(File src, File dst) throws Exception {
-        File parent = dst.getParentFile();
-        if (parent != null && !parent.exists()) parent.mkdirs();
-        try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
-        }
     }
 
     // ============ 动作管理 ============
@@ -1053,7 +995,7 @@ public class CareTools {
             String name = m.getName().replace(".motion3.json", "");
             // 读取时长/循环/曲线
             try {
-                JSONObject o = new JSONObject(readFile(m));
+                JSONObject o = new JSONObject(CareFileOps.readFile(m));
                 JSONObject meta = o.optJSONObject("Meta");
                 double dur = meta != null ? meta.optDouble("Duration", 0) : 0;
                 boolean loop = meta != null && meta.optBoolean("Loop", false);
@@ -1077,7 +1019,7 @@ public class CareTools {
         File m = resolveMotionFile(modelDir, motionName);
         if (m == null) return "未找到动作: " + motionName;
         try {
-            JSONObject o = new JSONObject(readFile(m));
+            JSONObject o = new JSONObject(CareFileOps.readFile(m));
             JSONObject meta = o.optJSONObject("Meta");
             JSONArray curves = o.optJSONArray("Curves");
             StringBuilder sb = new StringBuilder("📄 动作: " + m.getName() + "\n");
@@ -1173,7 +1115,7 @@ public class CareTools {
         if (modelDir == null || !modelDir.exists()) return "未找到模型目录: " + modelName;
         File m = resolveMotionFile(modelDir, motionName);
         if (m == null) return "未找到动作: " + motionName;
-        JSONObject motion = new JSONObject(readFile(m));
+        JSONObject motion = new JSONObject(CareFileOps.readFile(m));
         JSONObject edits = new JSONObject(editsJson);
         if (edits.has("duration")) {
             motion.getJSONObject("Meta").put("Duration", edits.getDouble("duration"));
@@ -1365,26 +1307,6 @@ public class CareTools {
         return null;
     }
 
-    private static File firstFile(File dir, String suffix) {
-        File[] files = dir.listFiles((d, n) -> n.endsWith(suffix));
-        if (files != null && files.length > 0) return files[0];
-        return null;
-    }
-
-    private static int countFiles(File dir, String suffix) {
-        int count = 0;
-        File[] files = dir.listFiles();
-        if (files == null) return 0;
-        for (File f : files) {
-            if (f.isDirectory()) {
-                count += countFiles(f, suffix);
-            } else if (f.getName().endsWith(suffix)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     private static void createMinimalModel3Json(File modelDir, String baseName) {
         try {
             JSONObject model3 = new JSONObject();
@@ -1402,38 +1324,5 @@ public class CareTools {
             }
         } catch (Exception ignored) {
         }
-    }
-
-    private static String readFile(File f) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader r = new BufferedReader(
-                new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) sb.append(line).append('\n');
-        }
-        return sb.toString().trim();
-    }
-
-    private static void deleteRecursive(File dir) {
-        if (dir == null || !dir.exists()) return;
-        File[] files = dir.listFiles();
-        if (files != null) {
-            for (File f : files) {
-                if (f.isDirectory()) deleteRecursive(f);
-                else f.delete();
-            }
-        }
-        dir.delete();
-    }
-
-    private static String formatSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0);
-        return String.format(Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0));
-    }
-
-    private static String relPath(File root, File f) {
-        return f.getAbsolutePath().substring(root.getAbsolutePath().length())
-                .replaceAll("^[/\\\\]", "");
     }
 }
