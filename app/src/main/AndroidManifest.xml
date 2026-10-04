@@ -22,6 +22,7 @@
     <!-- v1.140.0：关系统备份（此前 true），避免含密钥的 prefs 被云备份带出；
          数据迁移改由设置页「数据与隐私」的导出/清除提供 -->
     <application
+        android:name=".App"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
