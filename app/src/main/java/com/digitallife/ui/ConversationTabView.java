@@ -235,6 +235,20 @@ public class ConversationTabView extends LinearLayout {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(UiKit.color(activity, R.color.operit_text_primary));
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        // v1.147.0（#82）：置顶会话在标题左侧加一枚小角标
+        if (s.pinned) {
+            TextView pin = new TextView(activity);
+            pin.setText("置顶");
+            pin.setTextSize(9f);
+            pin.setTextColor(UiKit.color(activity, R.color.brand));
+            pin.setBackground(typeTagBg(UiKit.color(activity, R.color.brand)));
+            pin.setPadding(UiKit.dp(activity, 5), UiKit.dp(activity, 1),
+                    UiKit.dp(activity, 5), UiKit.dp(activity, 1));
+            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            plp.rightMargin = UiKit.dp(activity, 6);
+            titleRow.addView(pin, plp);
+        }
         TextView tag = new TextView(activity);
         tag.setText(typeLabel(s.type));
         tag.setTextSize(10f);
@@ -292,10 +306,38 @@ public class ConversationTabView extends LinearLayout {
             }
         });
         card.setOnLongClickListener(v -> {
-            showRenameDialog(s);
+            showCardMenu(s);
             return true;
         });
         return card;
+    }
+
+    /**
+     * v1.147.0（#82）：会话卡片长按菜单。
+     * <p>护理会话只能「重命名」（实为给出提示）；自建会话可选重命名 / 置顶或取消置顶。</p>
+     */
+    private void showCardMenu(ChatStore.SessionInfo s) {
+        boolean isCare = ChatStore.SESSION_CARE.equals(s.id);
+        if (isCare) {
+            // 内置会话不允许改名/置顶，保持原有「给出解释」的交互
+            showRenameDialog(s);
+            return;
+        }
+        final String[] items = s.pinned
+                ? new String[]{"重命名", "取消置顶"}
+                : new String[]{"重命名", "置顶"};
+        new android.app.AlertDialog.Builder(activity)
+                .setTitle(s.title == null || s.title.isEmpty() ? "未命名对话" : s.title)
+                .setItems(items, (d, w) -> {
+                    if (w == 0) {
+                        showRenameDialog(s);
+                    } else {
+                        if (chatStore.setPinned(s.id, !s.pinned)) {
+                            refresh();
+                        }
+                    }
+                })
+                .show();
     }
 
     private void showRenameDialog(ChatStore.SessionInfo s) {

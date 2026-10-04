@@ -24,7 +24,8 @@ public class ChatStore {
     public static final String SESSION_CARE = "care";
 
     private static final String DB_NAME = "pet_chat.db";
-    private static final int DB_VERSION = 2;
+    // v1.147.0（#82）：sessions 表新增 pinned 列，旧库靠 onUpgrade 补列
+    private static final int DB_VERSION = 3;
     private static final int MAX_MSG_PER_SESSION = 120;
 
     /** 会话类型 */
@@ -64,9 +65,16 @@ public class ChatStore {
         public final String modelName;   // 绑定模型名（type=model 时）
         public final long createdAt;
         public final long updatedAt;
+        /** v1.147.0（#82）：会话是否被用户置顶（旧数据/护理会话默认 false） */
+        public final boolean pinned;
 
         public SessionInfo(String id, String title, String type, String brainType,
                            String modelName, long createdAt, long updatedAt) {
+            this(id, title, type, brainType, modelName, createdAt, updatedAt, false);
+        }
+
+        public SessionInfo(String id, String title, String type, String brainType,
+                           String modelName, long createdAt, long updatedAt, boolean pinned) {
             this.id = id;
             this.title = title;
             this.type = type;
@@ -74,6 +82,7 @@ public class ChatStore {
             this.modelName = modelName;
             this.createdAt = createdAt;
             this.updatedAt = updatedAt;
+            this.pinned = pinned;
         }
     }
 
@@ -116,6 +125,7 @@ public class ChatStore {
         v.put("model_name", modelName);
         v.put("created_at", now);
         v.put("updated_at", now);
+        v.put("pinned", 0);
         db.insert("sessions", null, v);
     }
 
@@ -136,16 +146,29 @@ public class ChatStore {
         return db.update("sessions", v, "id = ?", new String[]{sessionKey}) > 0;
     }
 
+    /**
+     * v1.147.0（#82）：置顶 / 取消置顶自建会话。
+     * 护理大脑等系统内置会话不允许置顶（它本来就恒排第一），返回 false。
+     */
+    public synchronized boolean setPinned(String sessionKey, boolean pinned) {
+        if (SESSION_CARE.equals(sessionKey)) return false;
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues v = new ContentValues();
+        v.put("pinned", pinned ? 1 : 0);
+        return db.update("sessions", v, "id = ?", new String[]{sessionKey}) > 0;
+    }
+
     public synchronized SessionInfo getSession(String sessionKey) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
+        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at, pinned " +
                         "FROM sessions WHERE id = ?",
                 new String[]{sessionKey});
         try {
             if (c.moveToFirst()) {
                 return new SessionInfo(
                         c.getString(0), c.getString(1), c.getString(2),
-                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6));
+                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6),
+                        c.getInt(7) != 0);
             }
         } finally {
             c.close();
@@ -153,23 +176,27 @@ public class ChatStore {
         return null;
     }
 
-    /** 列出全部会话（护理大脑固定置顶，其余按最近更新时间降序） */
+    /**
+     * 列出全部会话：护理大脑恒第一，其后**置顶会话在前**、组内按最近更新时间降序。
+     * v1.147.0（#82）：排序规则下沉为 {@link com.digitallife.ui.chat.ConversationOrder#sort}（纯逻辑，可单测）。
+     */
     public synchronized List<SessionInfo> getSessions() {
         ArrayList<SessionInfo> out = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at " +
-                        "FROM sessions ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, updated_at DESC",
-                new String[]{SESSION_CARE});
+        Cursor c = db.rawQuery("SELECT id, title, type, brain_type, model_name, created_at, updated_at, pinned " +
+                        "FROM sessions ORDER BY updated_at DESC",
+                null);
         try {
             while (c.moveToNext()) {
                 out.add(new SessionInfo(
                         c.getString(0), c.getString(1), c.getString(2),
-                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6)));
+                        c.getString(3), c.getString(4), c.getLong(5), c.getLong(6),
+                        c.getInt(7) != 0));
             }
         } finally {
             c.close();
         }
-        return out;
+        return com.digitallife.ui.chat.ConversationOrder.sort(out, SESSION_CARE);
     }
 
     /** 删除会话及其全部消息 */
@@ -305,7 +332,8 @@ public class ChatStore {
                     "brain_type TEXT NOT NULL," +
                     "model_name TEXT," +
                     "created_at INTEGER NOT NULL," +
-                    "updated_at INTEGER NOT NULL" +
+                    "updated_at INTEGER NOT NULL," +
+                    "pinned INTEGER NOT NULL DEFAULT 0" +
                     ")");
         }
 
@@ -321,6 +349,10 @@ public class ChatStore {
                         "created_at INTEGER NOT NULL," +
                         "updated_at INTEGER NOT NULL" +
                         ")");
+            }
+            if (oldVersion < 3) {
+                // v1.147.0（#82）：补 pinned 列；旧记录一律视为未置顶
+                db.execSQL("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
             }
         }
     }
