@@ -167,12 +167,13 @@ public class AboutActivity extends Activity {
         final java.util.List<String> abis = abiArr == null
                 ? java.util.Collections.<String>emptyList()
                 : java.util.Arrays.asList(abiArr);
-        long pageSize = 0L;
+        long pageSizeTmp = 0L;
         try {
             // API 21+ 可用；取不到时保持 0（纯逻辑侧显示「未知」）
-            pageSize = android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE);
+            pageSizeTmp = android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE);
         } catch (Throwable ignored) {
         }
+        final long pageSize = pageSizeTmp;   // lambda 捕获需 effectively final
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
