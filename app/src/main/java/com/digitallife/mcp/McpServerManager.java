@@ -3,6 +3,8 @@ package com.digitallife.mcp;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.digitallife.util.SecureStore;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -21,6 +23,8 @@ public class McpServerManager {
     private static final String KEY_LIST = "servers";
 
     private final SharedPreferences sp;
+    /** v1.143.0：headerValue 多为 Authorization 令牌，落盘改走设备级加密（与 API Key 同策略） */
+    private final SecureStore secure = new SecureStore();
     private final List<McpClient> connected = new ArrayList<>();
 
     public McpServerManager(Context ctx) {
@@ -63,7 +67,8 @@ public class McpServerManager {
                         o.optString("name", ""),
                         o.optString("endpoint", ""),
                         o.optString("headerName", ""),
-                        o.optString("headerValue", ""),
+                        // 历史明文（无 enc:v1: 前缀）原样返回，下次 save 时透明加密回写
+                        secure.decrypt(o.optString("headerValue", "")),
                         o.optString("namespace", "")));
             }
         } catch (Exception ignored) {
@@ -121,7 +126,7 @@ public class McpServerManager {
                 o.put("name", c.name == null ? "" : c.name);
                 o.put("endpoint", c.endpoint == null ? "" : c.endpoint);
                 o.put("headerName", c.headerName == null ? "" : c.headerName);
-                o.put("headerValue", c.headerValue == null ? "" : c.headerValue);
+                o.put("headerValue", secure.encrypt(c.headerValue == null ? "" : c.headerValue));
                 o.put("namespace", c.namespace == null ? "" : c.namespace);
                 arr.put(o);
             } catch (Exception ignored) {
