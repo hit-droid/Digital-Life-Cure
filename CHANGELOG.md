@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.143.0 (2026-10-04)
+
+本版为**发行与安全加固**（P0 打包）：发行包从 debug 构建切到正式 release 构建、MCP 鉴权令牌加密落盘、收紧组件导出。由发布负责人 trae 完成后 bump。
+
+### 发行包改用 release 构建（非 debuggable + 正式签名）
+
+**问题**：此前 CI 出的是 `assembleDebug`，且 `buildTypes` 里只有 `debug`——发行包是可调试构建（可 attach 调试器、`run-as` 读应用私有数据），且签名配置挂在 `debug` 名下，语义上就是个"调试包"。
+
+- `app/build.gradle`：新增 `signingConfigs.release` 与 `release` buildType（`minifyEnabled false`）。签名沿用同一 `app/release-key.p12`（同 alias/密码），**证书与历史包一致，老用户可直接覆盖升级**；密码支持 `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` 环境变量覆盖，便于日后接入自有密钥而不改代码。
+- `.github/workflows/build.yml`：出包步骤改为 `assembleRelease`，上传 `app/build/outputs/apk/release/*.apk`；单测门禁仍跑 `testDebugUnitTest`。
+- **R8 暂未开启**（`minifyEnabled false`）：native 侧 `JniBridgeC.cpp` 用 `FindClass("com/digitallife/render/Live2DNative")` + `GetStaticMethodID(..., "loadFile"/"moveTaskToBack")` 按名回调，`BuiltinTools.registerIfAbsent` 还用 `Tools.class.getDeclaredMethod("register", ...)` 反射。开启混淆必须补 keep 规则（至少 `-keep class com.digitallife.render.Live2DNative { *; }` 与 `-keep class com.digitallife.brain.Tools { *; }`）并做真机冒烟，而当前容器无真机/模拟器无法验证运行时，故留待后续有设备时单独开。
+
+### MCP 鉴权令牌加密落盘
+
+**问题**：`McpServerManager` 把 `headerValue`（多为 `Authorization: Bearer <token>`）以明文 JSON 写进 `shared_prefs/mcp_servers`，与 v1.140.0 已加密的 API Key 策略不一致，密钥裸奔。
+
+- `mcp/McpServerManager`：落盘改走 `util/SecureStore`（Android Keystore + AES/GCM），读回时解密；历史明文（无 `enc:v1:` 前缀）原样返回并在下次保存时透明加密回写。设备不支持加密（API < 23）时降级明文，与 API Key 同一策略。
+
+### 组件导出收紧
+
+**问题**：除 `MainActivity` 外，Chat / Developer / Memory / AgentConsole / ToolMarket / Persona / Themes / CareModels 等 Activity 全部 `android:exported="true"` 且无权限校验，任意第三方 App 都可直接拉起；`ChatActivity` 还读取 intent extras（session/title/model），可被外部注入参数。
+
+- `AndroidManifest.xml`：这些**无 intent-filter、仅由 App 内部显式 Intent 拉起**的页面统一改为 `android:exported="false"`；`MainActivity`（LAUNCHER）与 `BootReceiver`（系统广播）保持导出。
+
+### 未纳入本版
+
+- **明文流量（`usesCleartextTraffic="true"`）未收紧**：Android 的 `networkSecurityConfig` 只能按域名/IP 枚举，无法表达"私网网段"，而自建/局域网 LLM 端点（`http://192.168.x.x:port`）是本 App 的一等用例，收紧会直接破坏功能。判定为**已接受风险**，保留全局放开。
+- 数据导出仍不可跨机迁移（密钥在 Keystore，`enc:v1:` 密文异机解不开）；无 i18n；`targetSdk` 仍为 34。
+
+### 验证
+
+无业务逻辑改动（签名/构建类型/清单/密钥存储路径）。CI 单测门禁通过后合并；push main 后由 workflow 出 `app-release.apk` 并发行 Release。
+
 ## v1.142.0 (2026-10-04)
 
 本版汇总 v1.141.0 之后合并到 main 的聊天体验修复（#55 / #57 / #59 / #64 / #66）与 CI 降耗（#63），由发布负责人 trae 统一 bump 发版。

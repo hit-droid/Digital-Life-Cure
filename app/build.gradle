@@ -10,8 +10,8 @@ android {
         applicationId "com.digitallife"
         minSdk 21
         targetSdk 34
-        versionCode 145
-        versionName "1.142.0"
+        versionCode 146
+        versionName "1.143.0"
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86'
         }
@@ -27,6 +27,8 @@ android {
     }
 
     signingConfigs {
+        // 本地/CI 均用 app/release-key.p12（库文件被 .gitignore 忽略，CI 首次运行自动生成并缓存）。
+        // 密码默认值与 CI 生成参数一致，可用环境变量覆盖以接入自有密钥（不用改代码）。
         debug {
             storeFile file("release-key.p12")
             storePassword "android"
@@ -34,11 +36,27 @@ android {
             keyPassword "android"
             storeType "PKCS12"
         }
+        release {
+            storeFile file(System.getenv("RELEASE_STORE_FILE") ?: "release-key.p12")
+            storePassword System.getenv("RELEASE_STORE_PASSWORD") ?: "android"
+            keyAlias System.getenv("RELEASE_KEY_ALIAS") ?: "maidenkey"
+            keyPassword System.getenv("RELEASE_KEY_PASSWORD") ?: "android"
+            storeType "PKCS12"
+        }
     }
 
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+        // v1.143.0：发行包改用 release 构建——非 debuggable（不可 attach 调试器 / run-as 取数据），
+        // 且与历史包同密钥签名（同 p12/alias），老用户可直接覆盖升级。
+        // R8 暂不开：native 侧用 FindClass/GetStaticMethodID 按名回调 Live2DNative.loadFile，
+        // 另有 Tools.register 的反射调用，开启混淆须配 keep 规则并做真机冒烟，本环境无设备验证，
+        // 故 minifyEnabled 保持 false；待有设备验证后再开（规则见 CHANGELOG v1.143.0）。
+        release {
+            signingConfig signingConfigs.release
             minifyEnabled false
         }
     }
