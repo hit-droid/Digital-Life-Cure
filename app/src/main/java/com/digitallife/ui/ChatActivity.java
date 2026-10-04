@@ -245,7 +245,7 @@ public class ChatActivity extends Activity {
             TextView careBadge = new TextView(this);
             careBadge.setText("● 医疗");
             careBadge.setTextSize(11f);
-            careBadge.setTextColor(0xFF6EE7B7);  // 薄荷绿
+            careBadge.setTextColor(0xFFF7C77A);  // 琥珀（护理色统一到橙系）
             careBadge.setBackgroundResource(R.drawable.bg_pill_care);
             careBadge.setPadding(dp(10), dp(3), dp(10), dp(3));
             LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(

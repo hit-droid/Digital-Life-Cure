@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.156.0 (2026-10-04)
+
+修掉 workbuddy 在 issue #98 用**真机像素采样**钉出来的 AI 气泡渲染 bug，并把「护理」色语从绿统一到橙。
+
+### B2（真 bug，与深浅色无关）：AI 气泡的左侧竖条被拉伸盖满整只气泡
+
+截图里护理页「问题确认」卡整块亮绿、白字压在同色上——这不是深浅色问题，是 drawable 结构 bug。
+
+`bg_bubble_ai.xml` / `bg_bubble_care.xml` 用 `layer-list` 画「气泡本体 + 左侧 3dp accent 竖条」，
+第二层的竖条写成 `<inset><shape><size android:width="3dp">`，但 **`<item>` 未声明 gravity，
+layer-list 默认 gravity=fill**：shape 被拉伸铺满整个 inset 区域，`<size>` 被忽略——
+竖条色盖住整只气泡，文字与底色同系、对比度只剩 ~1.6:1。
+
+修法用**叠加法**（比单加 `gravity="left"` 更稳）：
+
+- 底层放 accent 条，上下 inset 8dp → 只露中段；
+- 上层放气泡本体，`android:left="3dp"` 遮住其余部分；
+- 露出的正好是「8dp 内缩、2dp 圆角的悬浮竖条」，且不依赖任何 intrinsic 尺寸。
+
+> 不用 `android:gravity="left"` 的原因：① item 的 gravity 要 **API 23** 才生效，本项目 `minSdk 21`；
+> ② shape 只声明 width 时 intrinsic height = **-1**，竖条可能整根消失（尺寸塌陷）。
+
+### 护理色统一到橙系
+
+同一「护理」语义此前两种色：会话列表 `tag_care` 是橙 `#F2A54A`，而护理页顶栏/气泡/徽章是**绿系**。
+用户 2026-10-04 拍板统一到橙：
+
+- `bg_chat_topbar_care.xml` 起始色 `#2A5A4A`（绿）→ `#5A3F12`（琥珀）；
+- `bg_bubble_care.xml` 本体 `#1B5E45→#0F3D2E`（绿）→ `#5C4318→#33240B`（琥珀），accent `#5BD9A8` → `#F2A54A`；
+- `bg_pill_care.xml` 底 `#1B5E45` → `#5C4318`、描边 `#6EE7B7` → `#F2A54A`；
+- `bg_top_bar_care.xml`（遗留）同步到橙，避免误用；
+- `ChatActivity` 徽章文字 `#6EE7B7` → `#F7C77A`。
+
+### 验证
+
+`JAVA_HOME=/opt/jdk17 ./gradlew :app:assembleDebug` 通过（资源合并 + 打包）。
+
 ## v1.155.0 (2026-10-04)
 
 **浅色模式下界面「一半黑一半白」的根因修复：真正兑现「全 App 强制深色」。**

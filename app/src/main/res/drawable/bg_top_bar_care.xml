@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 护理大脑顶栏：深绿渐变（医疗/健康联想） -->
+<!-- 护理大脑顶栏（旧版实心渐变，已被 bg_chat_topbar_care 取代；保留同步到橙系避免误用） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
-        android:startColor="#0F3D2E"
-        android:centerColor="#1B5E45"
-        android:endColor="#2E7D5C"
+        android:startColor="#33240B"
+        android:centerColor="#5C4318"
+        android:endColor="#7A5A1E"
         android:angle="270" />
 </shape>

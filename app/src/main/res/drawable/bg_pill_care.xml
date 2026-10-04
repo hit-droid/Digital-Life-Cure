@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 护理大脑徽章：深绿 pill + 薄荷绿描边 -->
+<!-- 护理大脑徽章：深琥珀 pill + 琥珀描边（护理色统一到橙系，与 tag_care #F2A54A 同源） -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#1B5E45" />
-    <stroke android:width="1dp" android:color="#6EE7B7" />
+    <solid android:color="#5C4318" />
+    <stroke android:width="1dp" android:color="#F2A54A" />
     <corners android:radius="999dp" />
 </shape>

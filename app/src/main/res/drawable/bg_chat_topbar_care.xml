@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 聊天页护理模式顶栏背景（#96）：薄荷绿自顶部向下渐隐融入 Operit 页面底色。
+<!-- 聊天页护理模式顶栏背景（#96）：琥珀橙自顶部向下渐隐融入 Operit 页面底色。
 
-     旧 bg_top_bar_care 用的是大面积实心品牌绿，与 v1.150.0 落地的 Operit hero header
-     语言不一致。这里沿用与 bg_operit_topbar 完全相同的「渐隐」结构，只把起始色换成
-     薄荷绿，既保住「护理入口可辨识」，又与普通对话页同为一块渐隐 hero header。 -->
+     全 App 只此一套「护理色」= 琥珀橙（与列表 tag_care #F2A54A 同源）。
+     此前这里和气泡用的是绿系，而会话列表「护理」标签是橙——同一语义两种色，
+     本版统一到橙（用户 2026-10-04 决策）。结构仍与 bg_operit_topbar 一致，
+     只换起始色，保住「护理入口可辨识」。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <!-- 同 bg_operit_topbar：angle=270 才是「上→下」，否则顶栏底边出现硬切边。 -->
     <gradient
         android:angle="270"
-        android:startColor="#2A5A4A"
+        android:startColor="#5A3F12"
         android:endColor="@color/operit_bg"
         android:type="linear" />
 </shape>

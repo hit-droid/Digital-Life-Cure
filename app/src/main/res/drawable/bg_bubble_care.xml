@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v1.26.0：护理大脑 AI 气泡（深绿液态玻璃 + 薄荷绿 accent 竖线） -->
+<!-- 护理大脑 AI 气泡：深琥珀液态玻璃本体 + 左侧 3dp 琥珀 accent 悬浮竖条。
+
+     护理色统一到橙系：与列表 tag_care #F2A54A 同源（用户 2026-10-04 决策）。
+     此前是深绿系，与列表橙标签构成「同一语义两种色」。
+
+     ⚠️ 竖条用「叠加法」，理由同 bg_bubble_ai（issue #98 B2）：
+     不要改回 inset + <size android:width="3dp">，layer-list 默认 gravity=fill 会把它拉伸铺满
+     整只气泡、盖住文字。叠加法不依赖 intrinsic 尺寸，minSdk 21 也稳定。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
+    <item android:top="8dp" android:bottom="8dp">
         <shape android:shape="rectangle">
-            <!-- v1.27.0：液态玻璃渐变（对齐护理顶栏深绿体系），不再是扁平死色块 -->
+            <solid android:color="#F2A54A" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+    <item android:left="3dp">
+        <shape android:shape="rectangle">
             <gradient
-                android:startColor="#1B5E45"
-                android:centerColor="#16493A"
-                android:endColor="#0F3D2E"
+                android:startColor="#5C4318"
+                android:centerColor="#4A3411"
+                android:endColor="#33240B"
                 android:angle="270" />
             <corners android:radius="16dp" />
         </shape>
-    </item>
-    <item>
-        <inset android:insetLeft="0dp" android:insetTop="8dp"
-               android:insetBottom="8dp" android:insetRight="13dp">
-            <shape android:shape="rectangle">
-                <size android:width="3dp" />
-                <solid android:color="#5BD9A8" />
-                <corners android:radius="2dp" />
-            </shape>
-        </inset>
     </item>
 </layer-list>
