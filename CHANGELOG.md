@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.145.0 (2026-10-04)
+
+本版为**工具审批防线加固**（#79）：把「外部/第三方工具」纳入默认审批，并修复带 namespace 前缀的危险工具漏判。
+
+### 外部/第三方工具（MCP）一律需审批
+
+**问题**：危险工具审批（v1.141.0 #40）只按「整名 + `delete_` / `forget_` / `remove_` 前缀」判定，存在两处漏网：MCP/插件工具带 namespace 前缀（如 `gh_delete_repo`、`fs_remove_file`）过不了整名比对，危险动词识别不到；远程 MCP 工具本身来自第三方、不可信，即便名字看似无害（`list_repos` 之类）也会被直接执行，用户没有拒绝机会。
+
+- `tools/Tool` 新增 `isExternal()`（默认 `false`），`mcp/McpTool` 覆写为 `true`；
+- `harness/ToolApprovalPolicy.requiresApproval(name, external)`：`external=true` 恒需审批；危险名判定改为按 `_` 边界逐段取后缀比对，覆盖带前缀的工具名；
+- `harness/ToolPipeline` 从全局 `ToolRegistry` 按名取实例判定 `external`（查不到视为内部，走名字判定）；
+- 单测 +3（`ToolApprovalPolicyTest`）：命名空间危险/只读工具、外部工具恒审批。
+
+### 验证
+
+`testDebugUnitTest --tests *ToolApprovalPolicyTest --tests *ToolPipelineTest` 通过（14 + 22）。CI 单测门禁通过后合并；push main 后由 workflow 出 `app-release.apk` 并发行 Release。
+
 ## v1.144.0 (2026-10-04)
 
 本版为**工程化重构**：把 `care/CareTools` 里不依赖 Android 的纯文件/文本逻辑下沉到新类 `CareFileOps` 并补单测，行为不变。
