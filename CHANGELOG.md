@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.149.0 (2026-10-04)
+
+本版修复**上一轮 16 KB 对齐没修干净、Android 16 真机仍「点开即闪退」**的问题，并让启动崩溃不再无声消失。
+
+### Android 16 仍闪退的真因：只对齐了 LOAD 段，没对齐 RELRO
+
+**问题**：v1.141.0 给 native 库加了 `-Wl,-z,max-page-size=16384`，实测三个 ABI 的 LOAD 段 `Align` 都已是 `0x4000`（16 KB），但 Android 16 真机仍然一进就崩。
+
+**原因**：本项目用 NDK r26（≤ r27）。按 [Google 官方文档](https://developer.android.com/guide/practices/page-sizes)，NDK r27 及更早**必须同时**给 `max-page-size` **和** `common-page-size` 两个链接参数：
+
+```
+-Wl,-z,max-page-size=16384
+-Wl,-z,common-page-size=16384
+```
+
+只给前者时，链接器只把 **LOAD 段** 对齐到 16 KB，而 **RELRO / bss 等边界的取整仍按 `common-page-size`（默认 4 KB）** 计算，于是 `GNU_RELRO` 落在 4 KB 边界上（如 arm64 的 `0xf5000`）。16 KB 设备的动态链接器按 16 KB 粒度做 `mprotect`，保护范围会盖住本应可写的页，进程在重定位/首次写入时直接 `SIGSEGV`——表现就是「看起来对齐了，真机还是闪退」。
+
+- **`app/src/main/cpp/CMakeLists.txt`**：补上 `-Wl,-z,common-page-size=16384`。
+- 修复后实测发布包（`assembleRelease`）三个 ABI 的 `GNU_RELRO` 结束地址均为 16 KB 整数倍：arm64 `0xed010 + 0xaff0 = 0xf8000`、armeabi-v7a `0xb2100 + 0x5f00 = 0xb8000`、x86 `0xeb8d0 + 0x4730 = 0xf0000`（修复前分别是 `0xf5000` / `0xb6000` / `0xef740`，均非 16 KB 对齐）。
+
+### 启动崩溃可见化（不再「点开就没了」）
+
+**问题**：此前 native 库加载失败时，`System.loadLibrary` 在崩溃处理器安装**之前**且失败即 `return`，用户只看到静默闪退，什么线索都没有。
+
+- `util/CrashHandler`：先装 `UncaughtExceptionHandler` 再 `loadLibrary`；加载失败写入含 `SDK` / `SUPPORTED_ABIS` / 堆栈的日志文件；新增 `previousCrash()` / `clearPreviousCrash()`。
+- `render/Live2DNative`：静态块捕获 `loadLibrary` 失败，改由 `isLoaded()` / `loadError()` 暴露，避免类初始化直接抛错导致「首次触碰即闪退」。
+- `ui/MainActivity`：本次启动若发现上次崩溃残留，先把崩溃原文弹出来（可滚动 / 可复制 / 可重试），暂不做任何可能再次触发的初始化，保证「进得去」且用户能把原因直接发给开发者。
+
 ## v1.148.0 (2026-10-04)
 
 本版为 `ui/` 聊天与页面体验合集：新增**会话置顶**、**复制为 Markdown**、**运行环境自检**、**联系人搜索**四项功能（#82 / #83 / #87 / #88），并回补此前三项聊天修复（#72 / #75 / #78）。

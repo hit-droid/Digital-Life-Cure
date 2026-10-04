@@ -15,8 +15,33 @@ import java.io.InputStream;
 public class Live2DNative {
     private static final String TAG = "Live2DNative";
 
+    private static final boolean sLoaded;
+    private static final String sLoadError;
+
     static {
-        System.loadLibrary("maidendungeon");
+        boolean loaded = false;
+        String error = null;
+        try {
+            System.loadLibrary("maidendungeon");
+            loaded = true;
+        } catch (Throwable t) {
+            // 不让类初始化直接抛错：否则任何首次触碰本类的代码路径都会「无提示闪退」。
+            // 记录原因，由调用方决定降级（渲染不可用但界面仍能打开）。
+            error = t.getClass().getSimpleName() + ": " + t.getMessage();
+            Log.e(TAG, "Live2D native 库加载失败", t);
+        }
+        sLoaded = loaded;
+        sLoadError = error;
+    }
+
+    /** native 库是否可用；false 时所有 native 方法调用都会抛 UnsatisfiedLinkError */
+    public static boolean isLoaded() {
+        return sLoaded;
+    }
+
+    /** native 库加载失败原因；成功时为 null */
+    public static String loadError() {
+        return sLoadError;
     }
 
     private static AssetManager sAssetManager;

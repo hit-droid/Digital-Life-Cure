@@ -1,6 +1,9 @@
 package com.digitallife.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -13,6 +16,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -65,6 +69,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // 上次启动崩过：本次只把崩溃内容显示出来，不做任何可能再次触发崩溃的初始化，
+        // 保证「进得去」且用户能直接看到/复制原因（此前是静默闪退，无从排查）。
+        String previousCrash = CrashHandler.previousCrash(this);
+        if (previousCrash != null) {
+            showStartupCrashDialog(previousCrash);
+            return;
+        }
+
         CrashHandler.init(this);
         Live2DNative.init(this);
         ModelManager.registerImportedModels(this);
@@ -91,6 +104,51 @@ public class MainActivity extends Activity {
 
         buildUi();
         registerShortcuts();
+    }
+
+    /**
+     * 上次启动崩溃时的提示页：把崩溃原文显示出来（可滚动、可复制），
+     * 用户复制或点「重试」后清掉记录再重新走一次正常启动。
+     */
+    private void showStartupCrashDialog(String crash) {
+        TextView tip = new TextView(this);
+        tip.setText("上次启动崩溃了。下面是可以直接复制发给开发者的原因：");
+        tip.setTextSize(14f);
+        tip.setPadding(dp(20), dp(28), dp(20), dp(8));
+        setContentView(tip);
+
+        TextView detail = new TextView(this);
+        detail.setText(crash);
+        detail.setTextSize(11f);
+        detail.setTextIsSelectable(true);
+        detail.setPadding(dp(16), dp(12), dp(16), dp(12));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(detail, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        new AlertDialog.Builder(this)
+                .setTitle("上次启动崩溃了")
+                .setView(scroll)
+                .setCancelable(false)
+                .setPositiveButton("复制原因", (d, w) -> {
+                    copyCrash(crash);
+                    CrashHandler.clearPreviousCrash(this);
+                    Toast.makeText(this, "已复制，可直接粘贴发给开发者", Toast.LENGTH_LONG).show();
+                    recreate();
+                })
+                .setNegativeButton("重试", (d, w) -> {
+                    CrashHandler.clearPreviousCrash(this);
+                    recreate();
+                })
+                .show();
+    }
+
+    private void copyCrash(String crash) {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("digitallife_crash", crash));
+        } catch (Exception ignored) {
+        }
     }
 
     // v1.23.0: 长按桌面图标显示快捷菜单 (打开悬浮窗 / 停止桌宠)
