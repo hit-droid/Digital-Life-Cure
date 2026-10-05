@@ -149,10 +149,11 @@ public class ChatActivity extends Activity {
     private com.digitallife.util.MemoryStore chatMemory;
 
     private TextView curAssistantBubble;   // care 流式回复气泡
-    private TextView curToolBubble;        // care 工具过程卡片
+    // v1.158.0：工具过程卡片结构化——图标 + 工具名 + 状态胶囊分栏，结果体可折叠。
+    // 每张卡的名称/全文/展开态存进它自己的 View tag（ToolCardState）：老实现用全局
+    // curToolName/curToolFull，点击历史卡片会串到最新一张的内容，这里一并修掉。
+    private LinearLayout curToolCard;      // care 工具过程卡片（整卡容器）
     private String curAssistantText = "";
-    private String curToolName = "";       // 工具卡片名称
-    private String curToolFull = "";       // 工具卡片完整结果（点击展开/收起）
     private long lastTsLabel = 0;
 
     // ==================== v1.31.0：语音输入 ====================
@@ -2562,36 +2563,89 @@ public class ChatActivity extends Activity {
         }
     }
 
-    /** 工具过程卡片（完全可视化）：工具名 + 完整参数；结果回填后完整展示 */
+    /**
+     * 工具卡片的每卡状态。挂在卡片自身的 View tag 上，使每张历史卡片各自持有
+     * 名称/完整结果/展开态——点击任意一张只影响它自己，不再串到最新一张。
+     */
+    private static final class ToolCardState {
+        TextView nameView;
+        TextView statusView;
+        TextView bodyView;
+        String name = "";
+        String full = "";
+        boolean expanded = true;
+    }
+
+    /**
+     * 工具过程卡片（结构化）：头部一行为「🔧 图标 + 工具名 + 状态胶囊」，
+     * 下面是可折叠的结果体。执行中状态为强调色胶囊，回填后转为成功/失败胶囊。
+     */
     private void appendToolBubble(String toolName, String argsText) {
         hideThinkingDot();
-        final TextView b = new TextView(this);
-        b.setTextSize(13f);
-        b.setTextColor(getColorCompat(R.color.operit_text_primary));
-        b.setLineSpacing(2f, 1f);
-        b.setPadding(dp(12), dp(8), dp(12), dp(8));
-        b.setElevation(dp(1));
-        b.setBackgroundResource(R.drawable.bg_tool);
+        final ToolCardState st = new ToolCardState();
+        st.name = toolName == null ? "" : toolName;
+
+        final LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setElevation(dp(1));
+        card.setBackgroundResource(R.drawable.bg_tool);
+        card.setTag(st);
+
+        // ---- 头部：图标 + 工具名 + 状态胶囊 ----
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView icon = new TextView(this);
+        icon.setText("🔧");
+        icon.setTextSize(14f);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackgroundResource(R.drawable.bg_glass_tile);
+        header.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
+
+        TextView name = new TextView(this);
+        name.setText(st.name.isEmpty() ? "工具" : st.name);
+        name.setTextSize(13.5f);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+        name.setTextColor(getColorCompat(R.color.operit_text_primary));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nlp.leftMargin = dp(8);
+        header.addView(name, nlp);
+        st.nameView = name;
+
+        TextView status = new TextView(this);
+        status.setText("执行中");
+        status.setTextSize(11f);
+        status.setTextColor(getColorCompat(R.color.operit_accent));
+        status.setBackgroundResource(R.drawable.bg_pill_accent);
+        status.setPadding(dp(8), dp(2), dp(8), dp(2));
+        header.addView(status);
+        st.statusView = status;
+        card.addView(header);
+
+        // ---- 结果 / 参数体 ----
+        TextView body = new TextView(this);
+        body.setTextSize(13f);
+        body.setLineSpacing(2f, 1f);
+        body.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        body.setPadding(0, dp(8), 0, 0);
         String pretty = ChatTextOps.prettyJson(argsText);
-        String head = "🔧 正在调用工具：" + (toolName == null ? "…" : toolName)
-                + "\n\n⚙ 参数：" + (pretty.isEmpty() ? "（无）" : pretty);
-        String statusLine = "\n\n状态：执行中 🔄";
-        SpannableString ss = new SpannableString(head + statusLine);
-        ss.setSpan(new ForegroundColorSpan(getColorCompat(R.color.operit_accent)),
-                head.length() + "\n\n状态：".length(), ss.length(),
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        b.setText(ss);
-        b.setTag(Boolean.TRUE);
-        b.setOnClickListener(v -> toggleToolCard(b));
+        body.setText("⚙ 参数：\n" + (pretty.isEmpty() ? "（无）" : pretty));
+        card.addView(body);
+        st.bodyView = body;
+
+        card.setOnClickListener(v -> toggleToolCard(v));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(4);
         lp.leftMargin = dp(8);
         lp.rightMargin = dp(24);
-        listContainer.addView(b, lp);
-        curToolBubble = b;
-        curToolName = toolName == null ? "" : toolName;
-        curToolFull = "";
+        listContainer.addView(card, lp);
+        curToolCard = card;
         scrollToBottom();
     }
 
@@ -2695,38 +2749,49 @@ public class ChatActivity extends Activity {
         return b;
     }
 
-    /** 工具执行结果回填：完整结果直接展示，状态徽标标识成败 */
+    /** 工具执行结果回填：状态胶囊转成功/失败，结果体按长度决定是否折叠 */
     private void markLastToolResult(String toolName, Boolean ok, String result) {
-        if (curToolBubble != null) {
+        if (curToolCard != null && curToolCard.getTag() instanceof ToolCardState) {
+            ToolCardState st = (ToolCardState) curToolCard.getTag();
             String full = result == null ? "" : result.trim();
-            curToolFull = full;
-            String name = (toolName == null || toolName.isEmpty()) ? curToolName : toolName;
-            if (!name.isEmpty()) curToolName = name;
-            String status = ok == null ? "已完成" : (ok ? "✅ 成功" : "❌ 失败");
-            StringBuilder text = new StringBuilder("🔧 ")
-                    .append(curToolName.isEmpty() ? "工具" : curToolName)
-                    .append("\n\n").append(status);
+            st.full = full;
+            String name = (toolName == null || toolName.isEmpty()) ? st.name : toolName;
+            if (!name.isEmpty()) {
+                st.name = name;
+                if (st.nameView != null) st.nameView.setText(name);
+            }
+            // 状态胶囊：成功绿 / 失败红 / 未知中性（各自配一枚同色系胶囊底）
+            if (st.statusView != null) {
+                if (ok == null) {
+                    st.statusView.setText("已完成");
+                    st.statusView.setTextColor(getColorCompat(R.color.operit_text_secondary));
+                    st.statusView.setBackgroundResource(R.drawable.bg_pill_accent);
+                } else if (ok) {
+                    st.statusView.setText("成功");
+                    st.statusView.setTextColor(0xFF4CAF50);
+                    st.statusView.setBackgroundResource(R.drawable.bg_pill_ok);
+                } else {
+                    st.statusView.setText("失败");
+                    st.statusView.setTextColor(0xFFEF5350);
+                    st.statusView.setBackgroundResource(R.drawable.bg_pill_err);
+                }
+            }
             // v1.35.0：长结果默认折叠，避免长工具输出占满屏
             final boolean longResult = full.length() > TOOL_COLLAPSE_CHARS;
-            if (full.isEmpty()) {
-                text.append("\n\n（无返回内容）");
-            } else if (longResult) {
-                String brief = full.substring(0, TOOL_BRIEF_CHARS) + "…";
-                text.append("\n\n（结果较长，已折叠，点击展开）\n\n📋 结果：\n").append(brief);
-            } else {
-                text.append("\n\n📋 结果：\n").append(full);
+            st.expanded = !longResult;
+            if (st.bodyView != null) {
+                st.bodyView.setTextColor(getColorCompat(R.color.operit_text_primary));
+                if (full.isEmpty()) {
+                    st.bodyView.setText("（无返回内容）");
+                } else if (longResult) {
+                    st.bodyView.setText("📋 结果（已折叠，点击展开）：\n"
+                            + full.substring(0, TOOL_BRIEF_CHARS) + "…");
+                } else {
+                    st.bodyView.setText("📋 结果：\n" + full);
+                }
             }
-            int statusColor = ok == null ? getColorCompat(R.color.operit_text_secondary)
-                    : (ok ? 0xFF2E7D32 : 0xFFC62828);
-            SpannableString ss = new SpannableString(text.toString());
-            int start = text.indexOf(status);
-            ss.setSpan(new ForegroundColorSpan(statusColor), start, start + status.length(),
-                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            curToolBubble.setText(ss);
-            // v1.35.0：长结果初始标记为「未展开」，短结果保持展开态
-            curToolBubble.setTag(!longResult);
         }
-        curToolBubble = null;
+        curToolCard = null;
     }
 
     /**
@@ -2779,19 +2844,19 @@ public class ChatActivity extends Activity {
         return sb.toString();
     }
 
-    /** 工具卡片点击：在完整内容与摘要之间切换（默认完全展开） */
-    private void toggleToolCard(TextView b) {
-        if (curToolFull == null || curToolFull.isEmpty()) return;
-        boolean showingFull = Boolean.TRUE.equals(b.getTag());
-        String name = curToolName.isEmpty() ? "工具" : curToolName;
-        if (showingFull) {
-            String brief = curToolFull.length() > TOOL_BRIEF_CHARS
-                    ? curToolFull.substring(0, TOOL_BRIEF_CHARS) + "…" : curToolFull;
-            b.setText("🔧 " + name + "（已折叠，点击展开完整结果）\n" + brief);
-            b.setTag(Boolean.FALSE);
+    /** 工具卡片点击：在完整结果与一行摘要之间切换（长结果默认折叠） */
+    private void toggleToolCard(View card) {
+        Object tag = card == null ? null : card.getTag();
+        if (!(tag instanceof ToolCardState)) return;
+        ToolCardState st = (ToolCardState) tag;
+        if (st.full == null || st.full.isEmpty() || st.bodyView == null) return;
+        st.expanded = !st.expanded;
+        if (st.expanded) {
+            st.bodyView.setText("📋 结果：\n" + st.full);
         } else {
-            b.setText("🔧 " + name + "（点击收起）\n" + curToolFull);
-            b.setTag(Boolean.TRUE);
+            String brief = st.full.length() > TOOL_BRIEF_CHARS
+                    ? st.full.substring(0, TOOL_BRIEF_CHARS) + "…" : st.full;
+            st.bodyView.setText("📋 结果（已折叠，点击展开）：\n" + brief);
         }
     }
 
@@ -2850,9 +2915,7 @@ public class ChatActivity extends Activity {
                     cachedSuggestions = null;
                     hideSuggestions();
                     curAssistantBubble = null;
-                    curToolBubble = null;
-                    curToolName = "";
-                    curToolFull = "";
+                    curToolCard = null;
                     if (isCare && careAI != null) careAI.clearHistory();
                     thinking = false;
                     if (isCare) {
