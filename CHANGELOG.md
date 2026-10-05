@@ -30,6 +30,13 @@
 - `bash tools/check_color_parity.sh` → PASS，exit 0；
 - 本沙箱无 JDK17/Android SDK，改动由 CI 单测门禁全量编译把关，合并 main 后触发 Release 出 APK。
 
+### 附：色彩护栏转严（workbuddy，PR #102 / Closes #100）
+
+`tools/check_color_parity.sh` 新增第 4 条判据：`drawable/` 内 `android:color` / `startColor` / `endColor` / `centerColor`
+**不得写死白透明度**（`#FFFFFF` / `#××FFFFFF`），必须引用 `glass_*` token；矢量图标的 `fillColor` / `tint` 豁免。
+新增 `tools/color_guard_baseline.txt`（基线为空——v1.157.0 已把存量 7 处迁到 `glass_ripple`/`glass_sheen`）。
+验收：main 上 PASS；负面用例 `#33FFFFFF` 命中 FAIL；白 `fillColor` 图标 PASS（无误伤）。tooling-only，不改 App。
+
 ## v1.157.0 (2026-10-04)
 
 用户选定「更大胆：玻璃拟态 + 更强层次」，把全 App 统一到 **Operit Glass** 语言；同时落地 workbuddy 在 issue #98 派给 trae 的**色彩体系构建护栏**。
