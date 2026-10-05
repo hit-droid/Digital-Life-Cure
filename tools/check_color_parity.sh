@@ -91,6 +91,40 @@ else
     fi
 fi
 
+# ---------- 4) drawable 内不得写死白透明度，必须引用 glass_* token ----------
+# 判据：只查「形/描边/渐变」的颜色属性 android:color / android:*Color，
+#       豁免矢量图标的 android:fillColor / android:tint（图标用纯白是正常设计）。
+#       v1.157.1：存量 7 处已由 trae 迁移到 glass_ripple / glass_sheen，
+#       基线清零、规则转严 —— 此后任何写死的白透明度都会直接 FAIL。
+# 基线：tools/color_guard_baseline.txt 保留作将来存量的缓释口，
+#       当前为空（0 条），即不豁免任何东西；新增存量时应同步登记并限期清理。
+DRAWABLE_DIR="$RES/drawable"
+BASELINE="$ROOT/tools/color_guard_baseline.txt"
+
+if [ -d "$DRAWABLE_DIR" ]; then
+    found="$(
+        grep -rEn 'android:(color|startColor|endColor|centerColor)="#([0-9A-Fa-f]{2})?[Ff]{6}"' "$DRAWABLE_DIR" 2>/dev/null \
+        | grep -vE 'android:(fillColor|tint|strokeColor)' \
+        || true
+    )"
+    if [ -n "$found" ]; then
+        new_cnt=0; old_cnt=0
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            sig="$(printf '%s' "$line" | sed -E 's/^[^:]+:[0-9]+://' | tr -d ' \t')"
+            if [ -f "$BASELINE" ] && grep -Fqx "$sig" "$BASELINE"; then
+                old_cnt=$((old_cnt+1)); echo "WARN: [基线内] $line"
+            else
+                new_cnt=$((new_cnt+1)); echo "FAIL: drawable 写死白透明度，请改用 glass_* token —— $line"
+            fi
+        done <<< "$found"
+        echo "      （第4条：基线内 $old_cnt 处，新增违规 $new_cnt 处）"
+        [ "$new_cnt" -gt 0 ] && fail=1
+    else
+        echo "OK  : drawable 内无写死的白透明度（全部引用 glass_* token）"
+    fi
+fi
+
 echo "--------------------------"
 if [ "$fail" -ne 0 ]; then
     echo "结果：FAIL（见上）" >&2
