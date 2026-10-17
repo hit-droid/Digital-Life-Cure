@@ -1,5 +1,164 @@
 # Changelog
 
+## v1.160.0 (2026-10-17)
+
+承接 v1.159.0（「Operit Glass v2」，**未单独出包**，随本版一并发行）。
+本版两条主线：**原生真折射玻璃引擎**（把玻璃从「半透明叠加」推进到「真折射」）＋
+**Live2D 渲染质量提升**（悬浮窗里模型被缩小约 5× 造成的走样与落地感）。
+
+### 原生真折射玻璃引擎
+
+v1.157.0~v1.159.0 的玻璃都还是「半透明白 + 描边 + 环境光」的贴图近似，铺在纯色深底上偏平。
+本版引入真正的折射着色器：`LiquidGlassLayerView`（`TextureView`，插在 View 层级中间压住页面、
+又在抽屉内容之下）拿页面快照作背景，交给 native GL 按圆角 SDF 距离场做**边缘折射位移 + 色散
+多采样 + 9 抽模糊 + 高光带 + 内阴影**。
+
+- `app/src/main/cpp/glass/`：`GlassRenderer`（GLES2 折射着色器，为 Android 端**无 ImGui 依赖的精简重写**，
+  折射数学移植自「ytbl 液态玻璃」（默檐）；背景既支持拷贝当前帧缓冲 `glCopyTexSubImage2D`，
+  也支持 Java 侧上传位图纹理的页面快照）+ `GlassJni` JNI 入口。
+- `render/GlassNative.java`：JNI 桥（与 `Live2DNative` 同一个 `.so`，类初始化失败不抛错，由调用方降级）。
+- `ui/glass/BackdropCapture`：页面快照采集。
+- 落地范围：侧栏抽屉 → **底部导航胶囊**（`bg_operit_bottom_nav_glass`）。
+- **失败即降级**：GL 上下文 / 着色器创建失败时 `isAvailable()` 为 false，调用方保留 v1.159.0 的静态玻璃
+  drawable，界面照常、不影响渲染。
+- 纯逻辑单测钉住快照与样式：`BackdropCaptureTest` / `GlassPanelStyleTest` / `LiquidGlassLayerViewTest`。
+
+### Live2D 渲染质量提升
+
+模型纹理（典型 2048²）被画进约 0.35 屏宽的悬浮窗（≈378px），**缩小约 5×**；
+此前只有 `GL_LINEAR` 采样 → 边缘高频锯齿 / 闪烁，且模型浮动无落地感。
+
+- **预乘 α + mipmap + 三线性过滤**（`CMakeLists.txt` 的 `PREMULTIPLIED_ALPHA_ENABLE` 驱动两处）：
+  纹理加载期预乘像素、渲染侧走预乘着色器 + `ONE/ONE_MINUS_SRC_ALPHA` 混合；
+  2 的幂纹理 `glGenerateMipmap` 后切 `GL_LINEAR_MIPMAP_LINEAR`。
+  **预乘必须与 mipmap 同时启用**，否则直通 α 的纹理在低 mip 层会漏出暗色描边（halo）。
+- **NPOT 纹理的 mipmap**：ES2 默认不支持 NPOT 的 mipmap，此前一律退回 `GL_LINEAR`。
+  改为先探测 `GL_OES_texture_npot` / `GL_IMG_texture_npot` / `GL_NV_texture_npot_2D_mipmap`
+  扩展，有则同样生成 mipmap，无则安全退回。
+- **地面软阴影**（`LAppGroundShadow`，纯 GLES2 着色器，无纹理）：绘于模型下层，
+  按到中心距离二次衰减得到柔和椭圆。阴影锚在**稳定的地面线**而不是每帧包围盒底部——
+  角色抬身 / 跳跃时地面线不被拉高，**抬升越高阴影越大越淡**，避免腾空时贴脚「拖影」。
+  着色器创建失败自动跳过，不影响模型渲染。
+
+### 工程
+
+- 新增 `ScreenshotRenderTest`（Robolectric NATIVE 图形模式）＋ `ShadowLive2DNative`：
+  把主壳 + 聊天页 + 7 个二级页 + 侧栏渲成 PNG 到 `app/build/screenshots/`，
+  改 UI 后可直接看图自查静态缺陷（白底白字 / 直角实色块 / 对比度不足 / 元素被裁切）。
+  `main_shell` 依赖 `ShadowLive2DNative`，否则 `SettingsTabView` 构造期数模型会抛
+  `UnsatisfiedLinkError`、`buildUi()` 中断截不到图。
+
+## v1.159.0 (2026-10-05)
+
+> ⚠️ **本版未单独出包**：其内容（Operit Glass v2）与本版同批完成，随 **v1.160.0** 一并发行。
+
+「Operit Glass v2」：把 v1.157.0 的玻璃体系**从"半透明白叠加"推进到"有光可透"**，
+并全 App 统一落地。核心问题很具体：v1.157.0 的玻璃 token 本身没错，但铺在**纯色深底**上，
+卡片和底部导航叠出来是一片"死灰"，看不出浮起（用户真机反馈原话）。
+
+### 新增：页面环境光层 `bg_operit_page`（这是本轮的关键）
+
+深紫底 + 三层径向光晕（顶紫主光 / 右上副光 / 底部回光）。
+玻璃＝半透明白，**背后有亮暗变化**才立得住；铺上光后，同样的 `glass_*` token 立刻出层次。
+
+- 用法：**页面根 View** `setBackgroundResource(R.drawable.bg_operit_page)`；
+- ❌ 子 View 不要再铺一份：径向光以自身 bounds 为基准，嵌套会重复出假亮带；
+- 页面内需要透光的容器一律设为透明（`MainActivity` 的 `shell`/`content`、5 个 TabView、聊天页 chip 条已改）；
+- `AppTheme.windowBackground` 同步换成它，避免切页首帧闪纯色。
+
+覆盖：MainActivity、ChatActivity、About / Persona / Themes / Developer / MemoryManage /
+ToolMarket / AgentConsole / CareModels 全量二级页。
+
+### 色板收敛（`values/colors.xml`）
+
+- `operit_bg` `#12101A → #0F0D17`（再压暗一档，玻璃才有对比）；
+- `operit_header_start` `#2E2456 → #3A2A6E`（旧值在深紫底上几乎看不出紫，hero 顶栏名存实亡）；
+- 新增 `operit_header_fade`（顶栏三段渐变中段）、`operit_glow_top / _edge / _bottom`（环境光）、
+  `glass_accent_top / glass_border_accent`（accent 染色玻璃）、`glass_well`（凹槽底）；
+- `glass_fill` / `glass_border` 微调到 9% / 16%。
+
+### 组件玻璃化
+
+| 组件 | 改动 |
+| --- | --- |
+| 底部导航 `bg_operit_bottom_nav` | 实色面板 → 玻璃渐变 + 16% 描边，圆角 24→28dp |
+| 选中胶囊 `OperitBottomNav` | 实色 `operit_nav_pill` → **发光紫渐变**（accent→brand） |
+| 侧栏 `bg_operit_drawer` | 中性灰 `#FF2A2A2A` → 品牌紫 surface（仍保持不透明，避免透字） |
+| 气泡 `bg_bubble_ai` / `bg_bubble_care` | 实色本体 → 玻璃渐变 + 淡描边；竖条改渐变 |
+| 工具卡 `bg_tool` | 白玻璃 → accent 染色玻璃 |
+| 工具卡参数体 | 无底纯文字 → 等宽字 + 下沉凹槽底（新增 `bg_tool_body`） |
+| 工具卡图标 | 白玻璃磁贴 → accent 玻璃方块（新增 `bg_tool_icon`） |
+| 圆形图标按钮 `operit_icon_button_ripple` | 只有涟漪 → 玻璃圆钮（顶栏汉堡/返回、聊天页更多/附件/语音） |
+| 状态胶囊 `bg_pill_accent` | 实底 + 重描边 → accent 玻璃胶囊 |
+| 工具市场总览卡 / 当前角色卡 | 实色 → accent 玻璃 |
+
+### 自查工具升级：真 View 截图（替代 HTML 近似预览）
+
+沙箱跑不了 AVD，但 **Robolectric NATIVE 图形模式能在纯 JVM 里用真 Skia 渲染真 Android View**。
+`app/src/test/java/com/digitallife/ui/ScreenshotRenderTest.java` 现在：
+
+- `allScreens()` 一次性把**主壳 + 聊天页 + 7 个二级页**渲染成 PNG（`app/build/screenshots/`），
+  逐页 try/catch，缺 native 库/权限的页面打 `[skip]` 而不拖垮其余页面；
+- 新增 `ShadowLive2DNative`（测试期 shadow，不改生产代码）：把 `nativeGetModelCount` 等
+  查询类 native 方法兜成安全默认值，否则主壳在 `SettingsTabView` 构造期就会因
+  `UnsatisfiedLinkError` 中断 `buildUi()`，截不到图。
+
+局限不变：无真实状态栏/导航栏、无动画，**颜色/层次/排版/白底白字可信，真机复验仍必要**。
+
+### 截图查出的缺陷修复
+
+| 位置 | 缺陷 | 修复 |
+| --- | --- | --- |
+| `CareModelsActivity` 详情区 | `setBackgroundColor(Color.WHITE)` 漏网 → **白底白字** | 改 `bg_card` 玻璃面板 + 左右/底部边距 |
+| `MemoryManageActivity` 分段控件 | `operit_surface` 实色 + 直角实色选中块 | 容器 `bg_glass_tile`、选中 `bg_pill_accent`；选中文字改正文色（accent 文字压 accent 底同色相、对比度反而更低） |
+| `AgentConsoleActivity` Tab 条 | 同上「直角方砖」选中块 | 选中 `bg_pill_accent` + 正文色 |
+| `UiKit.addInfoRow` | 标签用 `operit_text_hint`，在玻璃卡上发灰难读 | 改 `operit_text_secondary` |
+| 11 处按钮 | 自动生成的占位无障碍标签（`"b"` / `"btnToggle"` / `"btnChat"`…），读屏会念字母 | 一律改为可见文案（含 `切换到「角色名」`/`删除「角色名」` 等带上下文的标签） |
+
+### 遗留色板收口（v1.159.0 补完）
+
+v1.157.0 起新组件用 `operit_*`，但仍有一批**旧 drawable / 旧 Java 组件**引用旧色板
+（`brand*` / `card_bg` / `surface_glass` / `text_secondary` / `divider` / `ripple`）。
+它们与本轮深紫底**色相不同调**（如旧 `brand #8B7DF4` vs Operit 紫 `#7A66D8`），
+混在玻璃界面里发脏。本轮全部收敛，至此**旧通用色板在 `src/main` 内零引用**：
+
+| 位置 | 旧 | 新 |
+| --- | --- | --- |
+| `bg_btn_primary` | `brand` / `brand_dark` | `brand_operit` / `brand_operit_dark`（与聊天页发送键同源） |
+| `bg_btn_secondary` | 实色 `brand_light` / `brand_stroke` | 玻璃 `glass_fill` / `glass_fill_strong` |
+| `bg_chip_outline` | 涟漪 `ripple` | `glass_ripple` |
+| `bg_track`（发现页心情条底槽） | `divider` | `operit_divider` |
+| `ic_empty`（会话空态图标） | `brand_light` / `card_bg` / `brand` | `operit_primary_container` / `operit_bg` / `operit_accent` |
+| `UiKit.secondaryButton` / `ripple()` | `brand` / `ripple` | `brand_operit_light` / `glass_ripple` |
+| `ConversationTabView` 置顶角标 | `brand` | `brand_operit` |
+| `ChatActivity` 中断标记 | `text_secondary` | `operit_text_secondary` |
+| `PetOverlayView`（悬浮窗状态条/快捷菜单/详情卡/输入条） | `surface_glass` / `card_bg` / `brand_stroke` / `brand` / `brand_soft` | `operit_surface` / `operit_divider` / `brand_operit` / `operit_surface_variant` |
+
+同时**删除两个已无引用的旧 drawable**：`bg_send.xml`、`bg_top_bar.xml`
+（后者在 v1.159.0 顶栏统一到 `bg_operit_topbar` 后成了死资源）。
+
+收口最后一步是**清掉 `colors.xml` 里已零引用的旧色条目**：
+`brand*` / `page_bg` / `card_bg` / `surface_glass` / `text_*` / `divider` / `ripple` /
+`brand_glass_bg` / `bubble_*` / `success_bg` / `danger_bg` / `warning_bg`，
+以及被渐变选中态取代的 `operit_nav_pill`；文件头补记「旧条目已删，勿再引入」。
+旧声明留着，下一个接手的人就会把它当「另一套口径」误用——这正是 issue #98 的复发路径。
+
+### 验证
+
+- `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL**；
+- `bash tools/check_color_parity.sh` → PASS（drawable 无写死白透明度、单套色板）；
+- `./tools/verify.sh` → compile / test / lint / apk **全绿**：单测 576 个 / 47 类，失败 0、错误 0；lint Error 0；APK 9,167,399 字节；
+- `ScreenshotRenderTest` 出图（主壳 + 聊天页 + 7 个二级页）逐张复核，遗留色板收口后无白底白字、无发灰死色。
+
+### 说明：本沙箱没有模拟器，视觉怎么自查的
+
+容器内**无 `/dev/kvm`、无 CPU 虚拟化标志、未装 emulator 包与系统镜像**，跑不了 AVD。
+两轮手段：v1→v2 用 HTML 高保真预览（`ui-preview/glass-v2.png` / `.html`，按真实 token 复刻、
+刻意不用 `backdrop-filter`，Playwright/Chromium 截图）；**v2 之后改用真 View 截图**
+（见上「自查工具升级」）——后者渲的是真 Android View，可信度高得多，HTML 预览降为设计参考。
+
+局限：颜色/层次/间距可信；**Android 专有渲染（insets、动画、真机暖启动）仍需真机复验**。
+
 ## v1.158.0 (2026-10-05)
 
 承接 issue #98 里派给「工具卡结构化」的那条，把聊天页的工具过程卡片从**一段带 emoji 的长文本**改成**结构化卡片**，并顺手修掉一处历史卡片串内容的隐患。

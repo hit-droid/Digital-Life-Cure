@@ -9,7 +9,8 @@
         <item name="android:colorPrimaryDark">@color/operit_bg</item>
         <item name="android:colorAccent">@color/operit_accent</item>
         <item name="android:colorControlActivated">@color/operit_accent</item>
-        <item name="android:windowBackground">@color/page_bg</item>
+        <!-- v1.158.0：窗口底也铺环境光，避免 Activity 切换/首帧出现纯色闪一下 -->
+        <item name="android:windowBackground">@drawable/bg_operit_page</item>
         <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

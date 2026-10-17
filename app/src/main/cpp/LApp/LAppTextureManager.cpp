@@ -7,11 +7,38 @@
 
 #include "LAppTextureManager.hpp"
 #include <iostream>
+#include <string.h>
 #define STBI_NO_STDIO
 #define STBI_ONLY_PNG
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "LAppPal.hpp"
+
+namespace {
+    // ES2 只在 2 的幂纹理上支持 mipmap：用位运算判定，避免为 NPOT 生成 mip 触发 GL 错误。
+    bool IsPowerOfTwo(int v)
+    {
+        return v > 0 && (v & (v - 1)) == 0;
+    }
+
+    // 部分 GPU 通过下列扩展允许对 NPOT 纹理生成 mipmap；判定只依赖当前 GL 上下文，
+    // 首次查询后缓存（全部调用都发生在 GL 线程上，无并发）。
+    bool SupportsNpotMipmap()
+    {
+        static int cached = -1;
+
+        if (cached < 0)
+        {
+            const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+            cached = (extensions != NULL &&
+                      (strstr(extensions, "GL_OES_texture_npot") != NULL ||
+                       strstr(extensions, "GL_IMG_texture_npot") != NULL ||
+                       strstr(extensions, "GL_NV_texture_npot_2D_mipmap") != NULL)) ? 1 : 0;
+        }
+
+        return cached != 0;
+    }
+}
 
 LAppTextureManager::LAppTextureManager()
 {
@@ -102,8 +129,27 @@ LAppTextureManager::TextureInfo* LAppTextureManager::CreateTextureFromPngFile(st
         LAppPal::ReleaseBytes(address);
         return NULL;
     }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // 模型 UV 会贴到纹理边界，CLAMP_TO_EDGE 防止越界回绕采样（POT/NPOT 均合法）。
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // 悬浮窗里模型被大幅缩小显示，仅 GL_LINEAR 会在缩小时产生锯齿/闪烁。
+    // 2 的幂纹理直接生成 mipmap；NPOT 纹理在 ES2 下默认不支持 mipmap，
+    // 仅当 GPU 提供 NPOT mipmap 扩展时才生成，否则安全退回 GL_LINEAR。
+    const bool pot = IsPowerOfTwo(width) && IsPowerOfTwo(height);
+    if (pot || SupportsNpotMipmap())
+    {
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        if (!pot)
+        {
+            LAppPal::PrintLog("[APP]NPOT texture mipmapped via extension: %s (%dx%d)", fileName.c_str(), width, height);
+        }
+    }
+    else
+    {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // 解放処理

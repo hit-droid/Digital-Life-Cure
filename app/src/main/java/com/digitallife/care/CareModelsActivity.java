@@ -12,8 +12,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -24,6 +22,7 @@ import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.service.PetService;
+import com.digitallife.ui.UiKit;
 import com.digitallife.util.Settings;
 
 import org.json.JSONObject;
@@ -61,28 +60,13 @@ public class CareModelsActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // ===== 顶栏 =====
-        LinearLayout topBar = new LinearLayout(this);
-        topBar.setOrientation(LinearLayout.HORIZONTAL);
-        topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundResource(R.drawable.bg_top_bar);
-        topBar.setPadding(dp(6), dp(12), dp(6), dp(12));
-
-        ImageButton btnBack = iconButton(R.drawable.ic_back);
-        btnBack.setContentDescription("返回");
-        btnBack.setOnClickListener(v -> finish());
-        topBar.addView(btnBack, btnLp(40, 40));
-
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText("模型管理");
-        tvTitle.setTextSize(17f);
-        tvTitle.setTextColor(Color.WHITE);
-        tvTitle.setGravity(Gravity.CENTER);
-        tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // 统一到 UiKit.pageTopBar（v1.159.0）：本页此前是唯一手写顶栏的二级页——用旧色板
+        // bg_top_bar，且 padding 没预留状态栏高度，真机上标题会被状态栏压住；
+        // 其余 7 个二级页在 v1.152.0 已统一到该组件。刷新/导入按钮追加在其后即可。
+        LinearLayout topBar = UiKit.pageTopBar(this, "模型管理");
 
         Button btnRefresh = new Button(this);
         btnRefresh.setHapticFeedbackEnabled(true);   // 自动生成：haptic
@@ -131,8 +115,12 @@ public class CareModelsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // ===== 详情区 =====
+        // 先前的 setBackgroundColor(Color.WHITE) 是深色色板统一（v1.155.0）时的漏网之鱼：
+        // 白底 + operit_text_primary(近白) = 白底白字，整块面板像贴了张白纸。
+        // 现统一走 bg_card 玻璃面板，与全站卡片同一语言（v1.159.0）。
         ScrollView detailScroll = new ScrollView(this);
-        detailScroll.setBackgroundColor(Color.WHITE);
+        detailScroll.setVerticalScrollBarEnabled(false);
+        detailScroll.setBackgroundResource(R.drawable.bg_card);
         tvDetail = new TextView(this);
         tvDetail.setTextSize(12f);
         tvDetail.setLineSpacing(3f, 1f);
@@ -143,6 +131,7 @@ public class CareModelsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(230));
+        dlp.setMargins(dp(12), 0, dp(12), dp(12));
         root.addView(detailScroll, dlp);
 
         setContentView(root);
@@ -374,7 +363,7 @@ public class CareModelsActivity extends Activity {
     private Button actionButton(String text, View.OnClickListener l) {
         Button b = new Button(this);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        b.setContentDescription(text);
         b.setText(text);
         b.setTextSize(12f);
         b.setAllCaps(false);
@@ -397,23 +386,6 @@ public class CareModelsActivity extends Activity {
         } catch (Exception ignored) {
         }
         return o;
-    }
-
-    private ImageButton iconButton(int res) {
-        ImageButton b = new ImageButton(this);
-        b.setImageResource(res);
-        b.setBackgroundColor(Color.TRANSPARENT);
-        b.setScaleType(ImageView.ScaleType.CENTER);
-        b.setPadding(dp(8), dp(8), dp(8), dp(8));
-        // v1.37.0：无障碍描述（当前工厂仅用于返回键）
-        if (res == R.drawable.ic_back) b.setContentDescription("返回");
-        return b;
-    }
-
-    private LinearLayout.LayoutParams btnLp(int w, int h) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(w), dp(h));
-        lp.setMargins(dp(4), 0, dp(4), 0);
-        return lp;
     }
 
     private void safeRun(Runnable r) {

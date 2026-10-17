@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 工具卡的参数/结果体（v1.158.0 Glass v2）：玻璃卡里的「下沉凹槽」。
+     与卡片的「抬升玻璃」相反——用 38% 黑压暗，配等宽字（ChatActivity 里设置 MONOSPACE），
+     读起来像一段独立代码块，而不是和卡片正文糊在一起。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/glass_well" />
+    <corners android:radius="12dp" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/glass_border_soft" />
+</shape>

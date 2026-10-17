@@ -51,7 +51,7 @@ public class AgentConsoleActivity extends Activity {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // 顶栏
         LinearLayout topBar = UiKit.pageTopBar(this, "智能体控制台");
@@ -173,11 +173,13 @@ public class AgentConsoleActivity extends Activity {
 
     private void showTab(int idx) {
         for (int i = 0; i < tabs.length; i++) {
-            tabs[i].setBackgroundColor(i == idx
-                    ? UiKit.color(this, R.color.operit_primary_container)
-                    : 0x00000000);
+            // 选中＝强调色玻璃胶囊；此前是 operit_primary_container 直角实色块，
+            // 在玻璃 Tab 条里像贴了块方砖，且 accent 文字压在 accent 底上同色相、对比度偏低。
+            tabs[i].setBackgroundResource(i == idx
+                    ? R.drawable.bg_pill_accent
+                    : android.R.color.transparent);
             tabs[i].setTextColor(i == idx
-                    ? UiKit.color(this, R.color.operit_accent)
+                    ? UiKit.color(this, R.color.operit_text_primary)
                     : UiKit.color(this, R.color.operit_text_secondary));
             tabScrolls[i].setVisibility(i == idx ? View.VISIBLE : View.GONE);
         }
@@ -388,7 +390,7 @@ public class AgentConsoleActivity extends Activity {
     private Button mkBtn(String text) {
         Button b = new Button(this);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        b.setContentDescription(text);
         b.setText(text);
         b.setTextSize(13);
         b.setAllCaps(false);

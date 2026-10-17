@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 顶栏图标按钮的圆形涟漪（汉堡按钮等） -->
+<!-- 圆形玻璃图标按钮（顶栏汉堡/返回、聊天页更多/附件/语音）。
+     v1.158.0 Glass v2：由「只有涟漪、没有底」升级为玻璃圆钮
+     （顶光 glass_highlight → 玻璃底 glass_fill + 1dp 高光描边），
+     在紫色 hero 顶栏与深紫页面上才看得出是个可点的按钮。
+     所有引用此 drawable 的按钮尺寸都是正方形，oval 圆钮不会变形。 -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="@color/glass_ripple">
-    <item android:id="@android:id/mask">
+    <item>
         <shape android:shape="oval">
-            <solid android:color="@color/glass_ripple" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/glass_highlight"
+                android:endColor="@color/glass_fill" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/glass_border" />
         </shape>
     </item>
 </ripple>

@@ -40,7 +40,7 @@ public class PersonaActivity extends Activity {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // 顶栏
         LinearLayout topBar = UiKit.pageTopBar(this, "角色管理");
@@ -171,7 +171,7 @@ public class PersonaActivity extends Activity {
         if (!isActive) {
             Button btnSwitch = new Button(this);
             btnSwitch.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-            btnSwitch.setContentDescription("btnSwitch");   // 自动生成：a11y
+            btnSwitch.setContentDescription("切换到「" + p.name + "」");
             btnSwitch.setText("切换");
             btnSwitch.setTextSize(12f);
             btnSwitch.setTextColor(Color.WHITE);
@@ -207,7 +207,7 @@ public class PersonaActivity extends Activity {
         if (!p.isDefault) {
             Button btnDel = new Button(this);
             btnDel.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-            btnDel.setContentDescription("btnDel");   // 自动生成：a11y
+            btnDel.setContentDescription("删除「" + p.name + "」");
             btnDel.setText("删除");
             btnDel.setTextSize(12f);
             btnDel.setTextColor(Color.WHITE);

@@ -185,6 +185,9 @@ public class Live2DGLView extends GLSurfaceView {
             float dt = lastFrameNanos == 0L ? 0f : (now - lastFrameNanos) / 1_000_000_000f;
             lastFrameNanos = now;
 
+            // 非待机动作（TapBody 等）播放中：L1 角度/视线/眨眼让位给动作动画，仅保留呼吸背景。
+            // native 侧原子标志与 Update() 同帧写入，GL 线程读取即得当前帧状态。
+            motionEngine.setActionPlaying(Live2DNative.nativeIsMotionPlaying());
             // L1：程序化噪声（正弦波/saccade/呼吸/眨眼）叠加到弹簧目标，一次 JNI 批量写入
             motionEngine.update(physics, dt);
             float[] values = physics.update(dt);

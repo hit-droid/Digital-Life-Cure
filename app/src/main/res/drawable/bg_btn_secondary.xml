@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 次级按钮（玻璃底）。
+     v1.159.0：由旧色板实色 brand_light/brand_stroke 改为 glass_fill / glass_fill_strong，
+     与卡片/胶囊同一套玻璃语言；按下更亮的分档保持不变。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand_stroke" />
+            <solid android:color="@color/glass_fill_strong" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand_light" />
+            <solid android:color="@color/glass_fill" />
         </shape>
     </item>
 </selector>

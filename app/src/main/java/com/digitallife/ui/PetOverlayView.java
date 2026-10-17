@@ -308,8 +308,8 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(9));
-        bg.setColor(colorRes(R.color.surface_glass));
-        bg.setStroke(1, colorRes(R.color.brand_stroke));
+        bg.setColor(colorRes(R.color.operit_surface));
+        bg.setStroke(1, colorRes(R.color.operit_divider));
         return bg;
     }
 
@@ -414,7 +414,7 @@ public class PetOverlayView extends FrameLayout {
 
     private View menuDivider() {
         View v = new View(getContext());
-        v.setBackgroundColor(colorRes(R.color.brand_stroke));
+        v.setBackgroundColor(colorRes(R.color.operit_divider));
         return v;
     }
 
@@ -422,8 +422,8 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(12));
-        bg.setColor(colorRes(R.color.card_bg));
-        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
+        bg.setColor(colorRes(R.color.operit_surface));
+        bg.setStroke(dp(1), colorRes(R.color.operit_divider));
         return bg;
     }
 
@@ -485,7 +485,7 @@ public class PetOverlayView extends FrameLayout {
                             colorRes(R.color.operit_text_secondary)));
 
                     card.addView(detailGap(dp(10)));
-                    card.addView(detailBarRow("亲密度", intimacy, colorRes(R.color.brand)));
+                    card.addView(detailBarRow("亲密度", intimacy, colorRes(R.color.brand_operit)));
                     card.addView(detailBarRow("精力", energy, colorRes(R.color.success)));
                     card.addView(detailGap(dp(8)));
                     card.addView(detailHairline());
@@ -542,7 +542,7 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable track = new android.graphics.drawable.GradientDrawable();
         track.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         track.setCornerRadius(h / 2f);
-        track.setColor(colorRes(R.color.brand_soft));
+        track.setColor(colorRes(R.color.operit_surface_variant));
         bar.setBackground(track);
         LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(maxPx, h);
         barLp.leftMargin = dp(4);
@@ -583,7 +583,7 @@ public class PetOverlayView extends FrameLayout {
 
     private View detailHairline() {
         View v = new View(getContext());
-        v.setBackgroundColor(colorRes(R.color.brand_stroke));
+        v.setBackgroundColor(colorRes(R.color.operit_divider));
         v.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
         return v;
     }
@@ -672,15 +672,15 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(18));
-        bg.setColor(colorRes(R.color.card_bg));
-        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
+        bg.setColor(colorRes(R.color.operit_surface));
+        bg.setStroke(dp(1), colorRes(R.color.operit_divider));
         return bg;
     }
 
     private android.graphics.drawable.Drawable getTailBackground() {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-        bg.setColor(colorRes(R.color.card_bg));
+        bg.setColor(colorRes(R.color.operit_surface));
         return bg;
     }
 
@@ -688,8 +688,8 @@ public class PetOverlayView extends FrameLayout {
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
         bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(16));
-        bg.setColor(colorRes(R.color.surface_glass));
-        bg.setStroke(dp(1), colorRes(R.color.brand_stroke));
+        bg.setColor(colorRes(R.color.operit_surface));
+        bg.setStroke(dp(1), colorRes(R.color.operit_divider));
         return bg;
     }
 

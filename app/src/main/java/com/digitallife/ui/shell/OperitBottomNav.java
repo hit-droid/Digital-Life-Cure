@@ -72,6 +72,19 @@ public class OperitBottomNav extends LinearLayout {
         return selected;
     }
 
+    /**
+     * 真折射玻璃层是否可用，由宿主（{@code MainActivity}）在玻璃层就绪后告知。
+     *
+     * <p>可用：背景透明，把「面板底色」交给下层 {@code LiquidGlassLayerView} 的真折射玻璃；
+     * 不可用（native 未加载 / 着色器失败 / 背景快照失败）：保留原有半透明玻璃面板，界面照常。
+     * 两者圆角轮廓相同（28dp），故切换不会改变阴影与裁切。</p>
+     */
+    public void setGlassEnabled(boolean enabled) {
+        setBackgroundResource(enabled
+                ? R.drawable.bg_operit_bottom_nav_glass
+                : R.drawable.bg_operit_bottom_nav);
+    }
+
     private void applySelection() {
         for (Map.Entry<OperitRoute, Item> e : items.entrySet()) {
             e.getValue().setActive(e.getKey() == selected);
@@ -123,9 +136,14 @@ public class OperitBottomNav extends LinearLayout {
         }
 
         void setActive(boolean active) {
-            pill.setColor(active
-                    ? UiKit.color(ctx, R.color.operit_nav_pill)
-                    : Color.TRANSPARENT);
+            // v1.158.0 Glass v2：选中胶囊由实色 operit_nav_pill 改为**发光紫渐变**，
+            // 配合底部玻璃导航面板，选中态才有"点亮"的感觉（实色在玻璃上偏死）。
+            if (active) {
+                pill.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+                pill.setColors(new int[]{0x85B9A6FF, 0x9E6A5AE0});
+            } else {
+                pill.setColors(new int[]{Color.TRANSPARENT, Color.TRANSPARENT});
+            }
             int c = UiKit.color(ctx, active ? R.color.operit_accent : R.color.operit_text_hint);
             icon.setColorFilter(c);
             label.setTextColor(c);

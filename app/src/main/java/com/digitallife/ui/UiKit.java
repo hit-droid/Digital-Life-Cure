@@ -158,7 +158,8 @@ public final class UiKit {
     public static Button button(Context c, LinearLayout root, String text) {
         Button b = new Button(c);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        // a11y：用可见文案，别留占位符（读屏会念出「b」）
+        b.setContentDescription(text);
         b.setText(text);
         b.setTextSize(14f);
         b.setTextColor(Color.WHITE);
@@ -177,7 +178,7 @@ public final class UiKit {
         Button b = new Button(c);
         b.setText(text);
         b.setTextSize(13f);
-        b.setTextColor(color(c, R.color.brand));
+        b.setTextColor(color(c, R.color.brand_operit_light));
         b.setBackgroundResource(R.drawable.bg_btn_secondary);
         b.setAllCaps(false);
         b.setPadding(dp(c, 14), 0, dp(c, 14), 0);
@@ -221,7 +222,7 @@ public final class UiKit {
         mask.setCornerRadius(dp(c, radiusDp));
         mask.setColor(0xFF000000);
         android.graphics.drawable.RippleDrawable rd = new android.graphics.drawable.RippleDrawable(
-                ColorStateList.valueOf(color(c, R.color.ripple)), content, mask);
+                ColorStateList.valueOf(color(c, R.color.glass_ripple)), content, mask);
         v.setBackground(rd);
         v.setClickable(true);
     }
@@ -375,7 +376,7 @@ public final class UiKit {
         TextView k = new TextView(c);
         k.setText(key);
         k.setTextSize(13f);
-        k.setTextColor(color(c, R.color.operit_text_hint));
+        k.setTextColor(color(c, R.color.operit_text_secondary));
         k.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(k);
         TextView v = new TextView(c);

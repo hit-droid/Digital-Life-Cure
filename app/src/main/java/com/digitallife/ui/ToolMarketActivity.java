@@ -87,7 +87,7 @@ public class ToolMarketActivity extends Activity {
     private View buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // ===== 顶栏 =====
         LinearLayout topBar = UiKit.pageTopBar(this, "工具市场");
@@ -238,7 +238,7 @@ public class ToolMarketActivity extends Activity {
         boolean enabled = !isDisabled(this, t.name);
         Button btnToggle = new Button(this);
         btnToggle.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnToggle.setContentDescription("btnToggle");   // 自动生成：a11y
+        btnToggle.setContentDescription(t.name + (enabled ? "，已启用" : "，已禁用"));
         btnToggle.setText(enabled ? "已启用" : "已禁用");
         btnToggle.setTextSize(12f);
         btnToggle.setTextColor(Color.WHITE);

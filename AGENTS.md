@@ -1,7 +1,7 @@
 # AGENTS.md — 数字生命（Digital-Life-Cure）项目交接文档
 
 > 本文件写给**一个完全不了解情况的新会话**。请先完整读一遍再动手。
-> 最后更新：2026-10-04（版本 v1.155.0，修**浅色模式下「一半黑一半白」**的根因：App 内长期并存两套色板——`operit_*`（日/夜同值、恒深色）与旧色（`page_bg`/`card_bg`/`text_primary`/`brand_*` 等，日=亮色、夜=深色）。新组件用前者、旧组件用后者，系统切浅色模式时旧组件全部翻亮 → 工具卡变纯白底 + 浅灰字糊成一片（采样 (255,255,255) 坐实）。按 workbuddy issue #98 的方案 A 修复：深色那套提为唯一色板、**删除 `values-night/`**、`AppTheme`/`AppDialogTheme` parent 去掉 `Light`、styles.xml 残留 brand 清掉。**约定：新增颜色只写 `values/colors.xml`，不得再建 `values-night/`**；上一版 v1.154.0 按真机截图修 5 处视觉 bug（顶栏渐变方向写反等）；v1.149.0 修 16 KB 对齐闪退；协作约定见第 9 节）
+> 最后更新：2026-10-17（版本 v1.160.0，本版＝**原生真折射玻璃引擎**（`LiquidGlassLayerView` + native GLES2 折射着色器）+ **Live2D 渲染质量提升**（预乘 α＋mipmap＋三线性、NPOT mipmap 扩展探测、地面软阴影）+ `ScreenshotRenderTest` UI 截图自查；并同批承接**未单独出包**的 v1.159.0「Operit Glass v2」。历史沿革：v1.155.0 修**浅色模式下「一半黑一半白」**的根因：App 内长期并存两套色板——`operit_*`（日/夜同值、恒深色）与旧色（`page_bg`/`card_bg`/`text_primary`/`brand_*` 等，日=亮色、夜=深色）。新组件用前者、旧组件用后者，系统切浅色模式时旧组件全部翻亮 → 工具卡变纯白底 + 浅灰字糊成一片（采样 (255,255,255) 坐实）。按 workbuddy issue #98 的方案 A 修复：深色那套提为唯一色板、**删除 `values-night/`**、`AppTheme`/`AppDialogTheme` parent 去掉 `Light`、styles.xml 残留 brand 清掉。**约定：新增颜色只写 `values/colors.xml`，不得再建 `values-night/`**；上一版 v1.154.0 按真机截图修 5 处视觉 bug（顶栏渐变方向写反等）；v1.149.0 修 16 KB 对齐闪退；协作约定见第 9 节）
 
 ---
 
@@ -114,13 +114,26 @@
 **注意**：`/tmp/opencode/toolchain` 在重启后会消失，届时重跑第 1 步（见 CHANGELOG v1.113.0）或重装 JDK。
 `app/release-key.p12` 本地需自行生成（CI 里由 workflow 自动生成，`.gitignore` 已忽略 `*.p12`），否则 `assembleDebug` / `assembleRelease` 会报 `validateSigning*` 失败。debug 与 release 共用同一 p12 与 alias，签名一致，故 v1.143.0 切到 release 出包后老用户仍可覆盖升级；密钥参数可用 `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` 环境变量覆盖。
 
-#### 测试能力边界（v1.114.0）
+#### 测试能力边界（v1.114.0；v1.159.0 起可截图自查 UI）
 
 | 能做 | 不能做 |
 |---|---|
 | 编译、单测、lint、出 APK（`tools/verify.sh`，约 41 秒） | **真机/模拟器运行测试** |
-| Robolectric 跑真实 Android 框架（Activity/Context/SharedPreferences 等） | 依赖 native 库的代码（`Live2DNative` 在 JVM 加载不了） |
-| 纯 Java 逻辑与 Android 框架交互的回归验证 | 渲染、动画、真实网络、TTS/STT 等设备相关行为 |
+| Robolectric 跑真实 Android 框架（Activity/Context/SharedPreferences 等） | 依赖 native 库的代码（`Live2DNative` 在 JVM 加载不了；测试期可用 `ShadowLive2DNative` 兜住查询类方法） |
+| **Robolectric NATIVE 图形模式把真 Android View 渲成 PNG**（`ScreenshotRenderTest`，见下） | 真实状态栏/导航栏、动画、触摸、真实网络、TTS/STT 等设备相关行为 |
+| 纯 Java 逻辑与 Android 框架交互的回归验证 | 像素级视觉基准（渲染是近似的） |
+
+**UI 自查（v1.159.0 起，替代之前的 HTML 近似预览）**：改 UI 后跑
+
+```
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :app:testDebugUnitTest \
+  --tests "com.digitallife.ui.ScreenshotRenderTest" --no-daemon
+```
+
+会把**主壳 + 聊天页 + 7 个二级页 + 侧栏**渲到 `app/build/screenshots/*.png`，直接看图找问题
+（白底白字、直角实色块、对比度不足、元素被裁切这类静态缺陷都能抓出来）。
+`main_shell` 依赖 `ShadowLive2DNative`：不打这个 shadow 的话，`SettingsTabView` 构造期数模型会
+抛 `UnsatisfiedLinkError`，`buildUi()` 中断、主壳截不到图。
 
 **模拟器为什么不可用**：容器是 Firecracker microVM，无 `/dev/kvm`、CPU 无 `vmx/svm` 标志，硬件加速模拟器起不来。
 **Robolectric 陷阱**：`testOptions.unitTests.returnDefaultValues = true` 会把 Android 方法桩成返回默认值，与 Robolectric 的真实实现冲突，已移除；测试类加 `@RunWith(RobolectricTestRunner.class)` + `@Config(sdk = 33)` 即可。
@@ -272,7 +285,8 @@ autoloop 靠 `--3way` 应用，已落地的补丁会再次入队重试。虽然�
 ### 4.9 其他小坑
 - **zsh 会截断 commit message**：`\`` + `#` 组合会被截断，复杂 message 用 `git commit -F /tmp/xxx.txt`
 - **Edit 工具陷阱**：`oldString` 不能包含与保留代码完全相同的子串；`case MotionEvent.CANCEL` 不会被自动补 `ACTION_` 前缀
-- **模型不支持读图**：read 图片返回成功但模型侧报 `this model does not support image input`；`image_analysis` MCP 报 `insufficient balance`。截图问题只能请用户文字描述
+- **截图可以自己看**（v1.159.0 起本环境已验证）：`Read` 直接读 PNG 就能看到图，配合上面的 `ScreenshotRenderTest` 可自查 UI。
+  （早前 "this model does not support image input" 的记录已过时；`image_analysis` MCP 仍可能报 `insufficient balance`）
 - **气泡最大宽度**：`maxBubbleWidth` = 屏幕宽 82%
 
 ---

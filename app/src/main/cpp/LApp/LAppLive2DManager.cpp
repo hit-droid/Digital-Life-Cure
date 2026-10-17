@@ -6,13 +6,16 @@
  */
 
 #include "LAppLive2DManager.hpp"
+#include <math.h>
 #include <string>
 #include <vector>
 #include <GLES2/gl2.h>
+#include <Model/CubismModel.hpp>
 #include <Rendering/CubismRenderer.hpp>
 #include "LAppPal.hpp"
 #include "LAppDefine.hpp"
 #include "LAppDelegate.hpp"
+#include "LAppGroundShadow.hpp"
 #include "LAppModel.hpp"
 #include "LAppView.hpp"
 
@@ -30,6 +33,105 @@ namespace {
     void FinishedMotion(ACubismMotion* self)
     {
         LAppPal::PrintLog("Motion Finished: %x", self);
+    }
+
+    // 计算模型所有可见 drawable 顶点在模型本地坐标中的包围盒。
+    // 用来给地面阴影定位：水平取包围盒中心，纵向取包围盒底部。
+    bool ComputeModelBounds(Csm::CubismModel* model, float* outMinX, float* outMaxX, float* outMinY)
+    {
+        if (model == NULL)
+        {
+            return false;
+        }
+
+        const csmInt32 drawableCount = model->GetDrawableCount();
+        bool hasVertex = false;
+        float minX = 0.0f;
+        float maxX = 0.0f;
+        float minY = 0.0f;
+
+        for (csmInt32 d = 0; d < drawableCount; ++d)
+        {
+            // 跳过不可见 drawable（如离屏/遮罩部件），避免它们的顶点把包围盒撑大。
+            if (!model->GetDrawableDynamicFlagIsVisible(d))
+            {
+                continue;
+            }
+
+            const csmInt32 vertexCount = model->GetDrawableVertexCount(d);
+            const csmFloat32* vertices = model->GetDrawableVertices(d);
+            if (vertices == NULL || vertexCount <= 0)
+            {
+                continue;
+            }
+
+            for (csmInt32 j = 0; j < vertexCount; ++j)
+            {
+                const float x = vertices[Csm::Constant::VertexOffset + j * Csm::Constant::VertexStep];
+                const float y = vertices[Csm::Constant::VertexOffset + j * Csm::Constant::VertexStep + 1];
+
+                if (!hasVertex)
+                {
+                    minX = maxX = x;
+                    minY = y;
+                    hasVertex = true;
+                }
+                else
+                {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                }
+            }
+        }
+
+        if (!hasVertex)
+        {
+            return false;
+        }
+
+        *outMinX = minX;
+        *outMaxX = maxX;
+        *outMinY = minY;
+        return true;
+    }
+
+    // 地面线状态：把「地面」稳定在模型本地坐标中，
+    // 避免角色抬身/跳跃时包围盒底上移、把阴影一起带到空中。
+    struct GroundLineState
+    {
+        const void* modelKey;   ///< 当前缓存的模型实例
+        float       groundY;    ///< 稳定后的地面线（模型本地 Y）
+        bool        valid;
+
+        GroundLineState() : modelKey(NULL), groundY(0.0f), valid(false) {}
+    };
+
+    GroundLineState g_groundLine;
+
+    // 用当前帧观测到的包围盒最低点更新地面线：
+    // 观测点更低（正常站立）立即贴合；更高（抬身/跳跃）只极缓慢回弹，
+    // 保证动作过程中地面线不被拉高，同时慢慢忘记偶发的一次性下探。切换模型时重置。
+    float UpdateGroundY(const void* modelKey, float observedMinY)
+    {
+        if (!g_groundLine.valid || g_groundLine.modelKey != modelKey)
+        {
+            g_groundLine.modelKey = modelKey;
+            g_groundLine.groundY = observedMinY;
+            g_groundLine.valid = true;
+            return g_groundLine.groundY;
+        }
+
+        if (observedMinY < g_groundLine.groundY)
+        {
+            g_groundLine.groundY = observedMinY;
+        }
+        else
+        {
+            g_groundLine.groundY += (observedMinY - g_groundLine.groundY) * 0.002f;
+        }
+
+        return g_groundLine.groundY;
     }
 }
 
@@ -69,6 +171,9 @@ LAppLive2DManager::~LAppLive2DManager()
 
 void LAppLive2DManager::ReleaseAllModel()
 {
+    // 模型实例销毁后地址可能被新模型复用，地面线状态按实例指针缓存，这里必须一并重置。
+    g_groundLine.valid = false;
+
     for (csmUint32 i = 0; i < _models.GetSize(); i++)
     {
         delete _models[i];
@@ -181,6 +286,45 @@ void LAppLive2DManager::OnUpdate() const
         LAppDelegate::GetInstance()->GetView()->PreModelDraw(*model);
 
         model->Update();
+
+        // 地面软阴影：先画阴影、后画模型，使阴影作为独立的一层落在模型脚下。
+        // 阴影锚在稳定的「地面线」而不是当前包围盒底部，避免角色抬身/跳跃时把阴影一起带上空中；
+        // 抬升越高则阴影越大越淡。着色器创建失败会自动跳过。
+        if (model->GetModel() != NULL && model->GetModelMatrix() != NULL)
+        {
+            float minX = 0.0f;
+            float maxX = 0.0f;
+            float minY = 0.0f;
+            if (ComputeModelBounds(model->GetModel(), &minX, &maxX, &minY))
+            {
+                // 复刻 LAppModel::Draw 的矩阵合成顺序，保证锚点与模型顶点落在同一变换下。
+                CubismMatrix44 shadowMatrix;
+                shadowMatrix.SetMatrix(projection.GetArray());
+                shadowMatrix.MultiplyByMatrix(model->GetModelMatrix());
+
+                const float groundY = UpdateGroundY(model->GetModel(), minY);
+                // 角色相对地面的抬升（本地单位，站立时约 0）。
+                const float lift = minY - groundY;
+
+                const float centerX = (minX + maxX) * 0.5f;
+                const float halfWidth = (maxX - minX) * 0.5f;
+
+                // 阴影取包围盒宽度的 62%，扁率（像素空间高/宽）0.26，落地时中心不透明度 0.34。
+                const float ndcCenterX = shadowMatrix.TransformX(centerX);
+                const float ndcCenterY = shadowMatrix.TransformY(groundY);
+                const float radiusScale = 1.0f + 0.6f * lift;
+                const float ndcRadiusX = fabsf(shadowMatrix.GetScaleX()) * halfWidth * 0.62f * radiusScale;
+                // NDC 的 X/Y 单位对应的像素数不同，按窗口宽高比换算，保证阴影在像素空间是扁椭圆。
+                const float ndcRadiusY = ndcRadiusX * 0.26f
+                    * (static_cast<float>(width) / static_cast<float>(height));
+
+                // 抬得越高阴影越淡，避免角色腾空时阴影仍贴脚形成「拖影」。
+                const float alpha = 0.34f / (1.0f + 2.5f * lift);
+
+                LAppGroundShadow::GetInstance()->Draw(ndcCenterX, ndcCenterY, ndcRadiusX, ndcRadiusY, alpha);
+            }
+        }
+
         model->Draw(projection);///< 参照渡しなのでprojectionは変質する
 
         // モデル1体描画後コール

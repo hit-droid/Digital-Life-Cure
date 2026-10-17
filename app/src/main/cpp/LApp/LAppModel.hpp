@@ -214,7 +214,6 @@ private:
 
     Csm::csmMap<Csm::csmString, Csm::csmFloat32> _externalParams; ///< AIが設定した外部パラメータ（毎フレーム適用）
 
-    Csm::csmString _currentMotionGroup; ///< 直近に開始したモーショングループ名
     std::atomic<bool> _externalActionPlaying; ///< 非待機アクション再生中フラグ（GLスレッド書込・他スレッド読込）
 
     Csm::Rendering::CubismRenderTarget_OpenGLES2  _renderBuffer;   ///< フレームバッファ以外の描画先

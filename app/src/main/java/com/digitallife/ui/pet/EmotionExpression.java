@@ -137,7 +137,10 @@ public final class EmotionExpression {
 
     /**
      * 表情变化时配套的自主小动作（动作名，交给 {@code PetOverlayView#resolveMotion}）；
-     * 平静 / 生气不外显动作，返回 {@code null}。
+     * 平静（F01）作为兜底不外显动作，返回 {@code null}。
+     *
+     * <p>F04 生气复用 {@code tilt_head}（{@code Shy[0] = yaotou}）——摇头 + 噘嘴语义贴合
+     * 不满/生气，且该动作组在 huohuo 模型定义中稳定存在，避免表情切换时生硬跳变。</p>
      */
     public static String motionFor(String expression) {
         if (expression == null) return null;
@@ -146,6 +149,8 @@ public final class EmotionExpression {
                 return "happy";
             case "F03":
                 return "sad";
+            case "F04":
+                return "tilt_head";
             case "F05":
                 return "surprised";
             case "F06":

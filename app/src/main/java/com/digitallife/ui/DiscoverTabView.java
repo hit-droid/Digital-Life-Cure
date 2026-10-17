@@ -40,7 +40,8 @@ public class DiscoverTabView extends LinearLayout {
         this.thoughtStore = new ThoughtStore(activity);
         this.memory = new MemoryStore(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
+        // v1.158.0：透明，让 MainActivity 根部的环境光透上来
+        setBackgroundColor(android.graphics.Color.TRANSPARENT);
         buildUi();
     }
 

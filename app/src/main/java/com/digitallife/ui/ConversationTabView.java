@@ -46,7 +46,8 @@ public class ConversationTabView extends LinearLayout {
         this.listener = listener;
         this.chatStore = new ChatStore(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
+        // v1.158.0：透明，让 MainActivity 根部的环境光透上来（子 View 再铺会重复出假亮带）
+        setBackgroundColor(android.graphics.Color.TRANSPARENT);
         buildUi();
     }
 
@@ -237,8 +238,8 @@ public class ConversationTabView extends LinearLayout {
             TextView pin = new TextView(activity);
             pin.setText("置顶");
             pin.setTextSize(9f);
-            pin.setTextColor(UiKit.color(activity, R.color.brand));
-            pin.setBackground(typeTagBg(UiKit.color(activity, R.color.brand)));
+            pin.setTextColor(UiKit.color(activity, R.color.brand_operit));
+            pin.setBackground(typeTagBg(UiKit.color(activity, R.color.brand_operit)));
             pin.setPadding(UiKit.dp(activity, 5), UiKit.dp(activity, 1),
                     UiKit.dp(activity, 5), UiKit.dp(activity, 1));
             LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(

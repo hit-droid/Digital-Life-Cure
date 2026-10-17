@@ -29,7 +29,7 @@ public class DeveloperActivity extends Activity {
         super.onCreate(savedInstanceState);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // 顶栏
         LinearLayout topBar = UiKit.pageTopBar(this, getString(R.string.route_developer));
@@ -131,7 +131,7 @@ public class DeveloperActivity extends Activity {
     private Button mkButton(String text) {
         Button b = new Button(this);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        b.setContentDescription(text);
         b.setText(text);
         b.setAllCaps(false);
         b.setTextColor(0xFFFFFFFF);

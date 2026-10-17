@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 底部导航：悬浮玻璃胶囊（v1.157.0「Operit Glass」）。
-     与卡片同一套语言，但用 glass_fill_strong 抬升一档——它是常驻浮层，
-     需要比内容卡片更「实」一点，才能在滚动的聊天内容上保持存在感。 -->
+<!-- 底部导航：悬浮玻璃胶囊（v1.158.0 Operit Glass v2）。
+     由 v1.157.0 的「实色 operit_surface 面板」升级为半透明玻璃：
+     顶部偏亮（glass_highlight）向下渐隐到抬升玻璃底（glass_fill_strong），
+     1dp glass_border 勾边。叠在 bg_operit_page 的底部回光上，才立得起来
+     （实色面板会变成一块「死灰」，这是 v1.157.0 真机反馈的原话）。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <gradient
         android:angle="270"
         android:startColor="@color/glass_highlight"
         android:endColor="@color/glass_fill_strong" />
-    <corners android:radius="24dp" />
+    <corners android:radius="28dp" />
     <stroke
         android:width="1dp"
         android:color="@color/glass_border" />

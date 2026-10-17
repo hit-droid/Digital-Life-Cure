@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 全 App 统一页面底（v1.158.0「Operit Glass v2」）：
+     深紫底 + 三层径向环境光（顶紫主光 / 右上副光 / 底部回光）。
+
+     为什么要这层光：玻璃＝半透明白叠加，背后没有亮暗变化时，卡片和导航
+     叠在纯色底上会「糊成一片灰」，看不出浮起（v1.157.0 真机与浏览器渲染都证实）。
+     铺上光晕后，同样的 glass_* token 立刻出现磨砂层次。
+
+     用法：页面根 View 直接 setBackgroundResource(R.drawable.bg_operit_page)。
+     ❌ 不要给「页面内的子 View」再铺一份：径向光以自身 bounds 为基准，
+     嵌套铺会把光晕重复到子 View 顶部，出现一条假的亮带。
+     页面内需要透出这层光的容器请设成透明。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 1) 纯底色打底（不透明，避免透出下层 Activity） -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/operit_bg" />
+        </shape>
+    </item>
+    <!-- 2) 顶部主光：偏左上方落下的品牌紫 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.24"
+                android:centerY="0.0"
+                android:gradientRadius="560dp"
+                android:startColor="@color/operit_glow_top"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <!-- 3) 右上副光：浅紫，和主光错开位置，避免整屏一片均匀紫 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="1.0"
+                android:centerY="0.05"
+                android:gradientRadius="420dp"
+                android:startColor="@color/operit_glow_edge"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+    <!-- 4) 底部回光：让底部悬浮导航背后也有光，玻璃才立得住 -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="1.0"
+                android:gradientRadius="520dp"
+                android:startColor="@color/operit_glow_bottom"
+                android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+</layer-list>

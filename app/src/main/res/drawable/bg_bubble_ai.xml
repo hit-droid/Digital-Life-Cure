@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 对话大脑 AI 气泡：深紫黑本体 + 左侧 3dp 浅紫 accent 悬浮竖条。
+<!-- 对话大脑 AI 气泡：玻璃本体 + 左侧 3dp 浅紫 accent 悬浮竖条（v1.158.0 Operit Glass v2）。
+
+     v1.158.0：本体由实色 #1E1B2E 改为**玻璃渐变**（glass_fill → glass_sheen）+ 淡描边，
+     与卡片/导航同一语言；竖条也由纯色改为紫→深紫渐变，像一根发光条。
 
      ⚠️ 竖条用「叠加法」实现，不要改回 inset + <size android:width="3dp"> 的写法：
      layer-list 的 <item> 默认 gravity=fill，会把只标了 width 的 shape 拉伸铺满整块区域，
@@ -13,14 +16,23 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:top="8dp" android:bottom="8dp">
         <shape android:shape="rectangle">
-            <solid android:color="#C4B5FD" />
+            <gradient
+                android:angle="270"
+                android:startColor="#C4B5FD"
+                android:endColor="@color/brand_operit" />
             <corners android:radius="2dp" />
         </shape>
     </item>
     <item android:left="3dp">
         <shape android:shape="rectangle">
-            <solid android:color="#1E1B2E" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/glass_fill"
+                android:endColor="@color/glass_sheen" />
             <corners android:radius="16dp" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/glass_border_soft" />
         </shape>
     </item>
 </layer-list>

@@ -5,11 +5,13 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,7 +24,10 @@ import android.widget.Toast;
 
 import com.digitallife.R;
 import com.digitallife.model.ModelManager;
+import com.digitallife.render.LiquidGlassLayerView;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.ui.glass.BackdropCapture;
+import com.digitallife.ui.glass.GlassPanelStyle;
 import com.digitallife.ui.shell.OperitContentView;
 import com.digitallife.ui.shell.OperitDrawer;
 import com.digitallife.ui.shell.OperitNavController;
@@ -38,8 +43,11 @@ import com.digitallife.util.Settings;
  */
 public class MainActivity extends Activity {
 
+    private static final String TAG = "MainActivity";
+
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    private View rootView;
     private TextView tvTitle;
     private TextView tvSubtitle;
     private FrameLayout content;
@@ -48,9 +56,21 @@ public class MainActivity extends Activity {
     private com.digitallife.ui.shell.OperitBottomNav bottomNav;
 
     // v1.23.0 Operit 侧栏
+    private FrameLayout shell;
     private OperitDrawer operitDrawer;
     private View drawerScrim;
     private OperitNavController navController;
+
+    // 侧栏的真折射玻璃层：与抽屉同位置、压在抽屉**下层**，折射它身后的页面内容
+    private LiquidGlassLayerView glassLayer;
+    private boolean drawerOpen;
+
+    // 底部导航的真折射玻璃层：与导航同矩形、压在导航下层，折射导航身后的页面环境光。
+    // 导航常驻可见且内容区不与它重叠，故快照只画 root 背景（见 uploadNavBackdrop）。
+    private LiquidGlassLayerView navGlassLayer;
+    private FrameLayout navWrap;
+    private int navBdX = -1, navBdY = -1, navBdW = -1, navBdH = -1;
+    private boolean navBdEnabled;
 
     private ConversationTabView conversationTab;
     private ContactsTabView contactsTab;
@@ -208,7 +228,10 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        // v1.158.0 Glass v2：整页铺环境光（顶紫主光 + 右上副光 + 底部回光），
+        // 上层的玻璃卡片/导航才有东西可"透"，不再是一块死灰。
+        root.setBackgroundResource(R.drawable.bg_operit_page);
+        rootView = root;
 
         // ===== 顶部 AppBar（Operit AI 风格：紫色自顶向下渐隐 + 圆形菜单按钮） =====
         LinearLayout topBar = new LinearLayout(this);
@@ -230,7 +253,7 @@ public class MainActivity extends Activity {
         titles.setOrientation(LinearLayout.VERTICAL);
         tvTitle = new TextView(this);
         tvTitle.setText(TAB_TITLES[0]);
-        tvTitle.setTextSize(21f);
+        tvTitle.setTextSize(22f);
         tvTitle.setTextColor(Color.WHITE);
         tvTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tvTitle.setIncludeFontPadding(false);
@@ -238,7 +261,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         tvSubtitle = new TextView(this);
         tvSubtitle.setText(TAB_SUBTITLES[0]);
-        tvSubtitle.setTextSize(11f);
+        tvSubtitle.setTextSize(11.5f);
         tvSubtitle.setTextColor(0xCCFFFFFF);
         tvSubtitle.setIncludeFontPadding(false);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
@@ -267,18 +290,19 @@ public class MainActivity extends Activity {
         View onlineDot = new View(this);
         onlineDot.setBackgroundResource(R.drawable.bg_operit_online_dot);
         avatarWrap.addView(onlineDot, new FrameLayout.LayoutParams(
-                dp(10), dp(10), Gravity.BOTTOM | Gravity.END));
-        topBar.addView(avatarWrap, new LinearLayout.LayoutParams(dp(34), dp(34)));
+                dp(11), dp(11), Gravity.BOTTOM | Gravity.END));
+        topBar.addView(avatarWrap, new LinearLayout.LayoutParams(dp(38), dp(38)));
 
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // ===== 内容 + 侧栏容器（FrameLayout 让侧栏浮在内容上） =====
-        FrameLayout shell = new FrameLayout(this);
-        shell.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        shell = new FrameLayout(this);
+        // 透明：环境光只铺一次（root），子容器再铺会出现重复的假亮带（见 bg_operit_page 注释）
+        shell.setBackgroundColor(Color.TRANSPARENT);
 
         content = new FrameLayout(this);
-        content.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        content.setBackgroundColor(Color.TRANSPARENT);
         shell.addView(content, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -290,6 +314,17 @@ public class MainActivity extends Activity {
         drawerScrim.setOnClickListener(v -> closeDrawer());
         shell.addView(drawerScrim, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // 真折射玻璃层：与抽屉同矩形、压在抽屉**之下**（抽屉背景透明时透出它），折射的
+        // 是打开抽屉前抓到的页面快照。压在遮罩之上、抽屉之下，所以它比被遮暗的页面更亮，
+        // 呈"浮起的玻璃面板"。常驻可见、平移出屏外，保证 SurfaceTexture 一直存活，
+        // 避免每次开抽屉重建 EGL 上下文闪一帧空白。
+        glassLayer = new LiquidGlassLayerView(this);
+        glassLayer.setStyle(GlassPanelStyle.drawer());
+        glassLayer.setTranslationX(-dp(280));
+        glassLayer.setListener(this::onGlassReady);
+        shell.addView(glassLayer, new FrameLayout.LayoutParams(
+                dp(280), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));
 
         // v1.23.0 Operit 侧栏
         operitDrawer = new OperitDrawer(this, route -> {
@@ -356,12 +391,35 @@ public class MainActivity extends Activity {
         bottomNav = new com.digitallife.ui.shell.OperitBottomNav(this, route -> {
             if (navController != null) navController.navigate(route);
         });
+
+        // 导航的真折射玻璃层：垫在导航**下层**，折射导航身后的页面环境光。
+        // 外层 FrameLayout 承担原来加在 bottomNav 上的边距，使「玻璃层矩形 == 导航胶囊矩形」。
+        navGlassLayer = new LiquidGlassLayerView(this);
+        navGlassLayer.setStyle(GlassPanelStyle.nav());
+        navGlassLayer.setListener(ok -> {
+            Log.i(TAG, "导航玻璃层就绪=" + ok
+                    + (ok ? "" : "：" + com.digitallife.render.GlassNative.loadError()));
+            if (ok) uploadNavBackdrop();
+        });
+        navWrap = new FrameLayout(this);
+        // 先垫玻璃层、再叠导航（顺序决定前后）。玻璃层初始高度 0：FrameLayout 对 MATCH_PARENT
+        // 子视图按「可用空间」测量，直接 MATCH_PARENT 会把 wrap_content 的 navWrap 撑满整屏
+        // （导航被顶到顶栏下、内容区被压成 0）。改由导航决定 navWrap 高度，玻璃层高度在布局
+        // 后按导航实测高度对齐——见 uploadNavBackdrop。
+        navWrap.addView(navGlassLayer, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0));
+        navWrap.addView(bottomNav, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         navLp.leftMargin = dp(12);
         navLp.rightMargin = dp(12);
         navLp.bottomMargin = dp(10);
-        root.addView(bottomNav, navLp);
+        root.addView(navWrap, navLp);
+        // 布局（含旋转后重排，本页声明了 configChanges 不会重建）完成后刷新快照：
+        // 布局会多次回调，uploadNavBackdrop 内部按导航矩形去重，仅在位置/尺寸变化时重传。
+        navWrap.getViewTreeObserver().addOnGlobalLayoutListener(this::uploadNavBackdrop);
 
         setContentView(root);
         // v1.23.0: 初次按 last_route 启动（默认 CHAT）
@@ -417,6 +475,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (glassLayer != null) glassLayer.release();
+        if (navGlassLayer != null) navGlassLayer.release();
         super.onDestroy();
     }
 
@@ -434,8 +494,13 @@ public class MainActivity extends Activity {
     private void openDrawer() {
         if (operitDrawer == null) return;
         operitDrawer.build(navController.current());
+        // 必须在抽屉可见之前抓快照：此刻抽屉还是 GONE、玻璃层平移在屏外，
+        // 画面里不会混入浮层自身（否则玻璃会折射自己，形成自反馈）。
+        uploadGlassBackdrop();
+        drawerOpen = true;
         operitDrawer.setVisibility(View.VISIBLE);
         operitDrawer.setTranslationX(0);
+        glassLayer.setTranslationX(0);
         drawerScrim.setVisibility(View.VISIBLE);
         android.view.animation.DecelerateInterpolator decel = new android.view.animation.DecelerateInterpolator(1.8f);
         operitDrawer.animate().translationX(0).setDuration(280).setInterpolator(decel).start();
@@ -445,14 +510,113 @@ public class MainActivity extends Activity {
 
     private void closeDrawer() {
         if (operitDrawer == null) return;
+        drawerOpen = false;
         android.view.animation.DecelerateInterpolator decel = new android.view.animation.DecelerateInterpolator(1.8f);
         operitDrawer.animate().translationX(-operitDrawer.getWidth()).setDuration(220).setInterpolator(decel)
                 .withEndAction(() -> operitDrawer.setVisibility(View.GONE))
                 .start();
+        // 玻璃层与抽屉同矩形，跟随同一段动画滑出（保持可见，以便 SurfaceTexture 常驻）
+        if (glassLayer != null) {
+            glassLayer.animate().translationX(-glassLayer.getWidth()).setDuration(220)
+                    .setInterpolator(decel).start();
+        }
         drawerScrim.animate().alpha(0f).setDuration(220).setInterpolator(decel)
                 .withEndAction(() -> drawerScrim.setVisibility(View.GONE))
                 .start();
         content.animate().translationX(0).setDuration(220).setInterpolator(decel).start();
+    }
+
+    /**
+     * 用当前页面内容刷新玻璃层的背景快照与面板矩形。
+     *
+     * <p>约定：面板矩形取玻璃层自身尺寸，快照区域取 root 上同一矩形（左上角在 shell 顶部），
+     * 因此 panel 内坐标与快照像素严格 1:1、origin 恒为 (0,0)——这是折射不错位的前提。</p>
+     */
+    private void uploadGlassBackdrop() {
+        if (glassLayer == null || operitDrawer == null) return;
+        int w = glassLayer.getWidth();
+        int h = glassLayer.getHeight();
+        if (w <= 0 || h <= 0) return;   // 尚未布局，跳过（下次打开再试）
+        if (!glassLayer.isAvailable()) {
+            // native 未加载 / 着色器未就绪：保留抽屉原有不透明面板
+            operitDrawer.setGlassEnabled(false);
+            glassLayer.setPanel(0, 0, 0, 0, 0, 0);
+            return;
+        }
+        Bitmap bmp = BackdropCapture.captureRegion(rootView, 0, shell.getTop(), w, h);
+        if (bmp == null) {
+            operitDrawer.setGlassEnabled(false);
+            glassLayer.setPanel(0, 0, 0, 0, 0, 0);
+            return;
+        }
+        // 先给背景纹理、再亮面板：两次调用各自独立加锁，GL 线程可能在中间被唤醒；
+        // 若先亮面板后传背景，中间那一帧会因纹理为空（texId=0）画出黑块。
+        glassLayer.setBackdrop(bmp);
+        glassLayer.setPanel(0, 0, w, h, 0, 0);
+        operitDrawer.setGlassEnabled(true);
+    }
+
+    /** 玻璃层就绪回调（首次开抽屉时 GL 还在初始化，就绪后补一次快照） */
+    private void onGlassReady(boolean ok) {
+        Log.i(TAG, "液态玻璃层就绪=" + ok + (ok ? "" : "：" + com.digitallife.render.GlassNative.loadError()));
+        if (ok && drawerOpen) uploadGlassBackdrop();
+    }
+
+    /**
+     * 用导航身后的页面背景刷新底部导航玻璃层的快照与面板矩形。
+     *
+     * <p>导航是 root（LinearLayout）里独立的一行，内容区在它上方、与它不重叠，故它身后
+     * 只有 root 的页面背景（{@code bg_operit_page} 的三层环境光）。这里只画 root 的背景
+     * drawable、**不画任何子 View**，避免把导航自身画进快照（自反馈）。面板矩形 ==
+     * 玻璃层矩形 == 导航胶囊矩形，故 origin 恒为 (0,0)、面板内坐标与快照严格 1:1。</p>
+     */
+    private void uploadNavBackdrop() {
+        if (navGlassLayer == null || navWrap == null || bottomNav == null || rootView == null) return;
+        // 玻璃层高度对齐导航的实测高度：首帧导航尚未量出高度（或刚 setLayoutParams）时先返回，
+        // 下一轮布局回调再继续——这样玻璃层矩形与导航胶囊矩形严格一致。
+        int navH = bottomNav.getHeight();
+        FrameLayout.LayoutParams glp = (FrameLayout.LayoutParams) navGlassLayer.getLayoutParams();
+        if (navH > 0 && glp.height != navH) {
+            glp.height = navH;
+            navGlassLayer.setLayoutParams(glp);
+            return;
+        }
+        int w = navGlassLayer.getWidth();
+        int h = navGlassLayer.getHeight();
+        if (w <= 0 || h <= 0 || rootView.getWidth() <= 0 || rootView.getHeight() <= 0) return;  // 尚未布局
+        int navX = navWrap.getLeft();
+        int navY = navWrap.getTop();
+        // 布局会多次回调：仅在矩形变化（首帧、旋转重排）或尚未启用时重传
+        if (navBdEnabled && navX == navBdX && navY == navBdY && w == navBdW && h == navBdH) return;
+
+        if (!navGlassLayer.isAvailable()) {
+            // native 未加载 / 着色器未就绪：保留导航原有的半透明玻璃面板
+            setNavGlass(false);
+            navGlassLayer.setPanel(0, 0, 0, 0, 0, 0);
+            return;
+        }
+        Bitmap bmp = BackdropCapture.captureDrawableRegion(rootView.getBackground(),
+                rootView.getWidth(), rootView.getHeight(), navX, navY, w, h);
+        if (bmp == null) {
+            setNavGlass(false);
+            navGlassLayer.setPanel(0, 0, 0, 0, 0, 0);
+            return;
+        }
+        // 先给背景纹理、再亮面板：中间那一帧若纹理为空（texId=0）会画出黑块
+        navGlassLayer.setBackdrop(bmp);
+        navGlassLayer.setPanel(0, 0, w, h, 0, 0);
+        setNavGlass(true);
+        navBdX = navX;
+        navBdY = navY;
+        navBdW = w;
+        navBdH = h;
+    }
+
+    /** 切换导航玻璃态（幂等：状态未变时不重复改背景） */
+    private void setNavGlass(boolean enabled) {
+        if (navBdEnabled == enabled) return;
+        navBdEnabled = enabled;
+        bottomNav.setGlassEnabled(enabled);
     }
 
     private int dp(float v) {

@@ -48,7 +48,8 @@ public class ContactsTabView extends LinearLayout {
         this.activity = activity;
         this.listener = listener;
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
+        // v1.158.0：透明，让 MainActivity 根部的环境光透上来
+        setBackgroundColor(android.graphics.Color.TRANSPARENT);
         buildUi();
     }
 

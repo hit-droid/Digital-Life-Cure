@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部导航：启用真折射玻璃层时的「透明但保留圆角轮廓」底。
+     玻璃面板由 render/LiquidGlassLayerView 画在导航**下层**，导航自身背景必须透明才能透出；
+     但仍需要一个 drawable 提供圆角 outline——elevation 阴影依赖它。
+     圆角 28dp 与 bg_operit_bottom_nav、以及 GlassPanelStyle.nav() 的 radius 完全一致，
+     故换成它后轮廓/阴影行为不变。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="28dp" />
+</shape>

@@ -9,6 +9,7 @@
 #include <iostream>
 #include <GLES2/gl2.h>
 #include "LAppView.hpp"
+#include "LAppGroundShadow.hpp"
 #include "LAppPal.hpp"
 #include "LAppDefine.hpp"
 #include "LAppLive2DManager.hpp"
@@ -72,6 +73,9 @@ void LAppDelegate::OnStop()
 
     // リソースを解放
     LAppLive2DManager::ReleaseInstance();
+
+    // 阴影着色器持有的 program ID 属于旧 GL 上下文，销毁后必须丢弃，下次启动重建。
+    LAppGroundShadow::ReleaseInstance();
 
     CubismFramework::Dispose();
 

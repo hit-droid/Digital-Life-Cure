@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 主操作按钮（实底品牌紫）。
+     v1.159.0：品牌色由旧色板 brand/brand_dark 收敛到 Operit 的 brand_operit*，
+     与聊天页发送键 bg_chat_send 同源；旧值 #8B7DF4 与 Operit 紫不同调，混在一起发脏。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand_dark" />
+            <solid android:color="@color/brand_operit_dark" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand" />
+            <solid android:color="@color/brand_operit" />
         </shape>
     </item>
 </selector>

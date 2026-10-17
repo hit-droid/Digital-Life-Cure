@@ -3,7 +3,7 @@
      v1.157.0 Glass：由「描边镂空」改为「玻璃实底胶囊」，在深紫底上更有分量，
      与底部导航/卡片的顶光语言一致。保留涟漪反馈。 -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="@color/ripple">
+    android:color="@color/glass_ripple">
     <item>
         <shape android:shape="rectangle">
             <gradient

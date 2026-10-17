@@ -189,7 +189,7 @@ public class ApiProfileSection {
     private Button tabButton(String text, String s) {
         Button b = new Button(activity);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        b.setContentDescription(text);
         b.setText(text);
         b.setTextSize(13f);
         b.setAllCaps(false);

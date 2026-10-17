@@ -92,7 +92,8 @@ public class SettingsTabView extends LinearLayout {
         this.settings = new Settings(activity);
         this.apiManager = new ApiManager(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
+        // v1.158.0：透明，让 MainActivity 根部的环境光透上来
+        setBackgroundColor(android.graphics.Color.TRANSPARENT);
         buildUi();
         updateStatus();
         // 启动后若刚应用过「从备份恢复」，第一时间汇报结果（清除后不再弹）
@@ -274,7 +275,7 @@ public class SettingsTabView extends LinearLayout {
         chatRow.addView(etChat, new LinearLayout.LayoutParams(0, UiKit.dp(activity, 48), 1));
         Button btnChat = new Button(activity);
         btnChat.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnChat.setContentDescription("btnChat");   // 自动生成：a11y
+        btnChat.setContentDescription("发送");
         btnChat.setText("发送");
         btnChat.setAllCaps(false);
         btnChat.setTextColor(Color.WHITE);

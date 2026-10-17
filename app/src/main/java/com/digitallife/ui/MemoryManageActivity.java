@@ -54,7 +54,7 @@ public class MemoryManageActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         LinearLayout topBar = UiKit.pageTopBar(this, "记忆管理");
 
@@ -75,7 +75,7 @@ public class MemoryManageActivity extends Activity {
         // v1.24.0：自动提取按钮
         Button btnExtract = new Button(this);
         btnExtract.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        btnExtract.setContentDescription("btnExtract");   // 自动生成：a11y
+        btnExtract.setContentDescription("AI 提取");
         btnExtract.setText("AI 提取");
         btnExtract.setTextSize(13f);
         btnExtract.setTextColor(Color.WHITE);
@@ -88,9 +88,12 @@ public class MemoryManageActivity extends Activity {
         topBar.addView(btnExtract, elp);
         root.addView(topBar);
 
+        // 分段控件：此前是实色 operit_surface 平铺 + 直角实色选中块，
+        // 与全站玻璃/圆角语言不一致（Robolectric 截图里是一块硬边方砖）。
+        // 现改为玻璃容器 + 强调色胶囊选中态（复用 bg_glass_tile / bg_pill_accent）。
         LinearLayout seg = new LinearLayout(this);
         seg.setOrientation(LinearLayout.HORIZONTAL);
-        seg.setBackgroundColor(getColorCompat(R.color.operit_surface));
+        seg.setBackgroundResource(R.drawable.bg_glass_tile);
         seg.setPadding(dp(4), dp(4), dp(4), dp(4));
         segBtnFacts = makeSegButton("事实 / 画像 / 事件", 0);
         segBtnSummary = makeSegButton("每日摘要", 1);
@@ -151,7 +154,7 @@ public class MemoryManageActivity extends Activity {
     private Button makeSegButton(String text, int tab) {
         Button b = new Button(this);
         b.setHapticFeedbackEnabled(true);   // 自动生成：haptic
-        b.setContentDescription("b");   // 自动生成：a11y
+        b.setContentDescription(text);
         b.setText(text);
         b.setTextSize(13f);
         b.setAllCaps(false);
@@ -170,11 +173,14 @@ public class MemoryManageActivity extends Activity {
     }
 
     private void applySegStyle(Button b, boolean isActive) {
-        b.setBackgroundColor(getColorCompat(isActive
-                ? R.color.operit_primary_container
-                : android.R.color.transparent));
+        // 选中＝强调色玻璃胶囊；未选中＝透明，让容器玻璃透出来
+        b.setBackgroundResource(isActive
+                ? R.drawable.bg_pill_accent
+                : android.R.color.transparent);
+        // 选中文字用正文色而非 accent：accent 文字压在 accent 胶囊上同色相，
+        // 对比度反而低于未选中项（截图里选中项看着「更灰」）。用近白正文色拉开层次。
         b.setTextColor(getColorCompat(isActive
-                ? R.color.operit_accent
+                ? R.color.operit_text_primary
                 : R.color.operit_text_secondary));
     }
 

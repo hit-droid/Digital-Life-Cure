@@ -462,11 +462,11 @@ void LAppModel::Update()
     {
         motionUpdated = _motionManager->UpdateMotion(_model, deltaTimeSeconds); // モーションを更新
     }
-    // 非待機アクション（タップ等）が再生中か。AI 外部パラメータは再生中に待機微動を抑制する
-    _externalActionPlaying.store(
-        _currentMotionGroup.GetLength() > 0
-        && strcmp(_currentMotionGroup.GetRawString(), MotionGroupIdle) != 0
-        && !_motionManager->IsFinished());
+    // 非待機アクション（タップ等）が再生中か。AI 外部パラメータは再生中に待機微動を抑制する。
+    // 待機モーション（PriorityIdle）より高い優先度で再生中なら「アクション再生中」と判定する。
+    // グループ名の文字列比較より頑健で、SDK の実再生状態（優先度）を直接反映する。
+    // モーション終了時は UpdateMotion が優先度を 0 に戻し、Update が待機を再開して 1 になる。
+    _externalActionPlaying.store(_motionManager->GetCurrentPriority() > PriorityIdle);
     _model->SaveParameters(); // 状態を保存
     //-----------------------------------------------------------------
 
@@ -644,7 +644,6 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
     {
         LAppPal::PrintLog("[APP]start motion: [%s_%d]", group, no);
     }
-    _currentMotionGroup = Csm::csmString(group);
     return  _motionManager->StartMotionPriority(motion, autoDelete, priority);
 }
 

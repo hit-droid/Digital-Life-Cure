@@ -24,6 +24,7 @@ set(LAPP_SRCS
     ${LAPP_SRC_DIR}/LAppAllocator.cpp
     ${LAPP_SRC_DIR}/LAppDefine.cpp
     ${LAPP_SRC_DIR}/LAppDelegate.cpp
+    ${LAPP_SRC_DIR}/LAppGroundShadow.cpp
     ${LAPP_SRC_DIR}/LAppLive2DManager.cpp
     ${LAPP_SRC_DIR}/LAppModel.cpp
     ${LAPP_SRC_DIR}/LAppPal.cpp
@@ -33,9 +34,17 @@ set(LAPP_SRCS
     ${LAPP_SRC_DIR}/TouchManager.cpp
 )
 
+# 液态玻璃渲染器（v1.160.0）：无 ImGui 依赖的精简实现，GLES2。
+# 折射着色器移植自「ytbl 液态玻璃」（默檐），详见 glass/GlassRenderer.h 顶部说明。
+set(GLASS_SRC_DIR ${CMAKE_SOURCE_DIR}/glass)
+file(GLOB GLASS_SRCS
+    ${GLASS_SRC_DIR}/*.cpp
+)
+
 add_library(maidendungeon SHARED
     ${FRAMEWORK_SRCS}
     ${LAPP_SRCS}
+    ${GLASS_SRCS}
 )
 
 target_include_directories(maidendungeon PRIVATE
@@ -44,6 +53,7 @@ target_include_directories(maidendungeon PRIVATE
     ${CMAKE_SOURCE_DIR}/Framework
     ${CMAKE_SOURCE_DIR}/Framework/src
     ${CMAKE_SOURCE_DIR}/LApp
+    ${CMAKE_SOURCE_DIR}/glass
 )
 
 target_link_libraries(maidendungeon
@@ -69,4 +79,14 @@ target_link_options(maidendungeon PRIVATE
     "-Wl,-z,common-page-size=16384"
 )
 
-target_compile_definitions(maidendungeon PRIVATE CSM_TARGET_ANDROID_ES2)
+# 渲染质量：模型纹理（典型 2048²）被画进 ~0.35 屏宽的悬浮窗，缩小时约 5×，
+# 仅用 GL_LINEAR 会在缩小时出现高频锯齿/闪烁。改用「预乘 α + mipmap + 三线性过滤」：
+#   * 预乘 α 必须与 mipmap 同时启用——直通 α 的纹理在 glGenerateMipmap 时会把
+#     全透明像素里的颜色漏进低 mip，模型边缘出现暗色描边（halo）。
+#     本宏同时驱动两处：LAppTextureManager 加载时预乘像素、LAppModel 走预乘渲染路径
+#     （IsPremultipliedAlpha(true) → 预乘着色器 + ONE/ONE_MINUS_SRC_ALPHA 混合）。
+#   * mipmap 只在 2 的幂纹理上生成（ES2 不支持 NPOT 的 mipmap），非 POT 退回 GL_LINEAR。
+target_compile_definitions(maidendungeon PRIVATE
+    CSM_TARGET_ANDROID_ES2
+    PREMULTIPLIED_ALPHA_ENABLE
+)

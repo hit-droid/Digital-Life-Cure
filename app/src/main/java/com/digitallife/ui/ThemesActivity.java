@@ -18,7 +18,7 @@ public class ThemesActivity extends Activity {
         super.onCreate(savedInstanceState);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(UiKit.color(this, R.color.operit_bg));
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         LinearLayout topBar = UiKit.pageTopBar(this, getString(R.string.route_themes));
         root.addView(topBar, new LinearLayout.LayoutParams(

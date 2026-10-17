@@ -209,7 +209,8 @@ public class ChatActivity extends Activity {
                 getResources().getDisplayMetrics().widthPixels);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        // v1.158.0 Glass v2：页面级环境光（见 bg_operit_page 注释）
+        root.setBackgroundResource(R.drawable.bg_operit_page);
 
         // ===== 顶栏 =====
         LinearLayout topBar = new LinearLayout(this);
@@ -362,7 +363,7 @@ public class ChatActivity extends Activity {
         HorizontalScrollView chipScroll = new HorizontalScrollView(this);
         chipScrollRef = chipScroll;   // v1.33.0：供与动态建议互斥显示
         chipScroll.setHorizontalScrollBarEnabled(false);
-        chipScroll.setBackgroundColor(getColorCompat(R.color.operit_bg));
+        chipScroll.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         chipScroll.setPadding(dp(10), dp(6), dp(10), dp(6));
         LinearLayout chipRow = new LinearLayout(this);
         chipRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2418,7 +2419,7 @@ public class ChatActivity extends Activity {
         int start = ssb.length();
         ssb.append(ChatTextOps.INTERRUPT_MARK);
         ssb.setSpan(new android.text.style.ForegroundColorSpan(
-                        getColorCompat(R.color.text_secondary)),
+                        getColorCompat(R.color.operit_text_secondary)),
                 start, ssb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         ssb.setSpan(new android.text.style.RelativeSizeSpan(0.85f),
                 start, ssb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -2601,7 +2602,8 @@ public class ChatActivity extends Activity {
         icon.setText("🔧");
         icon.setTextSize(14f);
         icon.setGravity(Gravity.CENTER);
-        icon.setBackgroundResource(R.drawable.bg_glass_tile);
+        // v1.158.0 Glass v2：图标底座换成 accent 染色玻璃方块，和工具卡的强调色口径一致
+        icon.setBackgroundResource(R.drawable.bg_tool_icon);
         header.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
         TextView name = new TextView(this);
@@ -2629,13 +2631,20 @@ public class ChatActivity extends Activity {
 
         // ---- 结果 / 参数体 ----
         TextView body = new TextView(this);
-        body.setTextSize(13f);
+        body.setTextSize(12f);
         body.setLineSpacing(2f, 1f);
+        // v1.158.0 Glass v2：参数/结果体改为等宽字 + 下沉凹槽底，读起来像一段代码块，
+        // 不再和卡片正文糊在一起（旧版是无底纯文字）
+        body.setTypeface(Typeface.MONOSPACE);
         body.setTextColor(getColorCompat(R.color.operit_text_secondary));
-        body.setPadding(0, dp(8), 0, 0);
+        body.setBackgroundResource(R.drawable.bg_tool_body);
+        body.setPadding(dp(10), dp(9), dp(10), dp(9));
         String pretty = ChatTextOps.prettyJson(argsText);
         body.setText("⚙ 参数：\n" + (pretty.isEmpty() ? "（无）" : pretty));
-        card.addView(body);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(9);
+        card.addView(body, blp);
         st.bodyView = body;
 
         card.setOnClickListener(v -> toggleToolCard(v));

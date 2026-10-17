@@ -3,7 +3,7 @@
     <!-- ============================================================
          全 App 强制深色：本文件是唯一色板，不再区分日/夜。
 
-         背景（v1.154.0）：此前 values/ 是「亮色一套」、values-night/ 是「深色一套」，
+         背景（v1.155.0）：此前 values/ 是「亮色一套」、values-night/ 是「深色一套」，
          Operit 改造期间新组件用 operit_*（两套一致，恒深色），但旧组件仍引用
          card_bg / page_bg / text_primary 等旧色 —— 于是**系统浅色模式下**旧组件全部
          按亮色渲染（卡白底、浅字），与 operit_* 的深色界面混成「一半黑一半白」：
@@ -12,40 +12,19 @@
          修法：把深色那套提到 values/ 作为唯一来源，删除 values-night/。
          这样无论系统深浅色，资源解析结果完全相同，界面恒为深色。
          新增颜色一律写在这里，不要再建 values-night/，否则会在浅色模式炸开。
+
+         v1.159.0：旧色板（brand* / page_bg / card_bg / surface_glass / text_* /
+         divider / ripple / brand_glass_bg / bubble_* / *_bg）已全部迁移到下面的
+         operit_* / glass_*，旧条目删除——留着就会被后来者当「另一套口径」误用，
+         重新长出第二套色板。下面只剩语义色 + Operit/Glass 体系。
          ============================================================ -->
 
     <color name="ic_launcher_background">#241634</color>
 
-    <!-- ===== 品牌色 ===== -->
-    <color name="brand">#8B7DF4</color>
-    <color name="brand_dark">#7A6BF0</color>
-    <color name="brand_end">#A89BFF</color>
-    <color name="brand_light">#2B2740</color>
-    <color name="brand_soft">#1E1C2E</color>
-    <color name="brand_stroke">#3A3554</color>
-    <color name="ripple">#3D8B7DF4</color>
-    <color name="brand_glass_bg">#26FFFFFF</color>
-
-    <!-- ===== 中性色 ===== -->
-    <color name="page_bg">#111118</color>
-    <color name="card_bg">#1C1C28</color>
-    <color name="surface_glass">#B31C1C28</color>
-    <color name="text_primary">#F0F0F7</color>
-    <color name="text_secondary">#9C9CB0</color>
-    <color name="text_hint">#5C5C72</color>
-    <color name="divider">#2A2A3A</color>
-
-    <!-- ===== 语义色 ===== -->
+    <!-- ===== 语义色（与 Operit 紫体系无关，仅保留在用到的三档） ===== -->
     <color name="success">#3ECB84</color>
-    <color name="success_bg">#1C3A2C</color>
     <color name="danger">#F2555A</color>
-    <color name="danger_bg">#3A2225</color>
     <color name="warning">#F0B24A</color>
-    <color name="warning_bg">#3A3020</color>
-
-    <!-- ===== 聊天 ===== -->
-    <color name="bubble_user">#7A6BF0</color>
-    <color name="bubble_ai">#1C1C28</color>
 
     <!-- ===== 类型标签 ===== -->
     <color name="tag_care">#F2A54A</color>
@@ -64,7 +43,7 @@
     <color name="brand_operit">#7A66D8</color>
     <color name="brand_operit_light">#9B8CF5</color>
     <color name="brand_operit_dark">#5A48B0</color>
-    <color name="operit_bg">#12101A</color>
+    <color name="operit_bg">#0F0D17</color>
     <color name="operit_surface">#1F1C2C</color>
     <color name="operit_surface_variant">#2A2640</color>
     <color name="operit_text_primary">#F1EDFB</color>
@@ -73,24 +52,40 @@
     <color name="operit_divider">#322D45</color>
     <color name="operit_accent">#B9A6FF</color>
     <color name="operit_primary_container">#2A2545</color>
-    <!-- 顶栏纵向渐变的起始色（向下渐隐到 operit_bg） -->
-    <color name="operit_header_start">#2E2456</color>
-    <!-- 底部导航选中态的图标胶囊底 -->
-    <color name="operit_nav_pill">#4A3D96</color>
+    <!-- 顶栏纵向渐变的起始色（向下渐隐到 operit_bg）。
+         v1.158.0：由 #2E2456 提亮到 #3A2A6E —— 旧值在深紫底上几乎看不出紫，
+         「hero header」名存实亡（浏览器渲染对比证实）。 -->
+    <color name="operit_header_start">#3A2A6E</color>
+    <!-- 顶栏渐变中段（品牌紫 30%），向下再渐隐到透明，接住页面环境光 -->
+    <color name="operit_header_fade">#4D7A66D8</color>
+
+    <!-- ===== Operit 环境光（v1.158.0「Operit Glass v2」） =====
+         玻璃要靠背后有光才成立。整页铺一层「顶紫 + 右紫 + 底紫」的径向光晕
+         （bg_operit_page），卡片/导航的半透明白才叠出磨砂层次。
+         这些只给 bg_operit_page 用，别当普通填充色。 -->
+    <color name="operit_glow_top">#8C7A66D8</color>    <!-- 顶部主光：55% 品牌紫 -->
+    <color name="operit_glow_edge">#3D9B8CF5</color>   <!-- 右上副光：24% 浅紫 -->
+    <color name="operit_glow_bottom">#4D4A3D96</color> <!-- 底部回光：30% 深紫 -->
 
     <!-- ===== Operit Glass 玻璃层 token（v1.157.0） =====
          Android View 无法对背后内容做真实高斯模糊（原生 Window blur 要 API 31+，
          `RenderEffect` 只能糊自己内容），所以这里的「玻璃」＝
          半透明白叠加 + 1dp 高光描边 + 顶部渐亮，叠在深紫底上呈磨砂质感。
          所有玻璃组件必须引用下面这几个 token，不要在 drawable 里写死白透明度。 -->
-    <color name="glass_fill">#16FFFFFF</color>         <!-- 玻璃底：~9% 白 -->
+    <color name="glass_fill">#17FFFFFF</color>         <!-- 玻璃底：~9% 白 -->
     <color name="glass_fill_strong">#24FFFFFF</color>  <!-- 抬升玻璃：~14% 白 -->
-    <color name="glass_border">#28FFFFFF</color>      <!-- 玻璃描边高光：~16% 白 -->
+    <color name="glass_border">#29FFFFFF</color>      <!-- 玻璃描边高光：~16% 白 -->
     <color name="glass_border_soft">#14FFFFFF</color> <!-- 次级描边：~8% 白 -->
     <color name="glass_highlight">#33FFFFFF</color>   <!-- 玻璃顶部渐亮起点 -->
     <color name="glass_sheen">#0DFFFFFF</color>       <!-- 气泡内侧顶部柔光：~5% 白 -->
+    <!-- 强调色玻璃（工具卡 / 当前角色卡等「系统行为」浮层）：
+         不是白玻璃，而是 accent 染色玻璃，用来和普通内容卡区分。 -->
+    <color name="glass_accent_top">#25B9A6FF</color>    <!-- accent 玻璃顶：~14.5% -->
+    <color name="glass_border_accent">#47B9A6FF</color> <!-- accent 玻璃描边：~28% -->
     <!-- 按下涟漪：22% 白。ripple 语义独立于 highlight(20%)，故单列一档，
          供 operit_*_ripple 引用（issue #100）。 -->
     <color name="glass_ripple">#38FFFFFF</color>
+    <!-- 「凹槽」底：参数/代码块这类嵌在玻璃卡里的下沉区域（38% 黑） -->
+    <color name="glass_well">#61000000</color>
     <color name="glass_scrim">#B3000000</color>       <!-- 抽屉/弹窗遮罩：70% 黑 -->
 </resources>

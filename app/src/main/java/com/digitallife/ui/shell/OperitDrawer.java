@@ -1,6 +1,7 @@
 package com.digitallife.ui.shell;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.view.Gravity;
 import android.view.View;
@@ -71,6 +72,21 @@ public class OperitDrawer extends LinearLayout {
     public void setSelected(OperitRoute route) {
         for (Map.Entry<OperitRoute, OperitDrawerItem> e : itemMap.entrySet()) {
             e.getValue().setSelected(e.getKey() == route);
+        }
+    }
+
+    /**
+     * 真折射玻璃层是否可用，由宿主（{@code MainActivity}）在开关抽屉时按实际结果告知。
+     *
+     * <p>可用：背景透明，把「面板底色」交给下层 {@code LiquidGlassLayerView} 的真折射玻璃；
+     * 不可用（native 未加载 / 着色器失败 / 背景快照失败）：保留原有不透明面板，界面照常。
+     * 两者圆角轮廓相同，故切换不会改变阴影与裁切。</p>
+     */
+    public void setGlassEnabled(boolean enabled) {
+        if (enabled) {
+            setBackgroundResource(R.drawable.bg_operit_drawer_glass);
+        } else {
+            setBackgroundResource(R.drawable.bg_operit_drawer);
         }
     }
 

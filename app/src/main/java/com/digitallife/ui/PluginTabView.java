@@ -42,7 +42,8 @@ public class PluginTabView extends LinearLayout {
         this.pluginManager = new PluginManager(activity);
         this.mcpManager = new McpServerManager(activity);
         setOrientation(LinearLayout.VERTICAL);
-        setBackgroundColor(UiKit.color(activity, R.color.operit_bg));
+        // v1.158.0：透明，让 MainActivity 根部的环境光透上来
+        setBackgroundColor(android.graphics.Color.TRANSPARENT);
         buildUi();
     }
 

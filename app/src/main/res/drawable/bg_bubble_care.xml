@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 护理大脑 AI 气泡：深琥珀液态玻璃本体 + 左侧 3dp 琥珀 accent 悬浮竖条。
+<!-- 护理大脑 AI 气泡：琥珀玻璃本体 + 左侧 3dp 琥珀 accent 悬浮竖条（v1.158.0 Glass v2）。
 
      护理色统一到橙系：与列表 tag_care #F2A54A 同源（用户 2026-10-04 决策）。
-     此前是深绿系，与列表橙标签构成「同一语义两种色」。
+     v1.158.0：本体由深绿实色 → 深紫实色 → **琥珀玻璃**（琥珀 24% → 9% 白叠在深底上），
+     配合页面环境光呈磨砂感；竖条改为琥珀→深琥珀渐变。
 
      ⚠️ 竖条用「叠加法」，理由同 bg_bubble_ai（issue #98 B2）：
      不要改回 inset + <size android:width="3dp">，layer-list 默认 gravity=fill 会把它拉伸铺满
@@ -10,18 +11,24 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:top="8dp" android:bottom="8dp">
         <shape android:shape="rectangle">
-            <solid android:color="#F2A54A" />
+            <gradient
+                android:angle="270"
+                android:startColor="#F7C77A"
+                android:endColor="#C97F2C" />
             <corners android:radius="2dp" />
         </shape>
     </item>
     <item android:left="3dp">
         <shape android:shape="rectangle">
+            <!-- 琥珀玻璃：24% → 9% 白（AARRGGBB） -->
             <gradient
-                android:startColor="#5C4318"
-                android:centerColor="#4A3411"
-                android:endColor="#33240B"
-                android:angle="270" />
+                android:angle="270"
+                android:startColor="#3DF2A54A"
+                android:endColor="#17F2A54A" />
             <corners android:radius="16dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#52F2A54A" />
         </shape>
     </item>
 </layer-list>

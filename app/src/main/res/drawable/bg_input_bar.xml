@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 聊天页底部输入栏容器（v1.158.0 Glass v2）：实色 operit_surface → 玻璃抬升面，
+     叠在页面底部回光上，读起来是「从底部浮起的一条玻璃槽」而不是一块死灰面板。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/operit_surface" />
-    <corners android:topLeftRadius="20dp" android:topRightRadius="20dp" />
+    <gradient
+        android:angle="270"
+        android:startColor="@color/glass_fill_strong"
+        android:endColor="@color/glass_fill" />
+    <corners android:topLeftRadius="22dp" android:topRightRadius="22dp" />
 </shape>

@@ -141,7 +141,7 @@ public class EmotionExpressionTest {
         assertNull(EmotionExpression.motionFor("F01"));
         assertEquals("happy", EmotionExpression.motionFor("F02"));
         assertEquals("sad", EmotionExpression.motionFor("F03"));
-        assertNull(EmotionExpression.motionFor("F04"));
+        assertEquals("tilt_head", EmotionExpression.motionFor("F04"));
         assertEquals("surprised", EmotionExpression.motionFor("F05"));
         assertEquals("tilt_head", EmotionExpression.motionFor("F06"));
         assertNull(EmotionExpression.motionFor(null));
