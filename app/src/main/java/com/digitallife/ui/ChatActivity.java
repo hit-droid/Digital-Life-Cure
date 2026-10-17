@@ -473,9 +473,10 @@ public class ChatActivity extends Activity {
         inputBar.addView(btnAttach, alp);
 
         etInput = new EditText(this);
-        // 输入框高度写死 dp(48)，hint 一旦折行第二行就会被裁掉（v1.153.0 真机截图里
-        // 护理版「…可附带模型 zip…」就露出半截）。护理 hint 必须与普通版等长，别再加字。
-        etInput.setHint(isCare ? "向护理大脑提问，点 ＋ 传模型 zip"
+        // 输入框高度写死 dp(48)，hint 一旦折行，第二行就会被裁掉（真机截图：护理版
+        // 「向护理大脑提问，点 ＋ 传模型 zip」第二行的「模型 zip」只露出半截）。
+        // 护理 hint 必须比普通版更短才排得下：压到「点 ＋ 传模型 zip」，保证单行不折。
+        etInput.setHint(isCare ? "点 ＋ 传模型 zip"
                 : "说点什么… ＋ 可附带文件");
         etInput.setTextSize(15f);
         // v1.47.0：改为多行输入。此前 singleLine + IME_ACTION_SEND 会让回车直接发送，
@@ -1549,11 +1550,14 @@ public class ChatActivity extends Activity {
     // ==================== 气泡渲染 ====================
 
     /** 相邻消息间隔超过 5 分钟时插入居中的时间标签（iMessage 风格）
-     *  @param ts 该条消息的真实时间戳（毫秒）；<=0 时回退为当前时间 */
-    private void appendTimeDividerIfNeeded(long ts) {
+     *  @param ts 该条消息的真实时间戳（毫秒）；<=0 时回退为当前时间
+     *  @return true = 本次确实插入了一条分割线。调用方据此决定是否还要画气泡自己的时间戳——
+     *          分割线标注的就是这条消息的时间，再画一条一模一样的时间纯属冗余
+     *          （真机护理首屏截图：「21:23」在气泡上方居中一条、下方靠左又一条）。 */
+    private boolean appendTimeDividerIfNeeded(long ts) {
         long msgTs = ts > 0 ? ts : System.currentTimeMillis();
         long now = System.currentTimeMillis();
-        if (lastTsLabel != 0 && Math.abs(msgTs - lastTsLabel) < 5 * 60 * 1000L) return;
+        if (lastTsLabel != 0 && Math.abs(msgTs - lastTsLabel) < 5 * 60 * 1000L) return false;
         lastTsLabel = msgTs;
         TextView t = new TextView(this);
         // v1.38.0：智能时间分割线（今天 / 昨天 / 更早）
@@ -1565,6 +1569,7 @@ public class ChatActivity extends Activity {
         t.setPadding(0, dp(8), 0, dp(6));
         listContainer.addView(t, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return true;
     }
 
     private TextView newTextViewBubble() {
@@ -1986,6 +1991,14 @@ public class ChatActivity extends Activity {
      * @param mine true=自己的消息（靠右），false=对方（靠左）
      */
     private LinearLayout wrapBubble(TextView bubble, long ts, boolean mine) {
+        return wrapBubble(bubble, ts, mine, true);
+    }
+
+    /**
+     * @param withTime false = 不画气泡自己的时间戳（调用方刚插了一条同时间的时间分割线，
+     *                 再画一条就是上下两条一模一样的时间）
+     */
+    private LinearLayout wrapBubble(TextView bubble, long ts, boolean mine, boolean withTime) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setGravity(mine ? Gravity.END : Gravity.START);
@@ -1995,7 +2008,7 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         blp.topMargin = dp(4);
         wrap.addView(bubble, blp);
-        wrap.addView(newBubbleTime(ts));
+        if (withTime) wrap.addView(newBubbleTime(ts));
         return wrap;
     }
 
@@ -2062,7 +2075,7 @@ public class ChatActivity extends Activity {
 
     /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
     private TextView appendUserBubble(String text, long ts) {
-        appendTimeDividerIfNeeded(ts);
+        boolean dividerShown = appendTimeDividerIfNeeded(ts);
         LinearLayout row = new LinearLayout(this);
         // v1.130.0：纵向——气泡在上、时间戳在下；gravity=END 让两者一起靠右
         row.setOrientation(LinearLayout.VERTICAL);
@@ -2085,8 +2098,8 @@ public class ChatActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(4);
         row.addView(bubble, lp);
-        // v1.130.0：气泡自己的时间戳（5.4 第 1 条）
-        row.addView(newBubbleTime(ts));
+        // v1.130.0：气泡自己的时间戳（5.4 第 1 条）；刚插过同时间的分割线时省掉这行
+        if (!dividerShown) row.addView(newBubbleTime(ts));
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rlp.bottomMargin = dp(2);
@@ -2126,13 +2139,14 @@ public class ChatActivity extends Activity {
 
     /** @param ts 消息真实时间戳（毫秒），用于渲染时间条；<=0 时按当前时间处理 */
     private TextView appendAiBubble(String text, long ts) {
-        appendTimeDividerIfNeeded(ts);
+        boolean dividerShown = appendTimeDividerIfNeeded(ts);
         TextView b = newTextViewBubble();
         // v1.147.0（#83）：登记原始 Markdown 原文，供「复制为 Markdown」使用
         rawMarkdown.put(b, text == null ? "" : text);
         b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
         // v1.130.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
-        listContainer.addView(wrapBubble(b, ts, false));
+        // 刚插过同时间的分割线时不再重复画气泡时间戳
+        listContainer.addView(wrapBubble(b, ts, false, !dividerShown));
         trackAssistant(b);
         // v1.28.0：长消息折叠（历史消息/非流式回复同样生效）
         applyCollapse(b);

@@ -216,6 +216,10 @@ private:
 
     std::atomic<bool> _externalActionPlaying; ///< 非待機アクション再生中フラグ（GLスレッド書込・他スレッド読込）
 
+    Csm::csmString   _lastRandomMotionGroup;      ///< 上次随机抽中的动作组（用于避免组内连续重复）
+    Csm::csmInt32    _lastRandomMotionNo;         ///< 上次随机抽中的组内索引，-1 表示尚未抽过
+    Csm::csmInt32    _lastRandomExpressionNo;     ///< 上次随机抽中的表情索引，-1 表示尚未抽过
+
     Csm::Rendering::CubismRenderTarget_OpenGLES2  _renderBuffer;   ///< フレームバッファ以外の描画先
 };
 

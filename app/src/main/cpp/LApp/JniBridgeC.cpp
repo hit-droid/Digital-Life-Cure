@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
 #include <unistd.h>
 #include <android/log.h>
 #include "JniBridgeC.hpp"
@@ -239,6 +240,15 @@ extern "C"
     JNIEXPORT void JNICALL
     Java_com_digitallife_render_Live2DNative_nativeOnStart(JNIEnv *env, jclass type)
     {
+        // rand() 未播种时行为等同 srand(1)，于是每次冷启动的「随机」序列完全一致：
+        // 待机动作顺序、随机表情、眨眼间隔每次打开 App 都一模一样。
+        // 这里在启动时用高精度单调时钟播种一次（纳秒级，避免快速重启时同种子）。
+        {
+            const long long nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            srand(static_cast<unsigned int>(nowNs));
+        }
+
         LAppDelegate::GetInstance()->OnStart();
     }
 

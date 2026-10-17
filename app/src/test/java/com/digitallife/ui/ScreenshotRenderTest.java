@@ -1,6 +1,7 @@
 package com.digitallife.ui;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.view.View;
@@ -8,6 +9,7 @@ import android.view.View;
 import com.digitallife.care.CareModelsActivity;
 import com.digitallife.ui.shell.OperitDrawer;
 import com.digitallife.ui.shell.OperitRoute;
+import com.digitallife.util.ChatStore;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,6 +49,23 @@ public class ScreenshotRenderTest {
                 Robolectric.buildActivity(CareModelsActivity.class).setup();
         View content = c.get().findViewById(android.R.id.content);
         capture(content, W, H, "care_models.png");
+    }
+
+    /**
+     * 护理会话首屏：琥珀护理气泡 + 三条快捷指令 chips。
+     *
+     * <p>这是真机反馈「气泡被渲染成亮金实色块」的复现点：空护理会话会插入一条种子消息，
+     * 走 {@code bg_bubble_care}。修完那个 drawable 后应该看到「深底 + 琥珀玻璃」，而不是整块金。</p>
+     */
+    @Test
+    public void careChatPage() throws Exception {
+        Intent it = new Intent(
+                org.robolectric.RuntimeEnvironment.getApplication(), ChatActivity.class);
+        it.putExtra("type", ChatStore.TYPE_CARE);
+        ActivityController<ChatActivity> c =
+                Robolectric.buildActivity(ChatActivity.class, it).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        capture(content, W, H, "chat_care.png");
     }
 
     /** 侧栏抽屉：280dp 宽，选中「对话」 */

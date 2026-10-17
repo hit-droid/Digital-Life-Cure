@@ -12,8 +12,14 @@
      ② shape 只给 width 时 intrinsic height = -1，可能整根消失。
 
      叠加法：底层放 accent 条（上下 inset 8dp → 只露中段），上层本体左移 3dp 遮住其余部分，
-     露出的就是 8dp 内缩、2dp 圆角的悬浮竖条。不依赖任何 intrinsic 尺寸，全 API 稳定。 -->
+     露出的就是 8dp 内缩、2dp 圆角的悬浮竖条。不依赖任何 intrinsic 尺寸，全 API 稳定。
+
+     ⚠️ 叠加法成立的前提是**上层本体遮得住底层竖条**，所以本体必须有不透明深底：
+     glass_fill 只有 9% 白、glass_sheen 5% 白，纯玻璃层遮不住底下那条不透明的
+     紫→深紫竖条，竖条会**透穿整只气泡**把整块渲染成紫色，宣称的「3dp 竖条」实际从未显示过
+     （护理气泡 bg_bubble_care 同样漏了这层，真机被渲染成整块亮金，两处一起修）。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 底层：浅紫→深紫 accent 竖条。上下 inset 8dp，被本体遮住后只露左侧 3dp。 -->
     <item android:top="8dp" android:bottom="8dp">
         <shape android:shape="rectangle">
             <gradient
@@ -23,6 +29,14 @@
             <corners android:radius="2dp" />
         </shape>
     </item>
+    <!-- 中层：不透明深紫底（气泡从页面底上抬一层）。必须不透明，见文件头说明。 -->
+    <item android:left="3dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/operit_surface" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <!-- 上层：玻璃渐变本体（9% → 5% 白）叠在深底上 + 淡描边 -->
     <item android:left="3dp">
         <shape android:shape="rectangle">
             <gradient

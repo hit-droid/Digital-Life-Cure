@@ -2,13 +2,17 @@
 <!-- 护理大脑 AI 气泡：琥珀玻璃本体 + 左侧 3dp 琥珀 accent 悬浮竖条（v1.158.0 Glass v2）。
 
      护理色统一到橙系：与列表 tag_care #F2A54A 同源（用户 2026-10-04 决策）。
-     v1.158.0：本体由深绿实色 → 深紫实色 → **琥珀玻璃**（琥珀 24% → 9% 白叠在深底上），
-     配合页面环境光呈磨砂感；竖条改为琥珀→深琥珀渐变。
 
-     ⚠️ 竖条用「叠加法」，理由同 bg_bubble_ai（issue #98 B2）：
-     不要改回 inset + <size android:width="3dp">，layer-list 默认 gravity=fill 会把它拉伸铺满
-     整只气泡、盖住文字。叠加法不依赖 intrinsic 尺寸，minSdk 21 也稳定。 -->
+     ⚠️ 竖条用「叠加法」，理由同 bg_bubble_ai：不要改回 inset + <size android:width="3dp">，
+     layer-list 默认 gravity=fill 会把它拉伸铺满整只气泡、盖住文字。
+
+     ⚠️ 中间那层「不透明深底」不能省：
+     叠加法成立的前提是上层本体**能遮住**底层竖条，只留左侧 3dp。
+     本体若只有半透明琥珀（#3DF2A54A 24% → #17F2A54A 9%），底层那条
+     #F7C77A → #C97F2C 的不透明亮金竖条会**透穿整只气泡**，琥珀再叠一层琥珀
+     → 整块气泡渲染成亮金实色块（真机截图坐实）。所以本体 = 不透明深底 + 琥珀玻璃叠层。 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 底层：琥珀 accent 竖条。上下 inset 8dp，本体遮住其余部分后只露左侧 3dp。 -->
     <item android:top="8dp" android:bottom="8dp">
         <shape android:shape="rectangle">
             <gradient
@@ -18,9 +22,16 @@
             <corners android:radius="2dp" />
         </shape>
     </item>
+    <!-- 中层：不透明深底（气泡从页面底上抬一层）。必须不透明，见文件头说明。 -->
     <item android:left="3dp">
         <shape android:shape="rectangle">
-            <!-- 琥珀玻璃：24% → 9% 白（AARRGGBB） -->
+            <solid android:color="@color/operit_surface" />
+            <corners android:radius="16dp" />
+        </shape>
+    </item>
+    <!-- 上层：琥珀玻璃（琥珀 24% → 9%）叠在深底上 + 琥珀描边 -->
+    <item android:left="3dp">
+        <shape android:shape="rectangle">
             <gradient
                 android:angle="270"
                 android:startColor="#3DF2A54A"

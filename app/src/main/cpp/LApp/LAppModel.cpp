@@ -69,6 +69,8 @@ LAppModel::LAppModel()
     , _modelSetting(NULL)
     , _userTimeSeconds(0.0f)
     , _loadFailed(false)
+    , _lastRandomMotionNo(-1)
+    , _lastRandomExpressionNo(-1)
 {
     if (DebugLogEnable)
     {
@@ -649,12 +651,24 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
 
 CubismMotionQueueEntryHandle LAppModel::StartRandomMotion(const csmChar* group, csmInt32 priority, ACubismMotion::FinishedMotionCallback onFinishedMotionHandler)
 {
-    if (_modelSetting->GetMotionCount(group) == 0)
+    const csmInt32 count = _modelSetting->GetMotionCount(group);
+    if (count == 0)
     {
         return InvalidMotionQueueEntryHandleValue;
     }
 
-    csmInt32 no = rand() % _modelSetting->GetMotionCount(group);
+    csmInt32 no = rand() % count;
+
+    // 组内动作多于一个时，避免连续两次抽到同一个：待机动作会循环反复播放，
+    // 连续重复同一个动作观感很呆。在「除 no 外的 count-1 个」里均匀重抽：
+    // k ∈ [0, count-2] → no' = (no + 1 + k) % count。
+    const csmString groupName(group);
+    if (count > 1 && groupName == _lastRandomMotionGroup && no == _lastRandomMotionNo)
+    {
+        no = (no + 1 + rand() % (count - 1)) % count;
+    }
+    _lastRandomMotionGroup = groupName;
+    _lastRandomMotionNo = no;
 
     return StartMotion(group, no, priority, onFinishedMotionHandler);
 }
@@ -729,12 +743,20 @@ void LAppModel::SetExpression(const csmChar* expressionID)
 
 void LAppModel::SetRandomExpression()
 {
-    if (_expressions.GetSize() == 0)
+    const csmInt32 count = _expressions.GetSize();
+    if (count == 0)
     {
         return;
     }
 
-    csmInt32 no = rand() % _expressions.GetSize();
+    csmInt32 no = rand() % count;
+
+    // 同上：表情多于一个时避免连续抽到同一个（连点两下换出一模一样的表情很像没反应）。
+    if (count > 1 && no == _lastRandomExpressionNo)
+    {
+        no = (no + 1 + rand() % (count - 1)) % count;
+    }
+    _lastRandomExpressionNo = no;
     csmMap<csmString, ACubismMotion*>::const_iterator map_ite;
     csmInt32 i = 0;
     for (map_ite = _expressions.Begin(); map_ite != _expressions.End(); map_ite++)
