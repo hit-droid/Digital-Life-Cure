@@ -309,7 +309,7 @@ public class CareTools {
         if (modelsDir == null) return "模型目录未初始化。";
         File[] dirs = modelsDir.listFiles(File::isDirectory);
         if (dirs == null || dirs.length == 0) {
-            return "尚未安装任何模型。\n可以在护理大脑对话中上传模型 zip 文件，我会自动解压并安装。";
+            return "尚未安装任何模型。\n可以在 Agent 对话中上传模型 zip 文件，我会自动解压并安装。";
         }
         StringBuilder sb = new StringBuilder("已安装模型：\n");
         for (int i = 0; i < dirs.length; i++) {
@@ -582,7 +582,7 @@ public class CareTools {
         }
         PetService svc = PetService.getInstance();
         if (svc == null) {
-            return "桌宠未启动，无法切换。请先启动桌宠再让护理大脑切换模型。";
+            return "桌宠未启动，无法切换。请先启动桌宠再让 Agent 切换模型。";
         }
         svc.switchToModelByName(matched);
         return "已切换模型至: " + matched + "（已设为默认，下次启动自动加载）";

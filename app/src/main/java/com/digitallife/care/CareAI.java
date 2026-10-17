@@ -54,7 +54,7 @@ public class CareAI {
     }
 
     private static final String SYSTEM_PROMPT =
-            "你是数字生命的护理大脑，负责管理桌面上的 Live2D 虚拟角色。\n\n" +
+            "你是数字生命的 Agent（智能体），负责管理桌面上的 Live2D 虚拟角色。\n\n" +
             "你的能力：\n" +
             "1. 模型管理：列出、检查、分析、安装、修复 Live2D 模型；可读取/写入模型任意 json 文件、修复引用路径、备份恢复模型\n" +
             "2. 动作管理：列出、创建、修改、删除、修复模型动作（.motion3.json），可指定参数曲线\n" +
@@ -422,7 +422,7 @@ public class CareAI {
             return;
         }
         if (llm == null || llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
-            postError("还没有可用的护理模型配置。请到「设置 → 模型配置」添加护理大脑模型后重试。");
+            postError("还没有可用的 Agent 模型配置。请到「设置 → 模型配置」添加模型后重试。");
             if (gen == generation) running.set(false);
             return;
         }

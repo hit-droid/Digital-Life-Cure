@@ -62,6 +62,7 @@ public class ScreenshotRenderTest {
         Intent it = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ChatActivity.class);
         it.putExtra("type", ChatStore.TYPE_CARE);
+        it.putExtra("title", ChatStore.TITLE_CARE);
         ActivityController<ChatActivity> c =
                 Robolectric.buildActivity(ChatActivity.class, it).setup();
         View content = c.get().findViewById(android.R.id.content);

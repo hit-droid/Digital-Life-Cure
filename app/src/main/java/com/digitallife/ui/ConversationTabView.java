@@ -117,8 +117,11 @@ public class ConversationTabView extends LinearLayout {
     public void refresh() {
         if (listContainer == null) return;
         listContainer.removeAllViews();
-        // 护理大脑会话始终存在并置顶
-        chatStore.ensureSession(ChatStore.SESSION_CARE, "护理大脑", ChatStore.TYPE_CARE, "care", null);
+        // Agent 会话始终存在并置顶
+        chatStore.ensureSession(ChatStore.SESSION_CARE, ChatStore.TITLE_CARE, ChatStore.TYPE_CARE, "care", null);
+        // v1.162.0：ensureSession 对已存在的行直接 return，老用户的库里还留着旧标题
+        // 「护理大脑」，这里把内置会话标题对齐到当前版本（只动内置会话）。
+        chatStore.syncBuiltinSessionTitle(ChatStore.SESSION_CARE, ChatStore.TITLE_CARE);
         List<ChatStore.SessionInfo> sessions = chatStore.getSessions();
         // v1.129.0：空态不再 return——引导卡插在最上方，护理会话卡片照常渲染在下方
         if (!hasUserSession(sessions)) {
@@ -172,9 +175,9 @@ public class ConversationTabView extends LinearLayout {
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setGravity(Gravity.CENTER);
         chips.addView(guideChip("＋ 新建", v -> showNewSessionDialog()));
-        chips.addView(guideChip("✦ 打开护理大脑", v -> {
+        chips.addView(guideChip("✦ 打开 Agent", v -> {
             if (listener != null) {
-                listener.onOpenSession(ChatStore.SESSION_CARE, "护理大脑",
+                listener.onOpenSession(ChatStore.SESSION_CARE, ChatStore.TITLE_CARE,
                         ChatStore.TYPE_CARE, "care");
             }
         }));
@@ -332,7 +335,7 @@ public class ConversationTabView extends LinearLayout {
 
     private void showRenameDialog(ChatStore.SessionInfo s) {
         if (ChatStore.SESSION_CARE.equals(s.id)) {
-            Toast.makeText(activity, "护理大脑会话是系统内置的，不能改名。", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "Agent 会话是系统内置的，不能改名。", Toast.LENGTH_SHORT).show();
             return;
         }
         final EditText et = new EditText(activity);
@@ -363,7 +366,7 @@ public class ConversationTabView extends LinearLayout {
         rbChat.setText("对话大脑（日常聊天）");
         rbChat.setChecked(true);
         final android.widget.RadioButton rbCare = new android.widget.RadioButton(activity);
-        rbCare.setText("护理大脑（模型体检 / 动作创作）");
+        rbCare.setText("Agent（模型体检 / 动作创作）");
         LinearLayout body = new LinearLayout(activity);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(UiKit.dp(activity, 20), UiKit.dp(activity, 4),
@@ -376,7 +379,7 @@ public class ConversationTabView extends LinearLayout {
                 .setView(body)
                 .setPositiveButton("创建", (d, w) -> {
                     String title = et.getText().toString().trim();
-                    if (title.isEmpty()) title = rbCare.isChecked() ? "护理会话" : "新对话";
+                    if (title.isEmpty()) title = rbCare.isChecked() ? "Agent 会话" : "新对话";
                     String type = rbCare.isChecked() ? ChatStore.TYPE_CARE : ChatStore.TYPE_CHAT;
                     String id = chatStore.createSession(title, type,
                             rbCare.isChecked() ? "care" : "chat", null);
@@ -388,7 +391,7 @@ public class ConversationTabView extends LinearLayout {
 
     private void confirmDelete(ChatStore.SessionInfo s) {
         if (ChatStore.SESSION_CARE.equals(s.id)) {
-            Toast.makeText(activity, "护理大脑会话是系统内置的，不能删除。可清空其对话。", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "Agent 会话是系统内置的，不能删除。可清空其对话。", Toast.LENGTH_SHORT).show();
             return;
         }
         new android.app.AlertDialog.Builder(activity)

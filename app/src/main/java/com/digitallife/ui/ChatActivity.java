@@ -233,7 +233,11 @@ public class ChatActivity extends Activity {
 
         TextView tvTitle = new TextView(this);
         tvTitleRef = tvTitle;   // v1.32.0：供自动标题更新
-        tvTitle.setText(title == null || title.isEmpty() ? "对话" : title);
+        // v1.162.0：没有传标题时也要区分页面身份——sessionKey 会兜底成 SESSION_CARE
+        // （见 onCreate），此时若一律显示「对话」会把 Agent 页认错成普通会话。
+        tvTitle.setText(title == null || title.isEmpty()
+                ? (isCare ? ChatStore.TITLE_CARE : "对话")
+                : title);
         tvTitle.setTextSize(18f);
         tvTitle.setTextColor(Color.WHITE);
         tvTitle.setGravity(Gravity.CENTER);
@@ -242,12 +246,14 @@ public class ChatActivity extends Activity {
         topBar.addView(tvTitle, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        // v1.26.0：护理大脑模式徽章（pill 描边样式）
+        // v1.26.0：Agent 模式徽章（pill 描边样式）
         if (isCare) {
             TextView careBadge = new TextView(this);
-            careBadge.setText("● 医疗");
+            // v1.162.0：徽章由「● 医疗」改为「● Agent」——这一页本是模型/动作智能体，
+            // 医疗徽章与「症状/饮食/用药」引导 chips 一起造成了"莫名其妙"的护理观感。
+            careBadge.setText("● Agent");
             careBadge.setTextSize(11f);
-            careBadge.setTextColor(0xFFF7C77A);  // 琥珀（护理色统一到橙系）
+            careBadge.setTextColor(0xFFF7C77A);  // 琥珀（沿用原护理色，用户 2026-10-17 拍板）
             careBadge.setBackgroundResource(R.drawable.bg_pill_care);
             careBadge.setPadding(dp(10), dp(3), dp(10), dp(3));
             LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
@@ -368,17 +374,18 @@ public class ChatActivity extends Activity {
         LinearLayout chipRow = new LinearLayout(this);
         chipRow.setOrientation(LinearLayout.HORIZONTAL);
         chipRow.setGravity(Gravity.CENTER_VERTICAL);
-        // v1.26.0：护理大脑用专属 chips（健康/医疗主题）
+        // v1.26.0：Agent 用专属 chips——v1.162.0 起去掉「症状/饮食/用药/运动/复盘」这套
+        // 医疗主题，换成 Agent 的真实能力入口（与 CareAI 提示词里的能力清单一一对应：
+        // 模型管理 / 动作管理 / 工作流 / 定时任务）。保持 5 个的视觉宽度不变改为 4 个。
         String[] chipLabels;
         String[] chipInserts;
         if (isCare) {
-            chipLabels = new String[]{"症状", "饮食", "用药", "运动", "复盘"};
+            chipLabels = new String[]{"模型", "动作", "工作流", "定时"};
             chipInserts = new String[]{
-                    "我最近有以下症状，请帮我分析：",
-                    "请帮我设计一份适合我的饮食方案：",
-                    "请帮我看看这个用药方案：",
-                    "请帮我制定一个运动计划：",
-                    "请帮我复盘最近的健康数据："
+                    "列出我已安装的模型，并告诉我怎么导入新的模型 zip：",
+                    "列出当前模型的所有动作，并播放一个给我看看：",
+                    "介绍一下你能编排的工作流，然后帮我建一个：",
+                    "帮我创建一个定时任务："
             };
         } else {
             chipLabels = new String[]{"语音", "拍照", "翻译", "总结", "联网"};
@@ -581,7 +588,7 @@ public class ChatActivity extends Activity {
     private void restoreHistory() {
         List<ChatStore.StoredMsg> msgs = chatStore.getMessages(sessionKey, 100);
         if (msgs.isEmpty() && isCare) {
-            appendAiBubble("你好，我是护理大脑。\n\n可以给我发模型 zip 压缩包（点左下角 ＋），我会自动解压体检、分析完整性、修复缺失文件，还能创作和编辑动作。");
+            appendAiBubble("你好，我是 Agent。\n\n可以给我发模型 zip 压缩包（点左下角 ＋），我会自动解压体检、分析完整性、修复缺失文件，还能创作和编辑动作。");
             appendCareQuickChips();
             return;
         }
@@ -900,7 +907,7 @@ public class ChatActivity extends Activity {
         } else if (cur != null && cur.name != null && !cur.name.isEmpty()) {
             label = cur.name;
         } else {
-            label = isCare ? "护理模型" : "选择模型";
+            label = isCare ? "Agent" : "选择模型";
         }
         btnModel.setText("模型 " + label + " ▾");
     }

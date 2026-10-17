@@ -14,7 +14,7 @@ public enum OperitRoute {
     SETTINGS   (R.string.route_settings,   R.drawable.ic_tab_settings, "settings",   true,  "配置你的数字生命"),
 
     MEMORY     (R.string.route_memory,     R.drawable.ic_tab_discover, "memory",     false, "记忆图谱化管理"),
-    CARE       (R.string.route_care,       R.drawable.ic_tab_discover, "care",       false, "护理大脑，管理模型"),
+    CARE       (R.string.route_care,       R.drawable.ic_tab_discover, "care",       false, "Agent，管理模型与动作"),
     CONSOLE    (R.string.route_console,    R.drawable.ic_tab_tool,    "console",    false, "智能体实时控制台"),
     PERSONA    (R.string.route_persona,    R.drawable.ic_tab_settings, "persona",    false, "创建/编辑/切换角色"),
     TOOLMARKET (R.string.route_tool_market, R.drawable.ic_tab_tool,    "tool",       false, "启用/禁用工具，查看调用统计"),

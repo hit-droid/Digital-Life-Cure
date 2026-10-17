@@ -206,7 +206,7 @@ public class CareExecutor {
             return "当前没有可用的 Live2D 模型，请先安装或切换模型。";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("🩺 桌宠模型健康检查（共 ").append(count).append(" 个模型）:\n");
+        sb.append("🔍 桌宠模型健康检查（共 ").append(count).append(" 个模型）:\n");
         for (int i = 0; i < count; i++) {
             String dirName = null;
             try {

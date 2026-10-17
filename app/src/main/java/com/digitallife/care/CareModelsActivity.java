@@ -31,7 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 护理大脑模型管理面板。
+ * Agent 模型管理面板。
  * 列出所有已安装的 Live2D 模型（内置 + 已导入），展示动作/资源状态，
  * 支持从本地导入、查看详情、立即切换、设为默认、删除、播放动作。
  */
@@ -150,7 +150,7 @@ public class CareModelsActivity extends Activity {
 
         if (count <= 0) {
             TextView empty = new TextView(this);
-            empty.setText("暂无可用模型。\n点右上角「导入」选择模型 zip，或在护理大脑对话中发送 zip 安装。");
+            empty.setText("暂无可用模型。\n点右上角「导入」选择模型 zip，或在 Agent 对话中发送 zip 安装。");
             empty.setTextSize(13f);
             empty.setTextColor(getColorCompat(R.color.operit_text_secondary));
             empty.setPadding(dp(8), dp(20), dp(8), dp(20));

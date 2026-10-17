@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.162.0 (2026-10-17)
+
+承接 v1.161.0。本版把「**护理大脑**」正名为「**Agent**」，并清掉整页的医疗味——
+它本来的职责就是管理桌面上的 Live2D 虚拟角色（模型 / 动作 / 工作流 / 定时任务），
+挂「护理 / 医疗」的马甲反而让人看不懂（用户 2026-10-17 反馈：「护理大脑换成 Agent、
+那个护理界面的饮食等莫名其妙的」）。
+
+### 用户可见文案：护理大脑 → Agent
+
+抽屉路由 `route_care`、会话列表内置会话标题（`ChatStore.TITLE_CARE`）、空态引导 chip
+「✦ 打开 Agent」、新建会话单选「Agent（模型体检 / 动作创作）」、默认标题「Agent 会话」、
+两个内置会话 Toast（不能改名 / 不能删除）、模型选择按钮（「护理模型」→「模型 Agent」）、
+种子消息（「你好，我是护理大脑」→「你好，我是 Agent」）、`CareAI` 系统提示词与
+「还没配置」报错文案、`CareModelsActivity` 空态文案、`CareTools` 两处提示、
+`OperitRoute` 抽屉副标题。
+
+### 去医疗化
+
+- 徽章「● 医疗」→「● Agent」。
+- 引导 chips 由「症状 / 饮食 / 用药 / 运动 / 复盘」换成 Agent 的四项真实能力入口
+  「模型 / 动作 / 工作流 / 定时」——与 `CareAI` 提示词里写的能力清单一一对应。
+- `CareExecutor` 模型体检输出的 🩺 换成 🔍。
+- **未动**：内部包名 `care/`、`CareAI`/`CareTools` 等类名、`SESSION_CARE`/`TYPE_CARE`
+  与会话 key `"care"`（改了历史消息就丢）；琥珀色系（用户拍板沿用）。
+
+### 老用户不再看到旧名
+
+`ChatStore.ensureSession` 对**已存在**的行直接 return，所以单纯改字面量只对新安装生效、
+老用户库里会永远留着旧标题。新增 `syncBuiltinSessionTitle()`：会话列表刷新时把**内置会话**
+标题对齐到当前版本；只对内置会话开放，用户自建会话的改名绝不被覆盖。
+
+另修：聊天页未传标题时一律显示「对话」，而 `sessionKey` 会兜底成 `SESSION_CARE`，
+于是 Agent 页会被认成普通会话——改为按 `isCare` 兜底成「Agent」。
+
+### 校验
+
+`tools/check_color_parity.sh` PASS；`tools/verify.sh` 全绿（587 单测 / 50 类、lint 0 error）。
+护理会话首屏由 `ScreenshotRenderTest` 出图逐项核对：标题 Agent、徽章 ● Agent、
+模型按钮「模型 Agent ▾」、种子消息「你好，我是 Agent」、底部 chips 模型/动作/工作流/定时。
+
 ## v1.161.0 (2026-10-17)
 
 承接 v1.160.0。本版两条主线：**Live2D 动作机制**（随机动作/表情此前从未播种，每次冷启动

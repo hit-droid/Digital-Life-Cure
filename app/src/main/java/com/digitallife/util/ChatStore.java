@@ -20,8 +20,19 @@ import java.util.List;
  */
 public class ChatStore {
 
-    /** 护理大脑会话键 */
+    /** 护理大脑会话键（内部标识，**不要改**：改了历史消息就丢） */
     public static final String SESSION_CARE = "care";
+
+    /**
+     * 内置 Agent 会话的展示标题。
+     * <p>v1.162.0 由「护理大脑」改名为「Agent」——它本来的职责就是管理 Live2D 模型与动作，
+     * 挂「护理/医疗」的马甲反而误导。改的是**用户可见文案**，内部包名 {@code care/}、
+     * {@link #SESSION_CARE}、{@link #TYPE_CARE} 一律不动。</p>
+     * <p>注意：{@link #ensureSession} 对已存在的行直接 return，所以只改这里的字面量
+     * **只对新安装生效**，老用户库里会永远留着旧标题——由
+     * {@link #syncBuiltinSessionTitle} 在会话列表刷新时把标题对齐。</p>
+     */
+    public static final String TITLE_CARE = "Agent";
 
     private static final String DB_NAME = "pet_chat.db";
     // v1.147.0（#82）：sessions 表新增 pinned 列，旧库靠 onUpgrade 补列
@@ -127,6 +138,23 @@ public class ChatStore {
         v.put("updated_at", now);
         v.put("pinned", 0);
         db.insert("sessions", null, v);
+    }
+
+    /**
+     * 同步**系统内置会话**的展示标题（v1.162.0）。
+     * <p>内置会话的标题由 App 完全掌控，但 {@link #ensureSession} 对已存在的行直接 return，
+     * 于是改标题只对新安装生效、老用户的库里永远留着旧标题（v1.162.0「护理大脑」→「Agent」
+     * 就会在新老用户之间显示不一致）。这里只在标题确实不同时才写库。</p>
+     * <p>**只对内置会话开放**：用户自建会话的改名绝不能被 App 覆盖。</p>
+     */
+    public synchronized boolean syncBuiltinSessionTitle(String sessionKey, String title) {
+        if (!SESSION_CARE.equals(sessionKey)) return false;
+        if (title == null || title.trim().isEmpty()) return false;
+        String t = title.trim();
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues v = new ContentValues();
+        v.put("title", t);
+        return db.update("sessions", v, "id = ? AND title <> ?", new String[]{sessionKey, t}) > 0;
     }
 
     /** 新建会话，返回 session id */
