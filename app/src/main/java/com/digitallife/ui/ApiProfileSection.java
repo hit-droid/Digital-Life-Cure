@@ -80,12 +80,12 @@ public class ApiProfileSection {
         btnNew.setOnClickListener(v -> startNewProfile());
         cardSel.addView(newRow, UiKit.lp(ctx, 0));
 
-        // 用途 Tab（对话大脑 / 护理大脑）
+        // 用途 Tab（对话大脑 / Agent）
         LinearLayout scopeRow = new LinearLayout(ctx);
         scopeRow.setOrientation(LinearLayout.HORIZONTAL);
         scopeRow.setGravity(Gravity.CENTER_VERTICAL);
         btnScopeChat = tabButton("对话大脑", ApiManager.SCOPE_CHAT);
-        btnScopeCare = tabButton("护理大脑", ApiManager.SCOPE_CARE);
+        btnScopeCare = tabButton("Agent", ApiManager.SCOPE_CARE);
         scopeRow.addView(btnScopeChat, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 40), 1));
         scopeRow.addView(btnScopeCare, new LinearLayout.LayoutParams(0, UiKit.dp(ctx, 40), 1));
         cardSel.addView(scopeRow, UiKit.lp(ctx, 10));
@@ -228,7 +228,7 @@ public class ApiProfileSection {
     }
 
     private String scopeLabel() {
-        return ApiManager.SCOPE_CARE.equals(scope) ? "护理大脑" : "对话大脑";
+        return ApiManager.SCOPE_CARE.equals(scope) ? "Agent" : "对话大脑";
     }
 
     // ==================== 当前配置 ====================

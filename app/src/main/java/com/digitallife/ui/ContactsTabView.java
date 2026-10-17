@@ -113,7 +113,7 @@ public class ContactsTabView extends LinearLayout {
         List<String> imported = ModelManager.listImportedModelDirs(activity);
         if (count <= 0) {
             TextView empty = new TextView(activity);
-            empty.setText("暂无可用模型。\n可在对话页打开「护理大脑」，发送模型 zip 压缩包完成安装。");
+            empty.setText("暂无可用模型。\n可在对话页打开「Agent」，发送模型 zip 压缩包完成安装。");
             empty.setTextSize(13f);
             empty.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
             empty.setGravity(Gravity.CENTER);
@@ -204,7 +204,7 @@ public class ContactsTabView extends LinearLayout {
         info.addView(nameRow);
 
         TextView status = new TextView(activity);
-        status.setText(hasMotions ? "动作齐全，可以自由活动" : "暂无动作文件（可通过护理大脑补全）");
+        status.setText(hasMotions ? "动作齐全，可以自由活动" : "暂无动作文件（可通过 Agent 补全）");
         status.setTextSize(13f);
         status.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
         info.addView(status, UiKit.lp(activity, 2));

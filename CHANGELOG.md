@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.163.0 (2026-10-17)
+
+承接 v1.162.0。本版两件事：给 Agent 页装上**真正的工作台入口**，并**收尾去医疗化**——
+v1.162.0 改的可见文案有漏网，模型切换弹窗、会话导出、会话列表类型标签、联系人页空态、
+API 用途 Tab 里还残留「护理大脑」。
+
+### Agent 页：工作台入口
+
+- Agent 页底部 chips 行首新增「工作台」小节标题。
+- 首个入口由提示词「模型」改为「**模型管理 ›**」，点击**真页面跳转**直达早已存在的
+  `CareModelsActivity`——此前只能从抽屉 / 设置绕进去，没理由再让 AI 复述一遍。
+  实现上把该项的提示词置 `null`，`chip` 点击时判空走 `startActivity`，其余项仍为快捷发送。
+
+### 去医疗化收尾（v1.162.0 漏网）
+
+- `ChatActivity`：模型切换弹窗标题「切换护理大脑模型」→「切换 Agent 模型」；会话导出
+  两处「会话类型：护理大脑」→「Agent」；自动命名默认标题常量 `DEFAULT_TITLE_CARE`
+  「护理会话」→「Agent 会话」（对齐 `ConversationTabView` 新建时的默认标题，否则自动命名
+  会对内置/新建 Agent 会话失效）。
+- `ConversationTabView`：会话卡片类型标签「护理」→「Agent」。
+- `ContactsTabView`：模型空态「打开「护理大脑」」、动作空态「可通过护理大脑补全」→「Agent」。
+- `ApiProfileSection`：API 配置用途 Tab「护理大脑」→「Agent」（两处：Tab 文案 + 当前用途标签）。
+- `CareToolHost`：工具表不可用报错「护理工具表不可用」→「Agent 工具表不可用」。
+- **未动**：内部包名 `care/`、`CareAI`/`CareModelsActivity` 等类名、`SESSION_CARE`/`TYPE_CARE`
+  与会话 key `"care"`（改了历史消息就丢）；`drawable/*_care` 文件名与其中的注释（非用户可见）。
+
+### 校验
+
+`tools/verify.sh` 全绿（587 单测 / 50 类、lint 0 error、APK 通过）。Agent 会话首屏由
+`ScreenshotRenderTest` 出图核对：标题 Agent、徽章 ● Agent、模型按钮「模型 Agent ▾」、
+底部 chips 行首「工作台」+「模型管理 › / 动作 / 工作流 / 定时」。
+
 ## v1.162.0 (2026-10-17)
 
 承接 v1.161.0。本版把「**护理大脑**」正名为「**Agent**」，并清掉整页的医疗味——

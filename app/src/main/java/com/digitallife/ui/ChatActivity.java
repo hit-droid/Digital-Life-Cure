@@ -376,13 +376,24 @@ public class ChatActivity extends Activity {
         chipRow.setGravity(Gravity.CENTER_VERTICAL);
         // v1.26.0：Agent 用专属 chips——v1.162.0 起去掉「症状/饮食/用药/运动/复盘」这套
         // 医疗主题，换成 Agent 的真实能力入口（与 CareAI 提示词里的能力清单一一对应：
-        // 模型管理 / 动作管理 / 工作流 / 定时任务）。保持 5 个的视觉宽度不变改为 4 个。
+        // 模型管理 / 动作管理 / 工作流 / 定时任务）。
+        // v1.163.0：行首加「工作台」小节标题，且「模型管理」是**真页面跳转**——
+        // CareModelsActivity 早就存在，此前只能从抽屉/设置绕进去，没理由让 AI 复述一遍。
+        if (isCare) {
+            TextView workbench = new TextView(this);
+            workbench.setText("工作台");
+            workbench.setTextSize(12f);
+            workbench.setTextColor(getColorCompat(R.color.operit_text_secondary));
+            workbench.setPadding(0, 0, dp(8), 0);
+            chipRow.addView(workbench);
+        }
         String[] chipLabels;
         String[] chipInserts;
         if (isCare) {
-            chipLabels = new String[]{"模型", "动作", "工作流", "定时"};
+            // insert 为 null = 该项不是提示词，而是跳转到已有页面（见下面的分支）
+            chipLabels = new String[]{"模型管理 ›", "动作", "工作流", "定时"};
             chipInserts = new String[]{
-                    "列出我已安装的模型，并告诉我怎么导入新的模型 zip：",
+                    null,
                     "列出当前模型的所有动作，并播放一个给我看看：",
                     "介绍一下你能编排的工作流，然后帮我建一个：",
                     "帮我创建一个定时任务："
@@ -412,6 +423,12 @@ public class ChatActivity extends Activity {
             chip.setLayoutParams(chipLp);
             chip.setOnClickListener(v -> {
                 UiKit.flash(v);
+                if (insert == null) {
+                    // v1.163.0：跳转项（insert 为 null）不进输入框，直接开已有页面
+                    startActivity(new Intent(ChatActivity.this,
+                            com.digitallife.care.CareModelsActivity.class));
+                    return;
+                }
                 etInput.setText(insert);
                 etInput.setSelection(insert.length());
             });
@@ -932,7 +949,7 @@ public class ChatActivity extends Activity {
                     + " · " + (p.model == null || p.model.isEmpty() ? "?" : p.model);
         }
         new android.app.AlertDialog.Builder(this)
-                .setTitle(isCare ? "切换护理大脑模型" : "切换对话大脑模型")
+                .setTitle(isCare ? "切换 Agent 模型" : "切换对话大脑模型")
                 .setSingleChoiceItems(names, curIdx, (d, w) -> {
                     com.digitallife.util.ApiProfile sel = list.get(w);
                     am.setCurrent(scope, sel.id);
@@ -2360,7 +2377,7 @@ public class ChatActivity extends Activity {
 
     /** 默认标题（与 ConversationTabView 新建时一致），命中才自动命名 */
     private static final String DEFAULT_TITLE_CHAT = "新对话";
-    private static final String DEFAULT_TITLE_CARE = "护理会话";
+    private static final String DEFAULT_TITLE_CARE = "Agent 会话";
     private boolean titleAutoTried = false;
 
     /**
@@ -3077,7 +3094,7 @@ public class ChatActivity extends Activity {
         sb.append("# ").append(exportTitle).append(" - 会话导出\n\n");
         sb.append("> 导出时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
                 .format(new Date())).append("\n");
-        sb.append("> 会话类型：").append(isCare ? "护理大脑" : "对话大脑").append("\n");
+        sb.append("> 会话类型：").append(isCare ? "Agent" : "对话大脑").append("\n");
         sb.append("> 消息数量：").append(msgs.size()).append("\n\n");
         sb.append("---\n\n");
         SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
@@ -3109,7 +3126,7 @@ public class ChatActivity extends Activity {
         sb.append("[【").append(title == null || title.isEmpty() ? "对话" : title).append("】]\n");
         sb.append("导出时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA)
                 .format(new Date())).append("\n");
-        sb.append("会话类型：").append(isCare ? "护理大脑" : "对话大脑").append("\n");
+        sb.append("会话类型：").append(isCare ? "Agent" : "对话大脑").append("\n");
         sb.append("消息数：").append(msgs.size()).append("\n\n");
         SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.CHINA);
         for (ChatStore.StoredMsg m : msgs) {

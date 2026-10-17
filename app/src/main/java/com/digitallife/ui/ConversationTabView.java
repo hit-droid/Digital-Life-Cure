@@ -406,7 +406,7 @@ public class ConversationTabView extends LinearLayout {
     }
 
     private String typeLabel(String type) {
-        if (ChatStore.TYPE_CARE.equals(type)) return "护理";
+        if (ChatStore.TYPE_CARE.equals(type)) return "Agent";
         if (ChatStore.TYPE_MODEL.equals(type)) return "模型";
         return "对话";
     }

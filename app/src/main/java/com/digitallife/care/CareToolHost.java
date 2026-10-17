@@ -65,7 +65,7 @@ public final class CareToolHost extends Tools {
             return;
         }
         if (care == null) {
-            cb.onResult(name, a, null, "护理工具表不可用");
+            cb.onResult(name, a, null, "Agent 工具表不可用");
             return;
         }
         String result = care.execute(name, a);
