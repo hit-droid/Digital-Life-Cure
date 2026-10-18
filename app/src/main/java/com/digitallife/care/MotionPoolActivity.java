@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -60,6 +62,13 @@ import java.util.Set;
  * 实时过滤（命中模型的卡片只列命中项，索引仍按原始组内下标，保证点播不错位）；点播按钮在
  * **非当前默认模型**上显示为「切播」——一次确认后 `PetService.switchToModelByName` 切过去再播，
  * 二者都走 GL 线程同一 FIFO {@code queueEvent}，故顺序有保证（切换在前、播放在后）。</p>
+ *
+ * <p>连招 / 组合（v1.172.0）：把**同一个模型内**的若干动作 / 表情按顺序编成一段，一键连播。
+ * 连招只记「组名 + 文件 / 表情名」，不记下标（用户改名 / 删动作后仍按当前扫描结果重新解析，
+ * 解析不到的步骤跳过并提示）；停顿时长由 {@link ComboPlan#dwellMs} 依据动作时长推导（循环动作
+ * 封顶、表情固定停顿）。播放经主线程 {@code Handler} 逐步调度，同一条连招用 generation 计数
+ * 防串台；由于 {@code nativeStartMotion} / {@code nativeSetExpression} 同走 GL 线程 FIFO，
+ * 逐步下发天然有序。连招只引用模型已有内容、不写模型 json，故内置模型也能编。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -82,6 +91,11 @@ public class MotionPoolActivity extends Activity {
     /** 未过滤时的汇总文案 */
     private String totalSummary = "";
 
+    /** 连招逐步播放的主线程调度器 */
+    private Handler comboHandler;
+    /** 连招代次：每次开播 +1，旧代次的延迟任务自我作废，避免多条连招串台 */
+    private int comboGeneration = 0;
+
     /** 待写出的导出 */
     private String pendingExportModel;
     private boolean pendingExportImported;
@@ -95,8 +109,17 @@ public class MotionPoolActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         settings = new Settings(this);
+        comboHandler = new Handler(Looper.getMainLooper());
         buildUi();
         refresh();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 离开页面即作废未播完的连招，避免延迟任务打到已销毁的界面
+        comboGeneration++;
+        if (comboHandler != null) comboHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     private void buildUi() {
@@ -320,6 +343,11 @@ public class MotionPoolActivity extends Activity {
             TextView impExpr = chip(row, "导入表情到此模型…", R.color.brand_operit_light);
             impExpr.setOnClickListener(v -> pickExprImportTo(m.dirName));
             card.addView(row);
+        }
+
+        // 连招（v1.172.0）：同模型内有序连播；搜索过滤时只在模型名命中时展示，避免干扰
+        if (!filtered || modelHit) {
+            card.addView(buildComboSection(m));
         }
 
         // 动作组（按原顺序遍历，命中与否用预筛结果判定；下标沿用 g.motions 的原始 i）
@@ -559,6 +587,370 @@ public class MotionPoolActivity extends Activity {
             box.addView(acts);
         }
         return box;
+    }
+
+    // ==================== 连招（v1.172.0） ====================
+
+    /** 连招区：标题 + 新建入口 + 已存连招列表（无内容时给提示） */
+    private View buildComboSection(MotionLibrary.ModelActions m) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        List<ComboPlan.Candidate> cands = comboCandidates(m);
+        List<ComboPlan.Combo> combos = ComboStore.list(this, m.dirName);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hlp.topMargin = dp(10);
+        head.setLayoutParams(hlp);
+
+        TextView tv = new TextView(this);
+        tv.setText("◆ 连招  ·  " + combos.size() + " 个");
+        tv.setTextSize(13f);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(getColorCompat(R.color.operit_accent));
+        tv.setIncludeFontPadding(false);
+        head.addView(tv, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (!cands.isEmpty()) {
+            TextView add = chip(head, "＋ 新建连招", R.color.brand_operit_light);
+            add.setOnClickListener(v -> showComboBuilder(m));
+        }
+        box.addView(head);
+
+        if (cands.isEmpty()) {
+            box.addView(hint("该模型没有可播放的动作 / 表情，无法编连招。"));
+            return box;
+        }
+        if (combos.isEmpty()) {
+            box.addView(hint("还没有连招。点「＋ 新建连招」把本模型的若干动作 / 表情按顺序编成一段。"));
+            return box;
+        }
+        for (ComboPlan.Combo c : combos) {
+            box.addView(comboRow(m, c, cands));
+        }
+        return box;
+    }
+
+    /** 一条连招：名称 + 步数（含失效计数）+ 序列预览 + 播 / 删 */
+    private View comboRow(MotionLibrary.ModelActions m, ComboPlan.Combo combo,
+                          List<ComboPlan.Candidate> cands) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(8);
+        box.setLayoutParams(blp);
+
+        LinearLayout line1 = new LinearLayout(this);
+        line1.setOrientation(LinearLayout.HORIZONTAL);
+        line1.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText("▶ " + combo.name);
+        title.setTextSize(13f);
+        title.setTextColor(getColorCompat(R.color.operit_text_primary));
+        title.setIncludeFontPadding(false);
+        line1.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int valid = ComboPlan.resolveAll(combo.steps, cands).size();
+        TextView meta = new TextView(this);
+        String metaText = "  [" + combo.size() + " 步";
+        if (valid < combo.size()) metaText += "，可播 " + valid + " 步";
+        metaText += "]";
+        meta.setText(metaText);
+        meta.setTextSize(11f);
+        meta.setTextColor(valid == 0 ? COLOR_MISSING : getColorCompat(R.color.operit_text_hint));
+        meta.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        mlp.leftMargin = dp(6);
+        line1.addView(meta, mlp);
+        box.addView(line1);
+
+        TextView seq = new TextView(this);
+        seq.setText(comboSeqText(combo));
+        seq.setTextSize(11f);
+        seq.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        seq.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.topMargin = dp(2);
+        box.addView(seq, slp);
+
+        LinearLayout acts = new LinearLayout(this);
+        acts.setOrientation(LinearLayout.HORIZONTAL);
+        acts.setPadding(0, dp(6), 0, 0);
+
+        TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
+        play.setOnClickListener(v -> playCombo(m, combo));
+        TextView del = chip(acts, "删", R.color.operit_text_secondary);
+        del.setOnClickListener(v -> confirmDeleteCombo(m, combo));
+        box.addView(acts);
+        return box;
+    }
+
+    /** 把某模型的扫描结果拍平成解析候选（只取「声明 + 文件存在」的可播项） */
+    private List<ComboPlan.Candidate> comboCandidates(MotionLibrary.ModelActions m) {
+        List<ComboPlan.Candidate> out = new ArrayList<>();
+        if (m == null) return out;
+        for (MotionLibrary.Group g : m.groups) {
+            for (int i = 0; i < g.motions.size(); i++) {
+                MotionLibrary.Motion mo = g.motions.get(i);
+                if (!mo.declared || !mo.exists) continue;
+                out.add(new ComboPlan.Candidate(true, g.name, mo.file, null, i,
+                        mo.duration, mo.loop));
+            }
+        }
+        for (MotionLibrary.Expr e : m.expressions) {
+            if (!e.declared || !e.exists) continue;
+            out.add(new ComboPlan.Candidate(false, null, e.file, e.name, -1, 0, false));
+        }
+        return out;
+    }
+
+    /** 播放一条连招：先解析出可播步骤，非当前模型走「切播」二次确认 */
+    private void playCombo(MotionLibrary.ModelActions m, ComboPlan.Combo combo) {
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            toast("桌宠未在运行，请先开启桌宠再试");
+            return;
+        }
+        List<ComboPlan.Candidate> cands = comboCandidates(m);
+        final List<ComboPlan.Resolved> steps = ComboPlan.resolveAll(combo.steps, cands);
+        if (steps.isEmpty()) {
+            toast("连招「" + combo.name + "」没有可播放的步骤（动作 / 表情可能已被删除或改名）");
+            return;
+        }
+        if (steps.size() < combo.size()) {
+            toast("连招有 " + (combo.size() - steps.size()) + " 步已失效，将播放其余 "
+                    + steps.size() + " 步");
+        }
+        final String name = combo.name;
+        Runnable start = () -> runCombo(svc, name, steps);
+        if (isCurrentModel(m.dirName)) {
+            start.run();
+        } else {
+            confirmSwitchAndPlay(svc, m.dirName, start);
+        }
+    }
+
+    /** 开始逐级下发连招；用 generation 作废旧代次的延迟任务，避免多条连招串台 */
+    private void runCombo(PetService svc, String name, List<ComboPlan.Resolved> steps) {
+        final int gen = ++comboGeneration;
+        comboHandler.removeCallbacksAndMessages(null);
+        long total = 0;
+        for (ComboPlan.Resolved r : steps) total += r.dwellMs;
+        toast("▶ 连招「" + name + "」开始（" + steps.size() + " 步，约 "
+                + String.format(Locale.ROOT, "%.1f", total / 1000.0) + " 秒）");
+        playComboStep(svc, steps, 0, gen);
+    }
+
+    /**
+     * 下发第 {@code i} 步并在其停留时长后调度下一步。动作 / 表情都经 GL 线程同一 FIFO
+     * {@code queueEvent}，故「逐步下发」天然有序；新动作会打断上一步，无需等它自然结束。
+     */
+    private void playComboStep(PetService svc, List<ComboPlan.Resolved> steps, int i, int gen) {
+        if (gen != comboGeneration) return;
+        if (i >= steps.size()) {
+            toast("连招播放完成");
+            return;
+        }
+        ComboPlan.Resolved r = steps.get(i);
+        if (r.motion) svc.onMotion(r.group, r.index, 3);
+        else svc.onExpression(r.exprName);
+        final int next = i + 1;
+        comboHandler.postDelayed(() -> playComboStep(svc, steps, next, gen), r.dwellMs);
+    }
+
+    private void confirmDeleteCombo(MotionLibrary.ModelActions m, ComboPlan.Combo combo) {
+        new AlertDialog.Builder(this)
+                .setTitle("删除连招？")
+                .setMessage("删除「" + combo.name + "」（" + combo.size() + " 步）。\n"
+                        + "只删这份编排，不影响模型里的动作 / 表情。")
+                .setPositiveButton("删除", (d, w) -> {
+                    ComboStore.delete(this, m.dirName, combo.name);
+                    toast("已删除连招「" + combo.name + "」");
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 新建连招弹窗：填名 + 点「＋」依次追加可播动作 / 表情，实时预览序列 */
+    private void showComboBuilder(MotionLibrary.ModelActions m) {
+        List<ComboPlan.Candidate> cands = comboCandidates(m);
+        if (cands.isEmpty()) {
+            toast("该模型没有可播放的动作 / 表情，无法编连招。");
+            return;
+        }
+        final List<ComboPlan.Combo> existing = ComboStore.list(this, m.dirName);
+        final ComboPlan.Combo draft = new ComboPlan.Combo(ComboPlan.suggestName(existing));
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(16), dp(4), dp(16), 0);
+
+        EditText nameField = new EditText(this);
+        nameField.setText(draft.name);
+        nameField.setTextSize(14f);
+        nameField.setSingleLine(true);
+        nameField.setPadding(dp(10), dp(8), dp(10), dp(8));
+        col.addView(nameField, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView seqView = new TextView(this);
+        seqView.setTextSize(12f);
+        seqView.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        seqView.setLineSpacing(dp(2), 1f);
+        seqView.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams qlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        qlp.topMargin = dp(8);
+        col.addView(seqView, qlp);
+
+        TextView tip = new TextView(this);
+        tip.setText("点下面的「＋」按顺序添加（最多 " + ComboPlan.MAX_STEPS + " 步）");
+        tip.setTextSize(11f);
+        tip.setTextColor(getColorCompat(R.color.operit_text_hint));
+        tip.setIncludeFontPadding(false);
+        col.addView(tip);
+
+        ScrollView stepScroll = new ScrollView(this);
+        stepScroll.setVerticalScrollBarEnabled(false);
+        LinearLayout stepList = new LinearLayout(this);
+        stepList.setOrientation(LinearLayout.VERTICAL);
+        stepScroll.addView(stepList, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams sslp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(200));
+        sslp.topMargin = dp(6);
+        col.addView(stepScroll, sslp);
+
+        for (ComboPlan.Candidate c : cands) {
+            final ComboPlan.Candidate cand = c;
+            TextView add = vchip(stepList, "＋ " + candidateLabel(cand),
+                    R.color.brand_operit_light);
+            add.setOnClickListener(v -> {
+                if (draft.steps.size() >= ComboPlan.MAX_STEPS) {
+                    toast("一条连招最多 " + ComboPlan.MAX_STEPS + " 步");
+                    return;
+                }
+                draft.steps.add(new ComboPlan.Step(
+                        cand.motion ? ComboPlan.KIND_MOTION : ComboPlan.KIND_EXPR,
+                        cand.group, cand.file, cand.name));
+                refreshSeqView(seqView, draft);
+            });
+        }
+
+        LinearLayout editRow = new LinearLayout(this);
+        editRow.setOrientation(LinearLayout.HORIZONTAL);
+        editRow.setPadding(0, dp(6), 0, 0);
+        TextView undo = chip(editRow, "撤销上一步", R.color.operit_text_secondary);
+        undo.setOnClickListener(v -> {
+            if (!draft.steps.isEmpty()) draft.steps.remove(draft.steps.size() - 1);
+            refreshSeqView(seqView, draft);
+        });
+        TextView clear = chip(editRow, "清空", R.color.operit_text_secondary);
+        clear.setOnClickListener(v -> {
+            draft.steps.clear();
+            refreshSeqView(seqView, draft);
+        });
+        col.addView(editRow);
+
+        refreshSeqView(seqView, draft);
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("新建连招 · " + m.dirName)
+                .setView(col)
+                .setPositiveButton("保存", null)
+                .setNegativeButton("取消", null)
+                .create();
+        // 自定义保存：校验名字非空、至少一步；同名则覆盖并提示
+        dialog.setOnShowListener(d ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                    String name = ComboPlan.sanitizeName(nameField.getText().toString());
+                    if (name.isEmpty()) {
+                        toast("请填写连招名");
+                        return;
+                    }
+                    if (draft.steps.isEmpty()) {
+                        toast("请至少添加一步");
+                        return;
+                    }
+                    boolean overwrite = ComboPlan.hasName(existing, name);
+                    ComboPlan.Combo toSave = new ComboPlan.Combo(name);
+                    toSave.steps.addAll(draft.steps);
+                    ComboStore.save(this, m.dirName, toSave);
+                    toast(overwrite ? "已覆盖同名连招「" + name + "」"
+                            : "已保存连招「" + name + "」（" + toSave.size() + " 步）");
+                    dialog.dismiss();
+                    refresh();
+                }));
+        dialog.show();
+    }
+
+    /** 弹窗里「＋」用的竖向 chip（与横向 chip 区别：加下间距，便于竖排堆叠） */
+    private TextView vchip(LinearLayout col, String text, int colorRes) {
+        TextView c = UiKit.chipButton(this, col, text, colorRes);
+        ViewGroup.LayoutParams lp = c.getLayoutParams();
+        if (lp instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) lp).bottomMargin = dp(6);
+        }
+        return c;
+    }
+
+    private void refreshSeqView(TextView seqView, ComboPlan.Combo draft) {
+        seqView.setText("当前序列（" + draft.size() + " 步）：" + comboSeqText(draft));
+    }
+
+    /** 序列预览文案（超过 6 步折叠） */
+    private String comboSeqText(ComboPlan.Combo combo) {
+        if (combo.steps.isEmpty()) return "（空）";
+        StringBuilder sb = new StringBuilder();
+        int shown = 0;
+        for (ComboPlan.Step s : combo.steps) {
+            if (shown >= 6) {
+                sb.append(" → …（共 ").append(combo.size()).append(" 步）");
+                break;
+            }
+            if (shown > 0) sb.append(" → ");
+            sb.append(stepDesc(s));
+            shown++;
+        }
+        return sb.toString();
+    }
+
+    private String stepDesc(ComboPlan.Step s) {
+        if (s.isMotion()) {
+            return (s.group == null || s.group.isEmpty() ? "" : s.group + "·") + shortFile(s.file);
+        }
+        String n = (s.name == null || s.name.isEmpty()) ? shortFile(s.file) : s.name;
+        return "表情 " + n;
+    }
+
+    /** 候选项展示名：动作「组 #序号 名」/ 表情「表情 名」 */
+    private String candidateLabel(ComboPlan.Candidate c) {
+        if (c.motion) {
+            String g = c.group == null || c.group.isEmpty() ? "" : c.group + " #" + (c.index + 1) + " ";
+            return g + shortFile(c.file);
+        }
+        String n = c.name == null || c.name.isEmpty() ? shortFile(c.file) : c.name;
+        return "表情 " + n;
+    }
+
+    /** 文件基名（去目录与 .motion3.json / .exp3.json 后缀） */
+    private String shortFile(String file) {
+        String b = baseName(file);
+        String l = b.toLowerCase(Locale.ROOT);
+        if (l.endsWith(".motion3.json")) b = b.substring(0, b.length() - ".motion3.json".length());
+        else if (l.endsWith(".exp3.json")) b = b.substring(0, b.length() - ".exp3.json".length());
+        return b;
     }
 
     // ==================== 行为 ====================

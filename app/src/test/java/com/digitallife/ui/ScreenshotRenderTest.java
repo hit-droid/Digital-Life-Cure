@@ -135,6 +135,24 @@ public class ScreenshotRenderTest {
         capture(content, W, H, "motion_pool_search.png");
     }
 
+    /** 动作池连招：预置 demo 的一条连招（Idle → TapBody），滚到底核对连招区排版 */
+    @Test
+    public void motionPoolCombo() throws Exception {
+        seedDemoImportedModel();
+        seedDemoCombo();
+        ActivityController<MotionPoolActivity> c =
+                Robolectric.buildActivity(MotionPoolActivity.class).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        content.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY));
+        content.layout(0, 0, W, H);
+        android.widget.ScrollView sv = findScrollView(content);
+        if (sv != null && sv.getChildCount() > 0) {
+            sv.scrollTo(0, sv.getChildAt(0).getHeight());
+        }
+        draw(content, W, H, "motion_pool_combo.png");
+    }
+
     private static android.widget.EditText findEditText(View v) {
         if (v instanceof android.widget.EditText) return (android.widget.EditText) v;
         if (v instanceof android.view.ViewGroup) {
@@ -235,6 +253,17 @@ public class ScreenshotRenderTest {
         write(new File(dir, "demo.cdi3.json"),
                 "{\"Version\":3,\"Parameters\":[{\"Id\":\"ParamAngleX\"},"
                         + "{\"Id\":\"ParamAngleY\"},{\"Id\":\"ParamBodyAngleX\"}]}");
+    }
+
+    /** 预置 demo 的一条连招（Idle → TapBody），用于连招区截图自查 */
+    private void seedDemoCombo() {
+        Context ctx = org.robolectric.RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("care_combos", Context.MODE_PRIVATE)
+                .edit()
+                .putString("demo", "[{\"name\":\"打招呼\",\"steps\":["
+                        + "{\"kind\":\"motion\",\"group\":\"Idle\",\"file\":\"idle.motion3.json\"},"
+                        + "{\"kind\":\"motion\",\"group\":\"TapBody\",\"file\":\"tap.motion3.json\"}]}]")
+                .commit();
     }
 
     private static String motionJson(String... paramIds) {
