@@ -28,6 +28,7 @@ import com.digitallife.model.MotionCompat;
 import com.digitallife.model.MotionLibrary;
 import com.digitallife.service.PetService;
 import com.digitallife.ui.UiKit;
+import com.digitallife.ui.pet.TouchBindings;
 import com.digitallife.util.Settings;
 
 import java.io.ByteArrayOutputStream;
@@ -79,6 +80,12 @@ import java.util.Set;
  * 确认），每次点播都会记进「最近播放」（保留 15 条，可「清空」）。两者都是纯引用，条目按当前
  * 扫描结果解析，模型 / 组 / 动作 / 表情被删改则标「失效」并可用「✕」清掉。搜索时本区隐藏，
  * 不干扰结果。此区只在内容非空时出现，故既有界面在没收藏 / 没播过时完全不变。</p>
+ *
+ * <p>事件绑定（v1.176.0）：列表顶部再加一张「事件绑定」卡——把「点桌宠时触发的表情 / 动作」
+ * 摆出来改。四个事件（摸头 / 戳身子 / 双击 / 点空白处）各自可指定表情与动作组，取值来自各模型
+ * 已声明内容（去重并集，按名字绑、不绑具体模型），保存经 {@link TouchBindings}；不设则用默认，
+ * 生效处（{@code PetOverlayView.handleModelTap} / {@code PetService.onTapZone/onDoubleTap}）按
+ * 「绑定优先、为空回落默认」解析，当前模型缺该内容也靠默认兜住。仅覆盖视觉，气泡与情绪仍走默认。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -240,8 +247,9 @@ public class MotionPoolActivity extends Activity {
         }
 
         int shown = 0;
-        // 收藏 / 最近播放（v1.175.0）：不打压搜索——有查询词时先隐藏，避免干扰结果
+        // 事件绑定（v1.176.0）+ 收藏 / 最近播放（v1.175.0）：不打压搜索——有查询词时先隐藏
         if (nq.isEmpty()) {
+            listContainer.addView(buildBindingsSection());
             View marks = buildMarksSection();
             if (marks != null) listContainer.addView(marks);
         }
@@ -261,6 +269,150 @@ public class MotionPoolActivity extends Activity {
                 listContainer.addView(hint("没有匹配「" + nq + "」的模型 / 动作 / 表情。"));
             }
         }
+    }
+
+    // ==================== 事件绑定（v1.176.0） ====================
+
+    /**
+     * 事件绑定卡：把「点桌宠时触发的表情 / 动作」摆出来改。每个事件（摸头 / 戳身子 / 双击 / 点空白处）
+     * 可分别指定表情与动作组，取值来自各模型已声明内容（去重后并集，按名字绑、不绑具体模型）；
+     * 不设则用默认，播放时当前模型缺该内容也会靠默认兜住。仅覆盖视觉，气泡与情绪仍走默认反应。
+     */
+    private View buildBindingsSection() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.bottomMargin = dp(8);
+        card.setLayoutParams(clp);
+
+        TextView title = new TextView(this);
+        title.setText("事件绑定 · 点桌宠时触发的表情 / 动作");
+        title.setTextSize(13f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(getColorCompat(R.color.operit_accent));
+        title.setIncludeFontPadding(false);
+        card.addView(title);
+
+        for (TouchBindings.Event ev : TouchBindings.events()) {
+            card.addView(bindingRow(ev));
+        }
+        return card;
+    }
+
+    /** 一个事件一行：名称 + 「表情」芯片 + 「动作」芯片 +（改过才出现的）「恢复默认」 */
+    private View bindingRow(TouchBindings.Event ev) {
+        TouchBindings.Binding bind = TouchBindings.get(this, ev.id);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(6);
+        row.setLayoutParams(lp);
+
+        TextView name = new TextView(this);
+        name.setText(ev.label);
+        name.setTextSize(13f);
+        name.setTextColor(getColorCompat(R.color.operit_text_primary));
+        name.setIncludeFontPadding(false);
+        name.setMinWidth(dp(56));
+        row.addView(name);
+
+        TextView exprChip = chip(row, "表情 " + bindingLabel(bind.expression, ev.defaultExpression),
+                bind.expression.isEmpty() ? R.color.operit_text_secondary : R.color.brand_operit_light);
+        exprChip.setOnClickListener(v -> pickBinding(false, ev));
+
+        TextView motionChip = chip(row, "动作 " + bindingLabel(bind.motionGroup, ev.defaultMotionGroup),
+                bind.motionGroup.isEmpty() ? R.color.operit_text_secondary : R.color.brand_operit_light);
+        motionChip.setOnClickListener(v -> pickBinding(true, ev));
+
+        if (!bind.isEmpty()) {
+            TextView reset = chip(row, "恢复默认", R.color.operit_text_secondary);
+            reset.setOnClickListener(v -> {
+                TouchBindings.clear(this, ev.id);
+                renderList();
+                toast("「" + ev.label + "」已恢复默认");
+            });
+        }
+        return row;
+    }
+
+    /** 绑定的显示文案：未设→「默认（x）/ 默认（无）」；哨兵→「不绑」；否则原名 */
+    private String bindingLabel(String bound, String def) {
+        if (bound == null || bound.isEmpty()) {
+            return def == null ? "默认（无）" : "默认（" + def + "）";
+        }
+        if (TouchBindings.NONE.equals(bound)) return "不绑";
+        return bound;
+    }
+
+    /**
+     * 弹选择器改某一项的绑定。选项含「用默认」（清绑定）、「不绑」（哨兵 NONE）、以及各模型
+     * 声明的表情名 / 动作组名（去重并集）；选中即写盘刷新，并对当前桌宠试播一下。
+     */
+    private void pickBinding(boolean motion, TouchBindings.Event ev) {
+        TouchBindings.Binding bind = TouchBindings.get(this, ev.id);
+        final List<String> values = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        String def = motion ? ev.defaultMotionGroup : ev.defaultExpression;
+        labels.add(def == null ? "用默认（无）" : "用默认（" + def + "）");
+        values.add("");
+        labels.add(motion ? "不绑动作" : "不绑表情");
+        values.add(TouchBindings.NONE);
+        for (String n : motion ? motionGroupNames() : expressionNames()) {
+            labels.add(n);
+            values.add(n);
+        }
+        int checked = values.indexOf(motion ? bind.motionGroup : bind.expression);
+
+        new AlertDialog.Builder(this)
+                .setTitle((motion ? "选择动作 · " : "选择表情 · ") + ev.label)
+                .setSingleChoiceItems(labels.toArray(new String[0]), checked, (d, which) -> {
+                    String v = values.get(which);
+                    if (motion) TouchBindings.setMotionGroup(this, ev.id, v);
+                    else TouchBindings.setExpression(this, ev.id, v);
+                    d.dismiss();
+                    renderList();
+                    if (v.isEmpty() || TouchBindings.NONE.equals(v)) {
+                        toast("「" + ev.label + "」· " + (v.isEmpty() ? "用默认" : (motion ? "不绑动作" : "不绑表情")));
+                    } else {
+                        preview(motion, v);
+                        toast("已绑定「" + ev.label + "」· " + (motion ? "动作 " : "表情 ") + v);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 选完立即在当前桌宠上试播一下（桌宠没跑 / 当前模型没这项就静默跳过） */
+    private void preview(boolean motion, String name) {
+        PetService svc = PetService.getInstance();
+        if (svc == null) return;
+        if (motion) svc.onMotion(name, 0, 3);
+        else svc.onExpression(name);
+    }
+
+    /** 各模型已声明表情名的去重并集 */
+    private List<String> expressionNames() {
+        List<String> names = new ArrayList<>();
+        for (MotionLibrary.ModelActions m : scanned) {
+            for (MotionLibrary.Expr e : m.expressions) {
+                if (e.declared) names.add(e.name);
+            }
+        }
+        return TouchBindings.distinctNames(names);
+    }
+
+    /** 各模型动作组名的去重并集 */
+    private List<String> motionGroupNames() {
+        List<String> names = new ArrayList<>();
+        for (MotionLibrary.ModelActions m : scanned) {
+            for (MotionLibrary.Group g : m.groups) names.add(g.name);
+        }
+        return TouchBindings.distinctNames(names);
     }
 
     // ==================== 收藏 / 最近播放（v1.175.0） ====================

@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.176.0 (2026-10-18)
+
+承接 v1.175.0 的动作池。桌宠点击时的表情 / 动作此前是**写死的**（摸头 F06+Shy、戳身子
+F05+TapBody、双击 F02），用户改不了。本版把它们变成**可绑定**：想让它被摸头时害羞还是
+开心，自己选。纯增量、不动渲染链路、不写模型 json。
+
+### 事件绑定（触摸事件 → 表情 / 动作）
+
+- 可绑定事件四个：**摸头 / 戳身子 / 双击 / 点空白处**，各自可分别指定触发表情与触发动作组。
+- 取值来自各模型**已声明**的表情与动作组（去重并集），按名字绑、不绑具体模型；不设则用
+  默认，生效时当前模型缺该内容也会靠默认兜住，不会哑火。可用「不绑」明确关闭默认视觉。
+- 动作池页顶部新增「事件绑定」卡：每行两个芯片（表情 / 动作）+ 改过才出现的「恢复默认」，
+  选择器选完即时在当前桌宠上试播一下。
+- 仅覆盖视觉（表情 + 动作）；气泡文案、情绪与亲密度增量仍走原有默认反应，行为不退化。
+
+### 新增 / 变更
+
+- `TouchBindings`（纯逻辑 `effective`（绑定优先 / 空回落默认 / 哨兵 `NONE` 明确不绑）/
+  `eventFor` / `events` / `distinctNames` + 存储 `get` / `setExpression` / `setMotionGroup` /
+  `clear` / `isDefault`，key = `care_touch_bindings`，项 = `<eventId>.expression` / `.motion`）。
+- 接入点：`PetOverlayView.handleModelTap`（分区 Head/Body/None 按绑定覆盖表情 / 动作）、
+  `PetService.onTapZone`（按绑定同步待机表情）、`PetService.onDoubleTap`（双击绑表情 / 动作）。
+- `MotionPoolActivity`：新增「事件绑定」卡与选择器。
+
+### 校验
+
+`tools/verify.sh` 全绿（单测 / lint 0 error / APK 通过）。
+
 ## v1.175.0 (2026-10-18)
 
 承接 v1.171.0 的跨模型动作池。动作池此前只能「按模型一张张翻」，常用的那几个动作每次

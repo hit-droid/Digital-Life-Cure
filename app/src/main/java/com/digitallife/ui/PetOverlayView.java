@@ -23,6 +23,7 @@ import com.digitallife.render.Pose;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.ui.pet.PetStatusText;
 import com.digitallife.ui.pet.PetTouchReaction;
+import com.digitallife.ui.pet.TouchBindings;
 
 /**
  * 悬浮窗 Live2D 视图 + 桌面聊天输入框。
@@ -622,13 +623,19 @@ public class PetOverlayView extends FrameLayout {
         final String zone = PetTouchReaction.zoneFor(x, y,
                 modelRect.left, modelRect.top, modelRect.right, modelRect.bottom);
         final PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
+        // v1.176.0：触摸事件 → 表情/动作 用户绑定（绑定优先、为空回落默认、哨兵 NONE 明确不绑）。
+        // 只覆盖视觉；气泡与情绪增量仍由 PetService 按默认反应处理。
+        String eventId = (zone == null || zone.isEmpty()) ? TouchBindings.EVENT_NONE : zone;
+        TouchBindings.Binding bind = TouchBindings.get(getContext(), eventId);
+        final String expr = TouchBindings.effective(bind.expression, reaction.expression);
+        final String group = TouchBindings.effective(bind.motionGroup, reaction.motionGroup);
         // 视觉：摸头害羞、戳身惊讶；未知分区不改表情，保留原有「随机 TapBody」手感
-        if (reaction.expression != null) {
-            setExpression(reaction.expression);
+        if (expr != null) {
+            setExpression(expr);
         }
-        if (reaction.motionGroup != null) {
+        if (group != null) {
             int index = reaction.motionIndex >= 0 ? reaction.motionIndex : rnd.nextInt(6);
-            live2DView.startMotion(reaction.motionGroup, index, 3);
+            live2DView.startMotion(group, index, 3);
         }
         // 气泡与情绪增量交给 PetService（那里才有 aiCore）；onTap() 语义不变
         if (listener != null) listener.onTapZone(zone);

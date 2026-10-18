@@ -40,6 +40,7 @@ import com.digitallife.ui.PetOverlayView;
 import com.digitallife.ui.pet.EmotionExpression;
 import com.digitallife.ui.pet.PetQuickMenu;
 import com.digitallife.ui.pet.PetTouchReaction;
+import com.digitallife.ui.pet.TouchBindings;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.render.ContinuousMotionEngine;
@@ -515,9 +516,12 @@ public class PetService extends Service implements AICore.Output,
         // v1.137.0（Issue #37）：摸头 / 戳身子的差异化反馈。
         // 只读调用 EmotionState 公开方法，不改 brain/ 内部算法；表情与动作已在 PetOverlayView 落定。
         PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
-        // 表情由 PetOverlayView 落定；这里同步内部状态，避免冷却期一过就抢回旧表情
-        if (reaction.expression != null) {
-            emotionExpression.syncCurrent(reaction.expression, System.currentTimeMillis());
+        // v1.176.0：若用户绑定覆盖了表情，同步内部状态时要跟着改，避免冷却期一过就抢回旧表情
+        String eventId = (zone == null || zone.isEmpty()) ? TouchBindings.EVENT_NONE : zone;
+        TouchBindings.Binding bind = TouchBindings.get(this, eventId);
+        String expr = TouchBindings.effective(bind.expression, reaction.expression);
+        if (expr != null) {
+            emotionExpression.syncCurrent(expr, System.currentTimeMillis());
         }
         if (aiCore != null) {
             if (reaction.intimacy != 0f) {
@@ -537,8 +541,17 @@ public class PetService extends Service implements AICore.Output,
         if (aiCore == null) return;
         aiCore.onUserInteraction();
         noteUserInteraction();
-        overlayView.setExpression("F02");
-        emotionExpression.syncCurrent("F02", System.currentTimeMillis());
+        // v1.176.0：双击同样可绑表情 / 动作（默认表情 F02、无动作）
+        TouchBindings.Binding bind = TouchBindings.get(this, TouchBindings.EVENT_DOUBLE_TAP);
+        String expr = TouchBindings.effective(bind.expression, "F02");
+        if (expr != null) {
+            overlayView.setExpression(expr);
+            emotionExpression.syncCurrent(expr, System.currentTimeMillis());
+        }
+        String group = TouchBindings.effective(bind.motionGroup, null);
+        if (group != null && overlayView != null) {
+            overlayView.setMotion(group, new java.util.Random().nextInt(6), 3);
+        }
         overlayView.showBubble("嘿嘿~ 戳我干嘛呀！", 2f);
     }
 
