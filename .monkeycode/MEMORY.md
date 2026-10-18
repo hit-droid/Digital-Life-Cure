@@ -323,3 +323,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - 交付内容：动作池「搜索筛选 + 跨模型点播」——`care/MotionPoolActivity` 顶部加搜索框，按模型名/组名/动作名/文件名/表情名实时过滤（`TextWatcher.afterTextChanged` → `renderList()`；`scanned` 缓存最近一次磁盘扫描，避免每次输入重扫）；`buildModelCard` 加 `nq` 参数预筛展示项，整卡无命中返回 `null`，**点播索引仍用组内原始下标**避免过滤后错位；非当前默认模型点播芯片由「播」改「切播」。新增纯逻辑 `care/MotionFilter`（`normalize` trim+小写 / `isBlank` / `matches` 大小写不敏感 contains / `anyMatches`）便于单测，`MotionFilterTest` 8 条锁契约；`ScreenshotRenderTest` 加 `motion_pool_search.png` 过滤态自查（`findEditText` 辅助）。
   - **跨模型点播顺序保证（关键依据）**：切换 `nativeChangeScene` 与播放 `nativeStartMotion` 都经 GL 线程同一 FIFO `queueEvent`，故「先切后播」天然有序，二次确认后 `PetService.switchToModelByName(modelDir)` 切过去再播，**无需延迟等待**，避免竞态错位。
   - 增量 verify 耗时：compile 10s / test 41s / lint 34s / apk 17s；653 单测 / 56 类、lint 0 error、APK(debug) 9,109,864B。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.172.0 动作池连招/组合
+- Category: Operations & Deployment
+- Instructions:
+  - v1.172.0 已发布：versionCode 175 / versionName 1.172.0、Release id 416303489、APK app-release.apk 8,604,380B、tag v1.172.0、main @ ce33c6b；CI run 39107776332 success
+  - 交付内容：动作池「连招 / 组合」——`care/MotionPoolActivity` 每个模型卡片新增「连招」区（列表 + 「＋ 新建连招」）+ 新建弹窗（填名 → 点「＋」按序追加本模型可播动作/表情 → 实时预览（超 6 步折叠）→ 撤销上一步/清空；校验名非空、至少一步、最多 20 步，同名忽略大小写覆盖）；播放 `playCombo/runCombo/playComboStep` 经主线程 `Handler` 逐步下发，停顿时长 `ComboPlan.dwellMs`，用 `comboGeneration` 计数 + `removeCallbacksAndMessages` 防多条连招串台（`onDestroy` 亦作废未播完的）；非当前模型复用既有 `confirmSwitchAndPlay`「切播」。新增纯逻辑 `care/ComboPlan`（`dwellMs`：单次=时长+150ms 间隙夹在 [400ms,6s]、循环封顶 `LOOP_CAP_MS=3000`、表情固定 `EXPR_STEP_MS=1500`、未知兜底 1500ms；`resolve/resolveAll` 按「组+文件 / 表情名」解析、解析不到返回 null 跳过；`sanitizeName/hasName/suggestName`）与 `care/ComboStore`（按模型目录名分存 prefs `care_combos`，整表 JSON 往返，同名忽略大小写覆盖，坏数据读取跳过）。单测 `ComboPlanTest`(10 纯 JVM) + `ComboStoreTest`(6 Robolectric)；`ScreenshotRenderTest` 加 `motion_pool_combo.png`。
+  - **设计决策（关键）**：连招限定**同一模型内**（跨模型需 `nativeChangeScene` 重载、会打断在播动作，不可控）；连招**只引用模型已有内容、不写模型 json**，故内置模型也能编；步骤**只记组名+文件 / 表情名、不记下标**，用户改名/删动作后播放时重新解析，失效步骤跳过并提示「N 步已失效」，避免错播。
+  - 增量 verify 耗时：compile 10s / test 44s / lint 35s / apk 16s；670 单测 / 58 类、lint 0 error、APK(debug) 9,118,951B。
