@@ -333,3 +333,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - 交付内容：动作池「连招 / 组合」——`care/MotionPoolActivity` 每个模型卡片新增「连招」区（列表 + 「＋ 新建连招」）+ 新建弹窗（填名 → 点「＋」按序追加本模型可播动作/表情 → 实时预览（超 6 步折叠）→ 撤销上一步/清空；校验名非空、至少一步、最多 20 步，同名忽略大小写覆盖）；播放 `playCombo/runCombo/playComboStep` 经主线程 `Handler` 逐步下发，停顿时长 `ComboPlan.dwellMs`，用 `comboGeneration` 计数 + `removeCallbacksAndMessages` 防多条连招串台（`onDestroy` 亦作废未播完的）；非当前模型复用既有 `confirmSwitchAndPlay`「切播」。新增纯逻辑 `care/ComboPlan`（`dwellMs`：单次=时长+150ms 间隙夹在 [400ms,6s]、循环封顶 `LOOP_CAP_MS=3000`、表情固定 `EXPR_STEP_MS=1500`、未知兜底 1500ms；`resolve/resolveAll` 按「组+文件 / 表情名」解析、解析不到返回 null 跳过；`sanitizeName/hasName/suggestName`）与 `care/ComboStore`（按模型目录名分存 prefs `care_combos`，整表 JSON 往返，同名忽略大小写覆盖，坏数据读取跳过）。单测 `ComboPlanTest`(10 纯 JVM) + `ComboStoreTest`(6 Robolectric)；`ScreenshotRenderTest` 加 `motion_pool_combo.png`。
   - **设计决策（关键）**：连招限定**同一模型内**（跨模型需 `nativeChangeScene` 重载、会打断在播动作，不可控）；连招**只引用模型已有内容、不写模型 json**，故内置模型也能编；步骤**只记组名+文件 / 表情名、不记下标**，用户改名/删动作后播放时重新解析，失效步骤跳过并提示「N 步已失效」，避免错播。
   - 增量 verify 耗时：compile 10s / test 44s / lint 35s / apk 16s；670 单测 / 58 类、lint 0 error、APK(debug) 9,118,951B。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.173.0 自动化可观测性 + v1.174.0 连招打磨
+- Category: Operations & Deployment
+- Instructions:
+  - v1.173.0 已发布：versionCode 176 / versionName 1.173.0、Release id 416312530、APK app-release.apk 8,605,812B、tag v1.173.0、main @ 3ab2dc8；CI run 39109235904 success
+  - v1.173.0 交付内容：自动化「执行可观测性」——新增 `care/RunLog`（纯逻辑：`looksOk` 以 `❌/失败/异常/未找到/没有步骤/请指定/请填写` 等失败标记判成败；`summarize` 折叠空白并截断 140 字；`whenText` 刚刚/N 分钟前/N 小时前/N 天前/M月d日 HH:mm；存储：prefs `care_runs`，key=`workflow|名` / `schedule|名`，每 key 只留最近 `MAX_KEPT=20` 条，`record` 最新在前、`last`/`recent`/`clear`）。`CareAutomation.checkScheduledTasks` 的 cron 触发、`AgentWorkbenchActivity.runWorkflowNow` 的「立即运行」都落盘（定时任务行手动运行同时记该任务与该工作流两条；自动触发同样双记录）。工作台工作流/定时任务两行各加「上次运行」一行（`appendLastRun`，无记录「尚未运行」）+「记录」入口（`showRunLog` 回看最近 20 次）。单测 `RunLogTest`(4 纯 JVM) + `RunLogStoreTest`(6 Robolectric)。
+  - v1.174.0 已发布：versionCode 177 / versionName 1.174.0、Release id 416315450、APK app-release.apk 8,607,294B、tag v1.174.0、main @ 0933d07；CI run 39109582695 success
+  - v1.174.0 交付内容：连招打磨——编排弹窗候选行改为「＋ / 试」两枚，`previewCandidate` 单步试播（非当前模型走既有 `confirmSwitchAndPlay`）；已存连招行加「复制」，`duplicateCombo` 另起不重名副本名（新增纯逻辑 `ComboPlan.copyName`：base/base2/base3…）原样拷贝步骤；`ComboPlanTest` 增 `copyNameAvoidsCollisions` 1 条。
+  - 增量 verify 耗时：v1.173.0 compile 9s / test 42s / lint 34s / apk 16s，680 单测/60 类；v1.174.0 compile 10s / test 43s / lint 35s / apk 11s，681 单测/60 类；均 lint 0 error。
