@@ -73,6 +73,12 @@ import java.util.Set;
  * <p>连招打磨（v1.174.0）：编排弹窗里每个候选旁加「试」，可**单步试播**（非当前模型走「切播」
  * 确认），避免「编完整条才发现某一步不对」；已存连招加「复制」，另起不重名的副本名
  * （{@link ComboPlan#copyName}）原样拷贝步骤，便于派生变体。</p>
+ *
+ * <p>收藏 / 最近播放（v1.175.0）：动作 / 表情行加「☆ 收藏」芯片（点击切换），列表顶部据
+ * {@link MotionMarks} 汇总出「★ 收藏 / ▷ 最近播放」区——点条目即点播（非当前模型走「切播」
+ * 确认），每次点播都会记进「最近播放」（保留 15 条，可「清空」）。两者都是纯引用，条目按当前
+ * 扫描结果解析，模型 / 组 / 动作 / 表情被删改则标「失效」并可用「✕」清掉。搜索时本区隐藏，
+ * 不干扰结果。此区只在内容非空时出现，故既有界面在没收藏 / 没播过时完全不变。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -234,6 +240,11 @@ public class MotionPoolActivity extends Activity {
         }
 
         int shown = 0;
+        // 收藏 / 最近播放（v1.175.0）：不打压搜索——有查询词时先隐藏，避免干扰结果
+        if (nq.isEmpty()) {
+            View marks = buildMarksSection();
+            if (marks != null) listContainer.addView(marks);
+        }
         for (MotionLibrary.ModelActions m : scanned) {
             View card = buildModelCard(m, nq);
             if (card == null) continue;
@@ -249,6 +260,204 @@ public class MotionPoolActivity extends Activity {
             if (shown == 0) {
                 listContainer.addView(hint("没有匹配「" + nq + "」的模型 / 动作 / 表情。"));
             }
+        }
+    }
+
+    // ==================== 收藏 / 最近播放（v1.175.0） ====================
+
+    /**
+     * 收藏 / 最近播放区：把常用动作 / 表情固定到列表顶部，免去反复翻模型。
+     * 两者都空时返回 {@code null}（调用方跳过，不占版面）。条目按当前扫描结果解析，
+     * 解析不到的标「失效」并可直接「✕」清掉。搜索时（有查询词）本区不展示。
+     */
+    private View buildMarksSection() {
+        List<MotionMarks.Ref> favs = MotionMarks.favorites(this);
+        List<MotionMarks.Ref> recents = MotionMarks.recents(this);
+        if (favs.isEmpty() && recents.isEmpty()) return null;
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clp.bottomMargin = dp(8);
+        card.setLayoutParams(clp);
+
+        if (!favs.isEmpty()) {
+            card.addView(marksHeader("★ 收藏 · " + favs.size() + " 个", false));
+            for (MotionMarks.Ref r : favs) card.addView(marksRow(r, true));
+        }
+        if (!recents.isEmpty()) {
+            card.addView(marksHeader("▷ 最近播放 · " + recents.size() + " 个", true));
+            for (MotionMarks.Ref r : recents) card.addView(marksRow(r, false));
+        }
+        return card;
+    }
+
+    /** 收藏 / 最近播放区的小标题；{@code clearable} 时右侧给「清空」 */
+    private View marksHeader(String text, boolean clearable) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        row.setLayoutParams(lp);
+
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13f);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(getColorCompat(R.color.operit_accent));
+        tv.setIncludeFontPadding(false);
+        row.addView(tv, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (clearable) {
+            TextView clr = chip(row, "清空", R.color.operit_text_secondary);
+            clr.setOnClickListener(v -> {
+                MotionMarks.clearRecents(this);
+                renderList();
+            });
+        }
+        return row;
+    }
+
+    /**
+     * 一条收藏 / 最近播放条目：解析得到就「点播」（非当前模型走切播确认），
+     * 解析不到就标「失效」；右侧「✕」从对应列表移除。
+     */
+    private View marksRow(MotionMarks.Ref r, boolean fromFavorites) {
+        ResolvedRef rr = resolveRef(r);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(6);
+        row.setLayoutParams(lp);
+
+        if (rr == null) {
+            TextView bad = chip(row, "失效 · " + refLabel(r), R.color.danger);
+            bad.setOnClickListener(v -> toast("该条目已失效（模型 / 动作 / 表情可能已被删除或改名）"));
+        } else {
+            TextView play = chip(row, "▶ " + rr.label, R.color.brand_operit_light);
+            play.setOnClickListener(v -> playRef(rr));
+        }
+        TextView del = chip(row, "✕", R.color.operit_text_secondary);
+        del.setOnClickListener(v -> {
+            if (fromFavorites) MotionMarks.toggleFavorite(this, r);
+            else MotionMarks.removeRecent(this, r);
+            renderList();
+        });
+        return row;
+    }
+
+    /** 动作 / 表情行上的「收藏」芯片：点击切换收藏并即时刷新顶部收藏区 */
+    private void addMarksChip(LinearLayout acts, MotionMarks.Ref ref) {
+        boolean fav = MotionMarks.isFavorite(this, ref);
+        TextView star = chip(acts, fav ? "★ 已收藏" : "☆ 收藏",
+                fav ? R.color.brand_operit_light : R.color.operit_text_secondary);
+        star.setOnClickListener(v -> {
+            MotionMarks.toggleFavorite(this, ref);
+            toast(MotionMarks.isFavorite(this, ref) ? "已收藏" : "已取消收藏");
+            renderList();
+        });
+    }
+
+    /** 点播一条收藏 / 最近播放引用（{@code rr} 已保证可播） */
+    private void playRef(ResolvedRef rr) {
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            toast("桌宠未在运行，请先开启桌宠再试");
+            return;
+        }
+        Runnable play = () -> {
+            if (rr.motion) svc.onMotion(rr.group, rr.index, 3);
+            else svc.onExpression(rr.exprName);
+            MotionMarks.pushRecent(this, rr.ref);
+        };
+        if (isCurrentModel(rr.modelDir)) {
+            play.run();
+            toast("已播放 " + rr.label);
+            renderList();
+        } else {
+            confirmSwitchAndPlay(svc, rr.modelDir, () -> {
+                play.run();
+                toast("已切到「" + rr.modelDir + "」并播放 " + rr.label);
+            });
+        }
+    }
+
+    /**
+     * 把一条引用对回当前扫描结果，得到可直接点播的目标；模型 / 组 / 动作 / 表情
+     * 任一已被删改则返回 {@code null}（该条目标「失效」）。动作按「组 + 文件」匹配，
+     * 表情按「名（空则文件）」匹配——与 {@link ComboPlan} 的解析口径一致。
+     */
+    private ResolvedRef resolveRef(MotionMarks.Ref r) {
+        if (r == null) return null;
+        for (MotionLibrary.ModelActions m : scanned) {
+            if (!m.dirName.equals(r.modelDir)) continue;
+            if (r.motion) {
+                for (MotionLibrary.Group g : m.groups) {
+                    if (!eq(g.name, r.group)) continue;
+                    for (int i = 0; i < g.motions.size(); i++) {
+                        MotionLibrary.Motion mo = g.motions.get(i);
+                        if (!mo.declared || !mo.exists || !eq(mo.file, r.file)) continue;
+                        String lbl = m.dirName + " · "
+                                + (g.name == null || g.name.isEmpty() ? "" : g.name + "·")
+                                + mo.displayName();
+                        return new ResolvedRef(r, m.dirName, true, g.name, i, null, lbl);
+                    }
+                }
+            } else {
+                for (MotionLibrary.Expr e : m.expressions) {
+                    if (!e.declared || !e.exists) continue;
+                    boolean nameHit = r.name != null && !r.name.isEmpty() && r.name.equals(e.name);
+                    if (!nameHit && !eq(e.file, r.file)) continue;
+                    return new ResolvedRef(r, m.dirName, false, null, -1, e.name,
+                            m.dirName + " · 表情 " + e.displayName());
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean eq(String a, String b) {
+        return a == null ? b == null : a.equals(b);
+    }
+
+    /** 失效条目的展示文案（不依赖扫描结果） */
+    private String refLabel(MotionMarks.Ref r) {
+        String model = (r.modelDir == null || r.modelDir.isEmpty()) ? "" : r.modelDir + " · ";
+        if (r.motion) {
+            return model + (r.group == null || r.group.isEmpty() ? "" : r.group + "·")
+                    + shortFile(r.file);
+        }
+        String n = (r.name == null || r.name.isEmpty()) ? shortFile(r.file) : r.name;
+        return model + "表情 " + n;
+    }
+
+    /** 解析后的可点播引用 */
+    private static final class ResolvedRef {
+        final MotionMarks.Ref ref;
+        final String modelDir;
+        final boolean motion;
+        final String group;
+        final int index;
+        final String exprName;
+        final String label;
+
+        ResolvedRef(MotionMarks.Ref ref, String modelDir, boolean motion, String group,
+                    int index, String exprName, String label) {
+            this.ref = ref;
+            this.modelDir = modelDir;
+            this.motion = motion;
+            this.group = group;
+            this.index = index;
+            this.exprName = exprName;
+            this.label = label;
         }
     }
 
@@ -495,8 +704,10 @@ public class MotionPoolActivity extends Activity {
 
             if (mo.declared && groupName != null) {
                 final int idx = playIndex;
+                MotionMarks.Ref ref = new MotionMarks.Ref(m.dirName, true, groupName, mo.file, null);
                 TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
-                play.setOnClickListener(v -> play(m.dirName, groupName, idx));
+                play.setOnClickListener(v -> play(m.dirName, groupName, idx, ref));
+                addMarksChip(acts, ref);
             }
             TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
             exp.setOnClickListener(v -> exportMotion(m, mo));
@@ -568,8 +779,10 @@ public class MotionPoolActivity extends Activity {
             acts.setPadding(0, dp(6), 0, 0);
 
             if (ex.declared) {
+                MotionMarks.Ref ref = new MotionMarks.Ref(m.dirName, false, null, ex.file, ex.name);
                 TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
-                play.setOnClickListener(v -> playExpression(m.dirName, ex.name));
+                play.setOnClickListener(v -> playExpression(m.dirName, ex, ref));
+                addMarksChip(acts, ref);
             }
             TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
             exp.setOnClickListener(v -> exportExpression(m, ex));
@@ -1019,7 +1232,7 @@ public class MotionPoolActivity extends Activity {
 
     // ==================== 行为 ====================
 
-    private void play(String modelDir, String group, int index) {
+    private void play(String modelDir, String group, int index, MotionMarks.Ref ref) {
         PetService svc = PetService.getInstance();
         if (svc == null) {
             toast("桌宠未在运行，请先开启桌宠再试");
@@ -1027,11 +1240,14 @@ public class MotionPoolActivity extends Activity {
         }
         if (isCurrentModel(modelDir)) {
             svc.onMotion(group, index, 3);
+            MotionMarks.pushRecent(this, ref);
             toast("已播放 " + group + "[" + index + "]");
+            renderList();
             return;
         }
         confirmSwitchAndPlay(svc, modelDir, () -> {
             svc.onMotion(group, index, 3);
+            MotionMarks.pushRecent(this, ref);
             toast("已切到「" + modelDir + "」并播放 " + group + "[" + index + "]");
         });
     }
@@ -1195,20 +1411,23 @@ public class MotionPoolActivity extends Activity {
     // ==================== 表情行为 ====================
 
     /** 播放一个已声明表情（引擎按 Name 播，故无需 index） */
-    private void playExpression(String modelDir, String name) {
+    private void playExpression(String modelDir, MotionLibrary.Expr ex, MotionMarks.Ref ref) {
         PetService svc = PetService.getInstance();
         if (svc == null) {
             toast("桌宠未在运行，请先开启桌宠再试");
             return;
         }
         if (isCurrentModel(modelDir)) {
-            svc.onExpression(name);
-            toast("已播放表情「" + name + "」");
+            svc.onExpression(ex.name);
+            MotionMarks.pushRecent(this, ref);
+            toast("已播放表情「" + ex.name + "」");
+            renderList();
             return;
         }
         confirmSwitchAndPlay(svc, modelDir, () -> {
-            svc.onExpression(name);
-            toast("已切到「" + modelDir + "」并播放表情「" + name + "」");
+            svc.onExpression(ex.name);
+            MotionMarks.pushRecent(this, ref);
+            toast("已切到「" + modelDir + "」并播放表情「" + ex.name + "」");
         });
     }
 
