@@ -292,3 +292,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - **GitHub API 取 token 的正确姿势**：token 内嵌在 `git remote get-url origin`（形如 `https://<user>:<token>@github.com/...`），`git credential fill` 在当前环境返回空 password。取法（不打印 token）：`URL=$(git remote get-url origin); UP=${URL#https://}; UP=${UP%%@*}; TOKEN=${UP#*:}`，再 `curl -H "Authorization: token $TOKEN" ...`。查 CI：`GET /repos/{repo}/actions/runs/{id}`（字段 status/conclusion）；查 Release：`GET /repos/{repo}/releases?per_page=3`。
   - **本地 verify 增量已缓存时很快**：本次 compile 9s / test 40s / lint 32s / apk 18s（合计约 1.7 分钟；仅改了 1 个 Activity + 1 个纯逻辑类 + 测试）。新增 13 条单测后总计 629 单测 / 55 类、lint 0 error、APK(debug) 9,095,661B。
   - 交付内容：新增纯逻辑 `care/CronText`（cron 人话 `describe` + 下次触发 `nextFireMillis`，复用 `CareAutomation.cronMatches` 语义）；工作台定时任务行改三行式（人话 / cron+工作流 / 下次触发），暂停项琥珀；定时小节加「＋ 新建定时任务」表单（选工作流 + cron 预设胶囊 + 实时预览），落盘复用 `CareTools.add_scheduled_task`。新增 `CronTextTest`(11) + `AgentWorkbenchToolsTest` 补 2。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.169.0 跨模型动作池纳入表情
+- Category: Operations & Deployment
+- Instructions:
+  - v1.169.0 已发布：versionCode 172 / versionName 1.169.0、Release id 416277783、APK app-release.apk 8,592,968B、tag v1.169.0、main @ 58123be；CI run 39104437120 success
+  - 交付内容：把 `.exp3.json` 纳入动作池——`model/MotionLibrary` 解析 `FileReferences.Expressions`（兼容根级 `Expressions/expressions`）得已声明表情 `Expr{file,name,declared,exists}` + 未注册表情；`model/ModelManager` 四项写回 `registerExpressionIntoModel` / `registerExistingFileAsExpression` / `removeExpressionFromModel` / `renameExpression`（镜像动作写回约定：仅导入模型可写、json 先备份 `.bak`、重名 `_1/_2`、落点对齐 `FileReferences.Expressions`）；`care/MotionPoolActivity` 每模型卡片新增表情区「播/导出/复用/改名/移除」+ 未注册表情「注册」+ 可写模型「导入表情」；`ModelManagerWritebackTest` +9 条含**扫描层可见性对齐锁**。
+  - 增量 verify 耗时：compile 11s / test 39s / lint 34s / apk 60s；638 单测 / 55 类、lint 0 error、APK(debug) 9,103,574B。
+  - 容器重启后重装工具链（JDK 17 via apt + `commandlinetools-linux-11076708` + sdkmanager `platform-tools`/`platforms;android-34`/`build-tools;34.0.0`/`ndk;27.3.13750724`/`cmake;3.22.1`）与 v1.164.0 记录一致；Gradle wrapper 自身下载不继承 shell 代理，需 `export JAVA_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080"`；`cmake;3.22.1` 首次装报 "Remote host terminated the handshake"，重试一次即成功。
+  - **GitHub Actions runs 列表 API 响应含控制字符**（commit message 内嵌），`json.loads(text, strict=False)` 才能解析，否则 `JSONDecodeError: Invalid control character`。
