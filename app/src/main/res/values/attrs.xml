@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ============================================================
+         主题属性（v1.179.0「主题设置」）
+         ============================================================
+         背景：全 App 是单套深色色板（values/ 唯一来源，values-night/ 被
+         tools/check_color_parity.sh 禁止重建，见 issue #98）。要让「强调色 / 外观」
+         在**不改第二套 XML 色板**的前提下全站生效，唯一干净的做法是把「会变的颜色」
+         从写死的 @color 提升为**主题属性（?attr/…）**：
+
+           - Java 侧：所有取色走 UiKit.color() → ThemeManager.resolveColor()，
+             按本文件声明解析当前主题的属性值；
+           - drawable 侧：XML 里把 @color/xxx 改成 ?attr/theme_xxx，
+             绘制时用视图所在主题解析。
+
+         AppTheme 里为每个属性给出**与当前色板完全相同的默认值**，所以默认主题下
+         渲染结果与改造前逐像素一致（零回归）；只有当用户切换强调色 / 外观时，
+         叠加的 AccentStyle* / AppThemeOled 才会改变这些属性的取值。
+
+         ⚠️ 新增属性必须同时在 AppTheme 里给默认值，否则未套主题的上下文
+            （如服务侧 Context）解析失败会退回 @color 兜底（ThemeManager 已兜底）。
+         ============================================================ -->
+
+    <!-- 强调色族（AccentStyle* 覆写） -->
+    <attr name="theme_accent" format="color" />              <!-- 主强调色（品牌实色） -->
+    <attr name="theme_accent_light" format="color" />        <!-- 浅强调色 -->
+    <attr name="theme_accent_dark" format="color" />         <!-- 深强调色 -->
+    <attr name="theme_accent_text" format="color" />         <!-- 强调字/描边色 -->
+    <attr name="theme_header_start" format="color" />        <!-- 顶栏渐变起始 -->
+    <attr name="theme_header_fade" format="color" />         <!-- 顶栏渐变中段 -->
+    <attr name="theme_accent_container" format="color" />    <!-- 强调色容器底 -->
+    <attr name="theme_accent_glass_top" format="color" />    <!-- 强调玻璃顶 -->
+    <attr name="theme_accent_glass_border" format="color" /> <!-- 强调玻璃描边 -->
+
+    <!-- 底部色族（AppThemeOled 覆写） -->
+    <attr name="theme_page_bg" format="color" />             <!-- 页面底色 -->
+    <attr name="theme_surface" format="color" />             <!-- 面板/抽屉底色 -->
+    <attr name="theme_surface_variant" format="color" />     <!-- 次级面板底 -->
+    <attr name="theme_divider" format="color" />             <!-- 分隔线 -->
+    <attr name="theme_glow_top" format="color" />            <!-- 环境光·顶部 -->
+    <attr name="theme_glow_edge" format="color" />           <!-- 环境光·右上 -->
+    <attr name="theme_glow_bottom" format="color" />         <!-- 环境光·底部 -->
+</resources>

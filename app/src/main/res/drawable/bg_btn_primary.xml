@@ -6,13 +6,13 @@
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand_operit_dark" />
+            <solid android:color="?attr/theme_accent_dark" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="22dp" />
-            <solid android:color="@color/brand_operit" />
+            <solid android:color="?attr/theme_accent" />
         </shape>
     </item>
 </selector>

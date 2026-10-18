@@ -43,6 +43,7 @@ public class AgentConsoleActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         View root = buildUi();
         setContentView(root);

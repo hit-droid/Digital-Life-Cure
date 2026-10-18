@@ -33,6 +33,7 @@ public class PersonaActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
     }

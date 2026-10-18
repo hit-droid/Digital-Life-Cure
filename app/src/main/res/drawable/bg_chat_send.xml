@@ -8,16 +8,16 @@
     <item android:state_pressed="true">
         <shape android:shape="oval">
             <gradient
-                android:startColor="@color/brand_operit"
-                android:endColor="@color/brand_operit_dark"
+                android:startColor="?attr/theme_accent"
+                android:endColor="?attr/theme_accent_dark"
                 android:angle="315" />
         </shape>
     </item>
     <item>
         <shape android:shape="oval">
             <gradient
-                android:startColor="@color/brand_operit_light"
-                android:endColor="@color/brand_operit"
+                android:startColor="?attr/theme_accent_light"
+                android:endColor="?attr/theme_accent"
                 android:angle="315" />
         </shape>
     </item>

@@ -14,7 +14,7 @@
     <!-- 1) 纯底色打底（不透明，避免透出下层 Activity） -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/operit_bg" />
+            <solid android:color="?attr/theme_page_bg" />
         </shape>
     </item>
     <!-- 2) 顶部主光：偏左上方落下的品牌紫 -->
@@ -25,7 +25,7 @@
                 android:centerX="0.24"
                 android:centerY="0.0"
                 android:gradientRadius="560dp"
-                android:startColor="@color/operit_glow_top"
+                android:startColor="?attr/theme_glow_top"
                 android:endColor="@android:color/transparent" />
         </shape>
     </item>
@@ -37,7 +37,7 @@
                 android:centerX="1.0"
                 android:centerY="0.05"
                 android:gradientRadius="420dp"
-                android:startColor="@color/operit_glow_edge"
+                android:startColor="?attr/theme_glow_edge"
                 android:endColor="@android:color/transparent" />
         </shape>
     </item>
@@ -49,7 +49,7 @@
                 android:centerX="0.5"
                 android:centerY="1.0"
                 android:gradientRadius="520dp"
-                android:startColor="@color/operit_glow_bottom"
+                android:startColor="?attr/theme_glow_bottom"
                 android:endColor="@android:color/transparent" />
         </shape>
     </item>

@@ -6,5 +6,5 @@
     <corners android:radius="18dp" />
     <stroke
         android:width="1dp"
-        android:color="@color/operit_accent" />
+        android:color="?attr/theme_accent_text" />
 </shape>

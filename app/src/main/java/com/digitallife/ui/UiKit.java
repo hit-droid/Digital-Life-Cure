@@ -42,7 +42,9 @@ public final class UiKit {
     }
 
     public static int color(Context c, int res) {
-        return c.getResources().getColor(res);
+        // v1.179.0：统一走主题解析——强调色/底部色族按当前主题的 ?attr 取值，
+        // 其余颜色取资源字面值。这样「强调色 / 外观」无需逐个改调用点即可全站生效。
+        return ThemeManager.resolveColor(c, res);
     }
 
     /** 读取真实 versionName，避免界面里写死版本号而随发版失真 */

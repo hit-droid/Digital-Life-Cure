@@ -701,7 +701,7 @@ public class PetOverlayView extends FrameLayout {
     }
 
     private int colorRes(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(getContext(), res);
     }
 
     public void clearBubble() {

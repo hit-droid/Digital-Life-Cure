@@ -80,6 +80,7 @@ public class ToolMarketActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(buildUi());
     }

@@ -121,6 +121,24 @@ public class Settings {
                 .apply();
     }
 
+    /**
+     * 主题·强调色键（v1.179.0）：取值见 {@code ui.Accent}（purple/blue/cyan/green/orange/pink），
+     * 默认 purple。由主题页写入、{@code ui.ThemeManager} 读取并套用。
+     */
+    public String getAccent() { return sp.getString("theme_accent", "purple"); }
+    public void setAccent(String v) {
+        sp.edit().putString("theme_accent", v == null || v.isEmpty() ? "purple" : v).apply();
+    }
+
+    /**
+     * 主题·外观键（v1.179.0）：{@code dark}（深紫，默认）/ {@code oled}（纯黑）。
+     * 注意两者同为**深色**——本项目坚持单套深色色板，不提供浅色模式（见 color guard）。
+     */
+    public String getAppearance() { return sp.getString("theme_appearance", "dark"); }
+    public void setAppearance(String v) {
+        sp.edit().putString("theme_appearance", v == null || v.isEmpty() ? "dark" : v).apply();
+    }
+
     /** 是否已配置 API */
     public boolean isConfigured() {
         return !getApiBase().trim().isEmpty() && !getApiKey().trim().isEmpty() && !getModel().trim().isEmpty();

@@ -22,6 +22,7 @@ import android.widget.Toast;
 import com.digitallife.R;
 import com.digitallife.model.MotionLibrary;
 import com.digitallife.render.Live2DNative;
+import com.digitallife.ui.ThemeManager;
 import com.digitallife.ui.UiKit;
 import com.digitallife.util.Settings;
 
@@ -85,6 +86,7 @@ public class AgentWorkbenchActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle saved) {
+        ThemeManager.apply(this);
         super.onCreate(saved);
         buildUi();
     }
@@ -815,7 +817,7 @@ public class AgentWorkbenchActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     private int dp(float v) {

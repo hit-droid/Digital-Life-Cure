@@ -9,8 +9,8 @@
          顶栏底边会出现一条硬切边（v1.153.0 真机截图证实）。 -->
     <gradient
         android:angle="270"
-        android:startColor="@color/operit_header_start"
-        android:centerColor="@color/operit_header_fade"
+        android:startColor="?attr/theme_header_start"
+        android:centerColor="?attr/theme_header_fade"
         android:endColor="@android:color/transparent"
         android:type="linear" />
 </shape>

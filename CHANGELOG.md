@@ -1,5 +1,49 @@
 # Changelog
 
+## v1.179.0 (2026-10-18)
+
+主题设置落地（路线图项）。本版让「主题」页从占位变可用：**强调色**与**外观底**全站生效。
+
+### 单套色板下的主题机制
+
+全 App 是单套深色色板（`values/` 唯一来源，`values-night/` 被
+`tools/check_color_parity.sh` 禁止重建，见 issue #98）。要让主题在**不加第二套 XML 色板**
+的前提下全站生效，唯一干净的做法是把「会变的颜色」从写死的 `@color` 提升为**主题属性**
+（`?attr/theme_*`，见 `res/values/attrs.xml`）：Java 取色统一走 `UiKit.color → ThemeManager`，
+drawable 里引用 `?attr`。`AppTheme` 为每个属性给出**与改造前完全相同的字面色**，故默认主题下
+渲染零回归；只有切了强调色 / 外观，叠加的 `AccentStyle*` / `AppThemeOled` 才改变取值。
+
+### 强调色
+
+- 六款预设：幻紫（默认）/ 星蓝 / 青碧 / 森绿 / 暖橙 / 樱粉，各派生九档色（主/浅/深 +
+  强调字 + 顶栏起止 + 容器底 + 强调玻璃顶/描边），由 `colors.xml` 统一提供、`AccentStyle*`
+  引用。
+- 覆盖「文字、图标、按钮、顶栏、气泡、工具卡、状态胶囊」——`brand_operit` / `operit_accent` /
+  `glass_accent_*` 等 token 全部改走属性，Java 侧 331 处调用点经 `UiKit.color` 收口一处生效。
+- 默认紫＝不叠加任何 `AccentStyle`（即 AppTheme 字面色），零成本。
+
+### 外观底
+
+- 深紫（默认）/ 纯黑（OLED）两态，均为**深色**（不新增浅色板、不碰 color guard）；
+  OLED 只覆写页面底 + 环境光 + 面板/抽屉/对话框底等底部色族。
+
+### 新增 / 变更
+
+- 新增 `ui/Accent`（预设元数据 + 归一化）、`ui/ThemeManager`（`apply(Activity)` +
+  `resolveColor(Context,res)`，属性缺失/无主题时退回字面色，永不抛）。
+- 新增 `res/values/attrs.xml`（16 个颜色属性）与 `styles.xml` 的 `AppThemeOled` +
+  五个 `AccentStyle*`；`AppTheme` 补默认属性值。
+- 19 个 drawable 的变色项由 `@color/...` 改引用 `?attr/theme_...`。
+- `Settings`：新增 `getAccent/setAccent`、`getAppearance/setAppearance`。
+- 12 个 Activity 在 `onCreate` 首句调用 `ThemeManager.apply(this)`；7 处本地取色 helper
+  改走 `UiKit.color`。
+- `ui/ThemesActivity`：占位页改为真主题页（色卡行 + 外观两行，改选即 `recreate` 生效）。
+
+### 校验
+
+`tools/verify.sh` 全绿（单测 / lint 0 error / APK 通过）。新增 `AccentTest`（脏输入归一化、
+色卡互异等边界）+ `ThemeManagerTest`（默认零回归、强调色/外观覆盖、无主题兜底不抛）。
+
 ## v1.178.0 (2026-10-18)
 
 承接 v1.172.0 起的连招线。连招此前只能**进动作池手动点播**——编好的编排无法接系统事件。

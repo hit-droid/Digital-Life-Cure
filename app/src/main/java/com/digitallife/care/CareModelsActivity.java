@@ -22,6 +22,7 @@ import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.service.PetService;
+import com.digitallife.ui.ThemeManager;
 import com.digitallife.ui.UiKit;
 import com.digitallife.util.Settings;
 
@@ -49,6 +50,7 @@ public class CareModelsActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         destroyed = false;
         tools = new CareTools(this);
@@ -399,7 +401,7 @@ public class CareModelsActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     private int dp(float v) {

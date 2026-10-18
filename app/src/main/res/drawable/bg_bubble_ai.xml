@@ -25,14 +25,14 @@
             <gradient
                 android:angle="270"
                 android:startColor="#C4B5FD"
-                android:endColor="@color/brand_operit" />
+                android:endColor="?attr/theme_accent" />
             <corners android:radius="2dp" />
         </shape>
     </item>
     <!-- 中层：不透明深紫底（气泡从页面底上抬一层）。必须不透明，见文件头说明。 -->
     <item android:left="3dp">
         <shape android:shape="rectangle">
-            <solid android:color="@color/operit_surface" />
+            <solid android:color="?attr/theme_surface" />
             <corners android:radius="16dp" />
         </shape>
     </item>

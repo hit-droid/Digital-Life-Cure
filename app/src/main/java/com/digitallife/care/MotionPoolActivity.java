@@ -25,6 +25,7 @@ import com.digitallife.model.ModelManager;
 import com.digitallife.model.MotionCompat;
 import com.digitallife.model.MotionLibrary;
 import com.digitallife.service.PetService;
+import com.digitallife.ui.ThemeManager;
 import com.digitallife.ui.UiKit;
 import com.digitallife.ui.pet.TouchBindings;
 import com.digitallife.util.Settings;
@@ -138,6 +139,7 @@ public class MotionPoolActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle saved) {
+        ThemeManager.apply(this);
         super.onCreate(saved);
         settings = new Settings(this);
         comboPlayer = new ComboPlayer(this, this::toast);
@@ -2106,7 +2108,7 @@ public class MotionPoolActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     private int dp(float v) {

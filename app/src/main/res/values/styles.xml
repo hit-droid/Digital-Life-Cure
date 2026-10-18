@@ -14,6 +14,25 @@
         <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+
+        <!-- v1.179.0「主题设置」：把会变的颜色提升为主题属性，默认值＝改造前的字面色，
+             故默认主题下渲染与之前完全一致（零回归）。见 attrs.xml 顶部说明。 -->
+        <item name="theme_accent">@color/brand_operit</item>
+        <item name="theme_accent_light">@color/brand_operit_light</item>
+        <item name="theme_accent_dark">@color/brand_operit_dark</item>
+        <item name="theme_accent_text">@color/operit_accent</item>
+        <item name="theme_header_start">@color/operit_header_start</item>
+        <item name="theme_header_fade">@color/operit_header_fade</item>
+        <item name="theme_accent_container">@color/operit_primary_container</item>
+        <item name="theme_accent_glass_top">@color/glass_accent_top</item>
+        <item name="theme_accent_glass_border">@color/glass_border_accent</item>
+        <item name="theme_page_bg">@color/operit_bg</item>
+        <item name="theme_surface">@color/operit_surface</item>
+        <item name="theme_surface_variant">@color/operit_surface_variant</item>
+        <item name="theme_divider">@color/operit_divider</item>
+        <item name="theme_glow_top">@color/operit_glow_top</item>
+        <item name="theme_glow_edge">@color/operit_glow_edge</item>
+        <item name="theme_glow_bottom">@color/operit_glow_bottom</item>
     </style>
 
     <!-- 圆角对话框（与 AppTheme 同为深色口径，不再出现 Light/Dark 两套 parent） -->
@@ -21,5 +40,80 @@
         <item name="android:windowBackground">@drawable/bg_dialog</item>
         <item name="android:colorAccent">@color/operit_accent</item>
         <item name="android:colorControlActivated">@color/operit_accent</item>
+    </style>
+
+    <!-- ===== 主题设置（v1.179.0） =====
+         外观：默认 AppTheme＝深紫；AppThemeOled＝纯黑 OLED（只覆写底部色族，仍为深色）。
+         强调色：AccentStyle* 只覆写强调色族九项，用 Theme.applyStyle() 在运行时叠加，
+                 可与外观自由组合（不必再写 外观×强调色 的笛卡尔积样式）。
+         默认强调色「紫」＝不叠加任何 AccentStyle（即 AppTheme 的字面值），零成本。 -->
+    <style name="AppThemeOled" parent="AppTheme">
+        <item name="theme_page_bg">@color/oled_bg</item>
+        <item name="theme_surface">@color/oled_surface</item>
+        <item name="theme_surface_variant">@color/oled_surface_variant</item>
+        <item name="theme_divider">@color/oled_divider</item>
+        <item name="theme_glow_top">@color/oled_glow_top</item>
+        <item name="theme_glow_edge">@color/oled_glow_edge</item>
+        <item name="theme_glow_bottom">@color/oled_glow_bottom</item>
+    </style>
+
+    <style name="AccentStyleBlue">
+        <item name="theme_accent">@color/accent_blue</item>
+        <item name="theme_accent_light">@color/accent_blue_light</item>
+        <item name="theme_accent_dark">@color/accent_blue_dark</item>
+        <item name="theme_accent_text">@color/accent_blue_text</item>
+        <item name="theme_header_start">@color/accent_blue_header_start</item>
+        <item name="theme_header_fade">@color/accent_blue_header_fade</item>
+        <item name="theme_accent_container">@color/accent_blue_container</item>
+        <item name="theme_accent_glass_top">@color/accent_blue_glass_top</item>
+        <item name="theme_accent_glass_border">@color/accent_blue_glass_border</item>
+    </style>
+
+    <style name="AccentStyleCyan">
+        <item name="theme_accent">@color/accent_cyan</item>
+        <item name="theme_accent_light">@color/accent_cyan_light</item>
+        <item name="theme_accent_dark">@color/accent_cyan_dark</item>
+        <item name="theme_accent_text">@color/accent_cyan_text</item>
+        <item name="theme_header_start">@color/accent_cyan_header_start</item>
+        <item name="theme_header_fade">@color/accent_cyan_header_fade</item>
+        <item name="theme_accent_container">@color/accent_cyan_container</item>
+        <item name="theme_accent_glass_top">@color/accent_cyan_glass_top</item>
+        <item name="theme_accent_glass_border">@color/accent_cyan_glass_border</item>
+    </style>
+
+    <style name="AccentStyleGreen">
+        <item name="theme_accent">@color/accent_green</item>
+        <item name="theme_accent_light">@color/accent_green_light</item>
+        <item name="theme_accent_dark">@color/accent_green_dark</item>
+        <item name="theme_accent_text">@color/accent_green_text</item>
+        <item name="theme_header_start">@color/accent_green_header_start</item>
+        <item name="theme_header_fade">@color/accent_green_header_fade</item>
+        <item name="theme_accent_container">@color/accent_green_container</item>
+        <item name="theme_accent_glass_top">@color/accent_green_glass_top</item>
+        <item name="theme_accent_glass_border">@color/accent_green_glass_border</item>
+    </style>
+
+    <style name="AccentStyleOrange">
+        <item name="theme_accent">@color/accent_orange</item>
+        <item name="theme_accent_light">@color/accent_orange_light</item>
+        <item name="theme_accent_dark">@color/accent_orange_dark</item>
+        <item name="theme_accent_text">@color/accent_orange_text</item>
+        <item name="theme_header_start">@color/accent_orange_header_start</item>
+        <item name="theme_header_fade">@color/accent_orange_header_fade</item>
+        <item name="theme_accent_container">@color/accent_orange_container</item>
+        <item name="theme_accent_glass_top">@color/accent_orange_glass_top</item>
+        <item name="theme_accent_glass_border">@color/accent_orange_glass_border</item>
+    </style>
+
+    <style name="AccentStylePink">
+        <item name="theme_accent">@color/accent_pink</item>
+        <item name="theme_accent_light">@color/accent_pink_light</item>
+        <item name="theme_accent_dark">@color/accent_pink_dark</item>
+        <item name="theme_accent_text">@color/accent_pink_text</item>
+        <item name="theme_header_start">@color/accent_pink_header_start</item>
+        <item name="theme_header_fade">@color/accent_pink_header_fade</item>
+        <item name="theme_accent_container">@color/accent_pink_container</item>
+        <item name="theme_accent_glass_top">@color/accent_pink_glass_top</item>
+        <item name="theme_accent_glass_border">@color/accent_pink_glass_border</item>
     </style>
 </resources>

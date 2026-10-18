@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
 
         // 上次启动崩过：本次只把崩溃内容显示出来，不做任何可能再次触发崩溃的初始化，
@@ -481,7 +482,7 @@ public class MainActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     public ConversationTabView getConversationTab() { return conversationTab; }

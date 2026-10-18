@@ -2,9 +2,9 @@
 <!-- 工具卡头部的工具图标底座（v1.158.0 Glass v2）：accent 染色圆角方块 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/glass_accent_top" />
+    <solid android:color="?attr/theme_accent_glass_top" />
     <corners android:radius="10dp" />
     <stroke
         android:width="1dp"
-        android:color="@color/glass_border_accent" />
+        android:color="?attr/theme_accent_glass_border" />
 </shape>

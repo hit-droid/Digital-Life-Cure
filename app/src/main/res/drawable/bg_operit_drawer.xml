@@ -7,7 +7,7 @@
     <item>
         <shape android:shape="rectangle">
             <!-- v1.158.0：由中性灰 #FF2A2A2A 收敛到品牌紫 surface，和页面底同一色系 -->
-            <solid android:color="@color/operit_surface" />
+            <solid android:color="?attr/theme_surface" />
             <corners android:topLeftRadius="16dp" android:bottomLeftRadius="16dp" />
         </shape>
     </item>

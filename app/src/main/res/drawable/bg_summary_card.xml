@@ -5,10 +5,10 @@
     android:shape="rectangle">
     <gradient
         android:angle="270"
-        android:startColor="@color/glass_accent_top"
+        android:startColor="?attr/theme_accent_glass_top"
         android:endColor="@color/glass_sheen" />
     <corners android:radius="20dp" />
     <stroke
         android:width="1dp"
-        android:color="@color/glass_border_accent" />
+        android:color="?attr/theme_accent_glass_border" />
 </shape>

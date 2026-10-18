@@ -178,6 +178,7 @@ public class ChatActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         chatStore = new ChatStore(this);
         // App 启动时重排定时任务闹钟（进程被杀/重启后 AlarmManager 注册会丢）
@@ -3190,7 +3191,7 @@ public class ChatActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     private int dp(float v) {

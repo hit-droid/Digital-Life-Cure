@@ -44,6 +44,7 @@ public class MemoryManageActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.apply(this);
         super.onCreate(savedInstanceState);
         destroyed = false;
         ms = new MemoryStore(this);
@@ -423,7 +424,7 @@ public class MemoryManageActivity extends Activity {
     }
 
     private int getColorCompat(int res) {
-        return getResources().getColor(res);
+        return UiKit.color(this, res);
     }
 
     private int dp(float v) {

@@ -3,6 +3,6 @@
      v1.159.0：旧色板 divider → operit_divider，带上 Operit 紫调，与深紫底不再发灰。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/operit_divider" />
+    <solid android:color="?attr/theme_divider" />
     <corners android:radius="4dp" />
 </shape>

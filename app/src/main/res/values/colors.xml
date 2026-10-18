@@ -88,4 +88,66 @@
     <!-- 「凹槽」底：参数/代码块这类嵌在玻璃卡里的下沉区域（38% 黑） -->
     <color name="glass_well">#61000000</color>
     <color name="glass_scrim">#B3000000</color>       <!-- 抽屉/弹窗遮罩：70% 黑 -->
+
+    <!-- ===== 强调色预设（v1.179.0「主题设置」） =====
+         默认强调色＝上面的 Operit 紫，其余预设在此定义成色值供 AccentStyle* 引用。
+         九档按统一 HSL/HSV 规则从同一基准色相派生（脚本生成，见 CHANGELOG）：
+           主色/浅/深 + 强调字 + 顶栏起止 + 容器底 + 强调玻璃顶/描边。
+         这里只是「素材」；真正决定当前生效值的是主题属性（见 attrs.xml）。 -->
+    <color name="accent_blue">#7190D9</color>
+    <color name="accent_blue_light">#98B4F5</color>
+    <color name="accent_blue_dark">#5470B0</color>
+    <color name="accent_blue_text">#A8C2FF</color>
+    <color name="accent_blue_header_start">#3C4B6E</color>
+    <color name="accent_blue_header_fade">#4D7190D9</color>
+    <color name="accent_blue_container">#313745</color>
+    <color name="accent_blue_glass_top">#25A8C2FF</color>
+    <color name="accent_blue_glass_border">#47A8C2FF</color>
+    <color name="accent_cyan">#71CBD9</color>
+    <color name="accent_cyan_light">#98E8F5</color>
+    <color name="accent_cyan_dark">#54A4B0</color>
+    <color name="accent_cyan_text">#A8F3FF</color>
+    <color name="accent_cyan_header_start">#3C676E</color>
+    <color name="accent_cyan_header_fade">#4D71CBD9</color>
+    <color name="accent_cyan_container">#314245</color>
+    <color name="accent_cyan_glass_top">#25A8F3FF</color>
+    <color name="accent_cyan_glass_border">#47A8F3FF</color>
+    <color name="accent_green">#71D99C</color>
+    <color name="accent_green_light">#98F5BF</color>
+    <color name="accent_green_dark">#54B07B</color>
+    <color name="accent_green_text">#A8FFCC</color>
+    <color name="accent_green_header_start">#3C6E51</color>
+    <color name="accent_green_header_fade">#4D71D99C</color>
+    <color name="accent_green_container">#314539</color>
+    <color name="accent_green_glass_top">#25A8FFCC</color>
+    <color name="accent_green_glass_border">#47A8FFCC</color>
+    <color name="accent_orange">#D9A171</color>
+    <color name="accent_orange_light">#F5C398</color>
+    <color name="accent_orange_dark">#B07F54</color>
+    <color name="accent_orange_text">#FFD1A8</color>
+    <color name="accent_orange_header_start">#6E533C</color>
+    <color name="accent_orange_header_fade">#4DD9A171</color>
+    <color name="accent_orange_container">#453A31</color>
+    <color name="accent_orange_glass_top">#25FFD1A8</color>
+    <color name="accent_orange_glass_border">#47FFD1A8</color>
+    <color name="accent_pink">#D971A5</color>
+    <color name="accent_pink_light">#F598C6</color>
+    <color name="accent_pink_dark">#B05482</color>
+    <color name="accent_pink_text">#FFA8D4</color>
+    <color name="accent_pink_header_start">#6E3C55</color>
+    <color name="accent_pink_header_fade">#4DD971A5</color>
+    <color name="accent_pink_container">#45313B</color>
+    <color name="accent_pink_glass_top">#25FFA8D4</color>
+    <color name="accent_pink_glass_border">#47FFA8D4</color>
+
+    <!-- ===== 纯黑 OLED 外观（v1.179.0「主题设置」） =====
+         与默认「深紫」同为**深色**（不新增浅色板、不碰 issue #98 红线），
+         只是把页面底压到纯黑、环境光收敛，供 AppThemeOled 引用。 -->
+    <color name="oled_bg">#000000</color>
+    <color name="oled_surface">#14121C</color>
+    <color name="oled_surface_variant">#1E1B29</color>
+    <color name="oled_divider">#2C2839</color>
+    <color name="oled_glow_top">#593A2A6E</color>   <!-- 顶部主光：35% 品牌紫 -->
+    <color name="oled_glow_edge">#295B4DB5</color>  <!-- 右上副光：16% 浅紫 -->
+    <color name="oled_glow_bottom">#332E2456</color><!-- 底部回光：20% 深紫 -->
 </resources>
