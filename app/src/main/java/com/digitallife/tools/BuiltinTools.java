@@ -180,11 +180,9 @@ public class BuiltinTools {
 
         // ===== 信息类（3 个） =====
         registerIfAbsent(tools, "get_calendar_today",
-                "获取今日日程（占位实现，从本地 JSON 读取）",
+                "获取今日日程（今日提醒 + 每日例行定时任务）",
                 new String[]{},
-                args -> {
-                    return com.digitallife.brain.MemoryTools.getTodayEvents(appContext);
-                });
+                args -> Agenda.today(appContext));
 
         registerIfAbsent(tools, "get_contacts_hint",
                 "获取联系人提示（需要 READ_CONTACTS 权限）",
@@ -192,9 +190,9 @@ public class BuiltinTools {
                 args -> "联系人功能需要在系统设置中授予通讯录权限");
 
         registerIfAbsent(tools, "get_files_recent",
-                "获取最近文件列表（占位）",
+                "获取最近文件列表（按修改时间倒序，最多 10 条）",
                 new String[]{},
-                args -> "文件浏览功能请在主程序中打开「设置 → 通用」查看");
+                args -> RecentFiles.recent(appContext));
 
         // ===== 网络类（1 个） =====
         registerIfAbsent(tools, "web_fetch",

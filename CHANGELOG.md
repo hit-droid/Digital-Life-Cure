@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.180.0 (2026-10-18)
+
+路线图收官项「Agent 工具补齐」。此前「信息」类里有两个工具**只挂名不干活**：`get_calendar_today`
+（今日日程）实为透传提醒读取、`get_files_recent`（最近文件）干脆只回一句「请到设置里查看」。
+本版把它们做成真的。纯增量、纯读、不申请任何存储权限。
+
+### 今日日程（`get_calendar_today`）
+
+- 新增 `tools/Agenda`：把 **今日提醒**（`reminders`）与 **每日例行**定时任务（`care_schedules`）
+  合并成一段可读文本。
+- 定时任务用既有 `care/CronText` 翻成人话（`0 9 * * *` → 「每天 09:00」）并推算**下次触发**
+  （今天 → 「今天 HH:mm」，其他日期 → 「MM-dd HH:mm」），标注目标（工作流 / 连招）与是否已暂停。
+- 容错：坏 JSON / 空值 / 非法 cron 一律跳过或退化为可读提示，绝不抛。
+
+### 最近文件（`get_files_recent`）
+
+- 新增 `tools/RecentFiles`：扫描应用专属外置目录（备份 / 导出）与内部文件目录、
+  公共「下载」「文档」目录，按修改时间倒序给出**文件名 · 大小 · 时间 · 路径**（最多 10 条）。
+- **不申请、不依赖存储权限**：公共目录受限时 `listFiles()` 返回 null 或抛异常一律静默跳过，
+  退化为「未找到」；不进入 `models` / `cache` 等噪音目录，扫描有总量上限，慢盘不卡。
+
+### 新增 / 变更
+
+- 新增 `tools/Agenda`（今日日程聚合，纯逻辑可测）与 `tools/RecentFiles`（最近文件扫描 / 渲染）。
+- `tools/BuiltinTools`：`get_calendar_today` 改走 `Agenda.today`、`get_files_recent` 改走
+  `RecentFiles.recent`，描述去掉「占位」字样。
+
+### 校验
+
+`tools/verify.sh` 全绿（单测 / lint 0 error / APK 通过）。新增 `InfoToolsTest`：大小 / 条数格式化、
+排序与截断、隐藏文件与噪音目录排除、坏 JSON 容错、带 Context 入口不抛。
+
 ## v1.179.0 (2026-10-18)
 
 主题设置落地（路线图项）。本版让「主题」页从占位变可用：**强调色**与**外观底**全站生效。
