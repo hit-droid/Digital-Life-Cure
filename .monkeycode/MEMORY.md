@@ -344,3 +344,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - v1.174.0 已发布：versionCode 177 / versionName 1.174.0、Release id 416315450、APK app-release.apk 8,607,294B、tag v1.174.0、main @ 0933d07；CI run 39109582695 success
   - v1.174.0 交付内容：连招打磨——编排弹窗候选行改为「＋ / 试」两枚，`previewCandidate` 单步试播（非当前模型走既有 `confirmSwitchAndPlay`）；已存连招行加「复制」，`duplicateCombo` 另起不重名副本名（新增纯逻辑 `ComboPlan.copyName`：base/base2/base3…）原样拷贝步骤；`ComboPlanTest` 增 `copyNameAvoidsCollisions` 1 条。
   - 增量 verify 耗时：v1.173.0 compile 9s / test 42s / lint 34s / apk 16s，680 单测/60 类；v1.174.0 compile 10s / test 43s / lint 35s / apk 11s，681 单测/60 类；均 lint 0 error。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.175.0 动作池 收藏 / 最近播放
+- Category: Operations & Deployment
+- Instructions:
+  - v1.175.0 已发布：versionCode 178 / versionName 1.175.0、Release id 416322524、APK app-release.apk 8,612,045B、tag v1.175.0、main @ 7b1d31c；CI run 39110736997 success
+  - 交付内容：动作池「收藏 / 最近播放」——新增 `care/MotionMarks`（纯逻辑 `contains`/`pushed`(置顶+去重+按 cap 裁剪)/`toggled`(已存在则移除、不存在则插最前)/`removed`(按身份键移除) + 存储：prefs `care_motion_marks`，key `favorites`/`recent`，`favorites`/`isFavorite`/`toggleFavorite`/`recents`/`pushRecent`(保留 `MAX_RECENT=15`)/`removeRecent`/`clearRecents`，JSON 往返；引用身份 `Ref.id()`=模型目录|m/e|组|文件|名）。`MotionPoolActivity` 新增 `buildMarksSection`（列表顶部据 prefs 汇总「★ 收藏 / ▷ 最近播放」区，条目点击 `playRef` 点播、非当前模型走既有 `confirmSwitchAndPlay`「切播」确认；解析不到标「失效」+「✕」移除；两者皆空返回 null 不占版面；有查询词时隐藏）；动作/表情行加 `addMarksChip`「☆ 收藏 / ★ 已收藏」切换芯片；`play`/`playExpression` 点播成功后 `pushRecent`（当前模型路径再 `renderList()` 即时刷新；跨模型路径由 `confirmSwitchAndPlay` 收尾 `refresh()` 刷新）。`ResolvedRef`/`resolveRef` 按「组+文件（动作）/ 名或文件（表情）」对回当前扫描，口径与 `ComboPlan` 一致。单测 `MotionMarksTest`(5 纯 JVM) + `MotionMarksStoreTest`(7 Robolectric)。
+  - **边界（关键）**：标记为**纯引用**（不复制文件、不写模型 json）；失效判定依赖扫描结果，用户删/改后旧引用自动标「失效」而非错播；列表重渲染用内存中 `scanned`（`renderList()`），不重扫磁盘。
+  - 增量 verify 耗时：compile 12s / test 44s / lint 34s / apk 17s；693 单测 / 62 类、lint 0 error、APK(debug) 9,129,110B。
+  - CI 发版链路：`git push origin main` → GitHub Actions `.github/workflows/build.yml` 自动 `assembleRelease` + 16KB 对齐门禁 + 「Check if release needed」(release 不存在才发) → 建 tag `v{versionName}` 并上传 `app-release.apk`。取 GitHub token：`git config remote.origin.url` 里内嵌 `https://<token>@github.com/...`，用 python 正则抽出（勿打印）；Actions runs/release API 响应含控制字符，`json.load(...,strict=False)` 才可解析。
