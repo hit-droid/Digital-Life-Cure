@@ -281,3 +281,14 @@ Entries discovered by the Agent during task execution should follow this format:
   - **mkpatch finish 后工作区会被 checkout 还原**（Tools/ChatActivity 改动被清空 + `git add -N` 的新文件变 0 字节）。如果下一步还要继续改，先 `git reset -q` 清索引前**先确认改动都已落到 patch**——否则改动会丢
   - **失败 commit 的代码可从 GitHub 用 `git fetch <sha> && git checkout <ref> -- <file>` 恢复**——autoloop 的 `git reset --hard HEAD~2` 不会删对象，失败 commit 在 fetch 后仍可访问
   - **`git diff` 默认不看 staged 和 untracked**：staged 改动用 `git diff --cached`，untracked 改动必须先 `git add -N` 再 diff。mkpatch finish 入队时若少了关键文件，会生成残缺 patch 二次失败
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.168.0 定时任务可读化 + 工作台新建定时任务
+- Category: Operations & Deployment
+- Instructions:
+  - v1.168.0 已发布：versionCode 171 / versionName 1.168.0、Release id 416219830、APK app-release.apk 8,585,716B、tag v1.168.0 @ d5641dc、main @ d5641dc；CI run 39095162478 success
+  - **Release 由 CI 自动发布，无需手工步骤**：`.github/workflows/build.yml` 的 `Check if release needed` + `Create GitHub Release and upload APK` 两步会在 push 到 main 且 `versionName` 对应 tag 尚不存在时自动建 tag、建 Release 并上传 `app-release.apk`。手工只需：改 `versionName` → commit → push main → 等 CI 绿即可；不要再单独跑建 tag/建 Release 的脚本（会与 CI 撞车或重复）。注意 workflow 用 `paths-ignore: '**/*.md'`，**纯 .md 提交（如只改 MEMORY/AGENTS）不会出包发版**——想发版必须带上 `app/build.gradle` 的 versionName 变更。
+  - **GitHub API 取 token 的正确姿势**：token 内嵌在 `git remote get-url origin`（形如 `https://<user>:<token>@github.com/...`），`git credential fill` 在当前环境返回空 password。取法（不打印 token）：`URL=$(git remote get-url origin); UP=${URL#https://}; UP=${UP%%@*}; TOKEN=${UP#*:}`，再 `curl -H "Authorization: token $TOKEN" ...`。查 CI：`GET /repos/{repo}/actions/runs/{id}`（字段 status/conclusion）；查 Release：`GET /repos/{repo}/releases?per_page=3`。
+  - **本地 verify 增量已缓存时很快**：本次 compile 9s / test 40s / lint 32s / apk 18s（合计约 1.7 分钟；仅改了 1 个 Activity + 1 个纯逻辑类 + 测试）。新增 13 条单测后总计 629 单测 / 55 类、lint 0 error、APK(debug) 9,095,661B。
+  - 交付内容：新增纯逻辑 `care/CronText`（cron 人话 `describe` + 下次触发 `nextFireMillis`，复用 `CareAutomation.cronMatches` 语义）；工作台定时任务行改三行式（人话 / cron+工作流 / 下次触发），暂停项琥珀；定时小节加「＋ 新建定时任务」表单（选工作流 + cron 预设胶囊 + 实时预览），落盘复用 `CareTools.add_scheduled_task`。新增 `CronTextTest`(11) + `AgentWorkbenchToolsTest` 补 2。
