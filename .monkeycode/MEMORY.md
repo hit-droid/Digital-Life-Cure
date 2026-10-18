@@ -303,3 +303,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - 增量 verify 耗时：compile 11s / test 39s / lint 34s / apk 60s；638 单测 / 55 类、lint 0 error、APK(debug) 9,103,574B。
   - 容器重启后重装工具链（JDK 17 via apt + `commandlinetools-linux-11076708` + sdkmanager `platform-tools`/`platforms;android-34`/`build-tools;34.0.0`/`ndk;27.3.13750724`/`cmake;3.22.1`）与 v1.164.0 记录一致；Gradle wrapper 自身下载不继承 shell 代理，需 `export JAVA_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080"`；`cmake;3.22.1` 首次装报 "Remote host terminated the handshake"，重试一次即成功。
   - **GitHub Actions runs 列表 API 响应含控制字符**（commit message 内嵌），`json.loads(text, strict=False)` 才能解析，否则 `JSONDecodeError: Invalid control character`。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.170.0 动作池详情 + 淡入淡出轻编辑
+- Category: Operations & Deployment
+- Instructions:
+  - v1.170.0 已发布：versionCode 173 / versionName 1.170.0、Release id 416286834、APK app-release.apk 8,596,053B、tag v1.170.0、main @ 7648ebe；CI run 39105462410 success
+  - 交付内容：动作池「详情 + 轻编辑」——`care/MotionPoolActivity` 动作行加「详情」（所属模型/组/文件、时长、循环、曲线数、当前淡入淡出、参数 ID 清单，参数清单复用 `MotionLibrary.motionParameterIds`）+「淡入淡出」弹窗（仅导入模型 + 已声明动作，两个数字输入，非法/负数拒绝）；`model/ModelManager.setMotionFade` 写回该动作在 `Motions` 组内注册条目的 `FadeInTime`/`FadeOutTime`（先备份 `.bak`、内置只读、负值归零、`round2` 两位小数）；`model/MotionLibrary.Motion` 补 `fadeIn`/`fadeOut`（未声明该键记 `NaN`＝引擎默认 1.0）；`ModelManagerWritebackTest` +6 条含**扫描层同步锁**。表情行加「详情」（名称/文件/大小）。
+  - **关键依据（已在源码核实，避免做成静默 no-op）**：引擎确实读模型 json 注册条目的淡入淡出——`app/src/main/cpp/LApp/LAppModel.cpp` 的 `PreLoadMotionGroup`（约 379-389 行）与 `StartMotion`（约 618-628 行）调用 `_modelSetting->GetMotionFadeInTimeValue/GetMotionFadeOutTimeValue(group, i)` 再 `tmpMotion->SetFadeInTime/SetFadeOutTime`，故改 json 会真正生效。
+  - 增量 verify 耗时：compile 9s / test 40s / lint 34s / apk 11s；644 单测 / 55 类、lint 0 error、APK(debug) 9,107,329B。
