@@ -177,6 +177,9 @@ public class CareAutomation {
                 } catch (Exception e) {
                     result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
                 }
+                // 落盘执行记录（v1.173.0）：工作台据此显示「上次运行 / 记录」
+                RunLog.record(ctx, RunLog.scheduleKey(name), RunLog.looksOk(result), result);
+                RunLog.record(ctx, RunLog.workflowKey(workflowName), RunLog.looksOk(result), result);
                 careAI.logAutomationEvent("定时任务「" + name + "」触发，执行工作流「" + workflowName + "」:\n" + result);
                 if (report != null) report.onAutoReport("⏰ 定时任务「" + name + "」已触发\n" + result);
             } catch (Exception ignored) {

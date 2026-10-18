@@ -50,6 +50,12 @@ import java.util.Map;
  * 自定义 + 实时预览），复用 {@code add_scheduled_task}——定时任务是纯配置，不需要 AI 编排。
  * 工作流创建 / 编辑仍回到对话里让 AI 编排（那是 Agent 的主场），这里只做「已配置的东西」
  * 的查看与轻操作。动作浏览已移到「动作池」页（其入口卡片在本页给出）。</p>
+ *
+ * <p>执行可观测性（v1.173.0）：此前只有「管」没有「看」——定时任务会按 cron 真跑工作流，但结果
+ * 不落盘，工作台看不到「上次几点跑、成没成」。本版给工作流 / 定时任务两行都补上「上次运行」
+ * 一行（来自 {@link RunLog}，无记录显示「尚未运行」）与「记录」入口（回看最近 {@code 20} 次
+ * 的时间 + 成败 + 结果摘要）。「立即运行」现在也会落盘并即时刷新；定时任务行的手动运行同时记
+ * 到该任务与该工作流两条记录（{@code CareAutomation} 的自动触发同样双记录）。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -155,8 +161,12 @@ public class AgentWorkbenchActivity extends Activity {
                 LinearLayout box = rowBox(r[0], r[1]);
                 LinearLayout acts = actionRow();
                 final String wf = r[0];
+                appendLastRun(box, RunLog.workflowKey(wf));
                 chip(acts, "立即运行", R.color.brand_operit_light)
-                        .setOnClickListener(v -> runWorkflowNow(wf, "工作流"));
+                        .setOnClickListener(v -> runWorkflowNow(wf, "工作流", RunLog.workflowKey(wf)));
+                chip(acts, "记录", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> showRunLog(
+                                RunLog.workflowKey(wf), "工作流「" + wf + "」记录"));
                 chip(acts, "查看", R.color.operit_text_secondary)
                         .setOnClickListener(v -> showWorkflowSteps(wf));
                 chip(acts, "删除", R.color.danger)
@@ -208,9 +218,13 @@ public class AgentWorkbenchActivity extends Activity {
                 String cron = r[1];
                 long next = CronText.nextFireMillis(cron, now);
                 String when = next > 0 ? "下次 " + formatWhen(next, now) : "近一年内不触发";
+                RunLog.Record lastRun = RunLog.last(this, RunLog.scheduleKey(r[0]));
+                String lastTxt = lastRun == null ? "尚未运行"
+                        : (lastRun.ok ? "✅ " : "❌ ") + "上次运行 " + RunLog.whenText(lastRun.at, now);
                 String subtitle = CronText.describe(cron)
                         + "\n" + cron + "  →  " + r[3]
-                        + "  ·  " + (enabled ? when : "已暂停");
+                        + "  ·  " + (enabled ? when : "已暂停")
+                        + "\n" + lastTxt;
                 LinearLayout box = rowBox(r[0], subtitle);
                 if (!enabled) {
                     TextView t = (TextView) box.getChildAt(0);
@@ -220,7 +234,11 @@ public class AgentWorkbenchActivity extends Activity {
                 final String taskName = r[0];
                 final String wf = r[3];
                 chip(acts, "立即运行", R.color.brand_operit_light)
-                        .setOnClickListener(v -> runWorkflowNow(wf, "定时任务「" + taskName + "」"));
+                        .setOnClickListener(v -> runWorkflowNow(wf, "定时任务「" + taskName + "」",
+                                RunLog.scheduleKey(taskName), RunLog.workflowKey(wf)));
+                chip(acts, "记录", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> showRunLog(
+                                RunLog.scheduleKey(taskName), "定时任务「" + taskName + "」记录"));
                 chip(acts, enabled ? "暂停" : "启用", R.color.operit_text_secondary)
                         .setOnClickListener(v -> toggleSchedule(taskName));
                 chip(acts, "删除", R.color.danger)
@@ -258,8 +276,12 @@ public class AgentWorkbenchActivity extends Activity {
 
     // ============ 操作 ============
 
-    /** 立即运行某个工作流（可能含网络 / 文件步骤，放后台线程，勿占主线程） */
-    private void runWorkflowNow(String workflowName, String label) {
+    /**
+     * 立即运行某个工作流（可能含网络 / 文件步骤，放后台线程，勿占主线程）。
+     * 运行结果落盘到 {@code logKeys} 指定的执行记录（工作流行记 workflow、定时任务行另记 schedule），
+     * 完成后刷新界面让「上次运行」立即更新。
+     */
+    private void runWorkflowNow(String workflowName, String label, String... logKeys) {
         if (workflowName == null || workflowName.isEmpty() || "?".equals(workflowName)) {
             toast("找不到对应的工作流");
             return;
@@ -274,8 +296,13 @@ public class AgentWorkbenchActivity extends Activity {
             } catch (Exception e) {
                 res = "运行失败：" + UiKit.safeMsg(e);
             }
+            boolean ok = RunLog.looksOk(res);
+            for (String k : logKeys) RunLog.record(getApplicationContext(), k, ok, res);
             final String out = res;
-            runOnUiThread(() -> showResult(label + " 执行结果", out));
+            runOnUiThread(() -> {
+                showResult(label + " 执行结果", out);
+                refresh();
+            });
         }).start();
     }
 
@@ -543,6 +570,46 @@ public class AgentWorkbenchActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(body)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    // ============ 执行记录（v1.173.0） ============
+
+    /** 在记录框里补一行「上次运行」（无记录则「尚未运行」），让「管」与「看」在同一行可见 */
+    private void appendLastRun(LinearLayout box, String key) {
+        String line = RunLog.lastLine(this, key, System.currentTimeMillis());
+        TextView tv = new TextView(this);
+        tv.setText(line != null ? line : "尚未运行");
+        tv.setTextSize(11.5f);
+        tv.setTextColor(getColorCompat(line != null
+                ? R.color.operit_text_secondary : R.color.operit_text_hint));
+        tv.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(2);
+        box.addView(tv, lp);
+    }
+
+    /** 查看某个 key 的最近执行记录（最新在前） */
+    private void showRunLog(String key, String title) {
+        List<RunLog.Record> runs = RunLog.recent(this, key);
+        StringBuilder sb = new StringBuilder();
+        if (runs.isEmpty()) {
+            sb.append("还没有执行记录。\n运行一次后这里会显示时间、成败与结果摘要。");
+        } else {
+            long now = System.currentTimeMillis();
+            for (RunLog.Record r : runs) {
+                sb.append(r.ok ? "✅ " : "❌ ").append(RunLog.whenText(r.at, now)).append('\n');
+                if (!r.summary.isEmpty()) sb.append("   ").append(r.summary).append('\n');
+                sb.append('\n');
+            }
+        }
+        String text = sb.toString().trim();
+        if (text.length() > 4000) text = text.substring(0, 4000) + "\n…（已截断）";
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(text)
                 .setPositiveButton("关闭", null)
                 .show();
     }

@@ -84,6 +84,15 @@ public class ScreenshotRenderTest {
                 .putString("每小时巡检",
                         "{\"cronExpr\":\"0 * * * *\",\"workflowName\":\"晨间简报\",\"enabled\":false}")
                 .commit();
+        long now = System.currentTimeMillis();
+        ctx.getSharedPreferences("care_runs", Context.MODE_PRIVATE)
+                .edit().putString("workflow|晨间简报",
+                        "[{\"at\":" + (now - 3_600_000L)
+                                + ",\"ok\":true,\"summary\":\"3 步全部成功\"}]")
+                .putString("schedule|每天九点",
+                        "[{\"at\":" + (now - 600_000L)
+                                + ",\"ok\":false,\"summary\":\"步骤 2: send → ❌ 失败: 网络超时\"}]")
+                .commit();
         ActivityController<AgentWorkbenchActivity> c =
                 Robolectric.buildActivity(AgentWorkbenchActivity.class).setup();
         View content = c.get().findViewById(android.R.id.content);
