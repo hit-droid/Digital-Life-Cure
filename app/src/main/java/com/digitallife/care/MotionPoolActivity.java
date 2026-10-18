@@ -7,7 +7,9 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,6 +31,7 @@ import com.digitallife.util.Settings;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -52,6 +55,11 @@ import java.util.Set;
  * <p>详情 / 轻编辑（v1.170.0）：每条动作可点「详情」只读查看时长 / 循环 / 曲线数 / 参数清单；
  * 导入模型还可「淡入淡出」就地改写注册条目的 {@code FadeInTime/FadeOutTime}（引擎在
  * {@code LAppModel} 读取并应用，故会真正生效）。表情「详情」展示名称 / 文件 / 大小。</p>
+ *
+ * <p>搜索筛选 + 跨模型点播（v1.171.0）：顶部搜索框按模型名 / 组名 / 动作名 / 文件名 / 表情名
+ * 实时过滤（命中模型的卡片只列命中项，索引仍按原始组内下标，保证点播不错位）；点播按钮在
+ * **非当前默认模型**上显示为「切播」——一次确认后 `PetService.switchToModelByName` 切过去再播，
+ * 二者都走 GL 线程同一 FIFO {@code queueEvent}，故顺序有保证（切换在前、播放在后）。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -68,6 +76,11 @@ public class MotionPoolActivity extends Activity {
     private Settings settings;
     private LinearLayout listContainer;
     private TextView tvSummary;
+    private EditText searchBox;
+    /** 最近一次扫描结果（供搜索过滤复用，避免每次输入都重扫磁盘） */
+    private List<MotionLibrary.ModelActions> scanned = new ArrayList<>();
+    /** 未过滤时的汇总文案 */
+    private String totalSummary = "";
 
     /** 待写出的导出 */
     private String pendingExportModel;
@@ -115,6 +128,26 @@ public class MotionPoolActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(14), dp(12), dp(14), dp(16));
 
+        // 搜索框：实时过滤模型/组/动作/表情（v1.171.0）
+        searchBox = new EditText(this);
+        searchBox.setHint("搜索模型 / 动作组 / 动作 / 表情");
+        searchBox.setHintTextColor(getColorCompat(R.color.operit_text_hint));
+        searchBox.setTextColor(getColorCompat(R.color.operit_text_primary));
+        searchBox.setTextSize(14f);
+        searchBox.setSingleLine(true);
+        searchBox.setInputType(InputType.TYPE_CLASS_TEXT);
+        searchBox.setPadding(dp(12), dp(10), dp(12), dp(10));
+        searchBox.setBackgroundResource(R.drawable.bg_card);
+        searchBox.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) {
+                renderList();
+            }
+        });
+        body.addView(searchBox, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         tvSummary = new TextView(this);
         tvSummary.setTextSize(12f);
         tvSummary.setTextColor(getColorCompat(R.color.operit_text_secondary));
@@ -137,39 +170,111 @@ public class MotionPoolActivity extends Activity {
     }
 
     private void refresh() {
-        listContainer.removeAllViews();
-        List<MotionLibrary.ModelActions> models =
-                MotionLibrary.scanAll(this, settings.getDefaultModelDir());
+        scanned = MotionLibrary.scanAll(this, settings.getDefaultModelDir());
 
         int groups = 0;
         int files = 0;
         int orphans = 0;
         int exprs = 0;
         int exprOrphans = 0;
-        for (MotionLibrary.ModelActions m : models) {
+        for (MotionLibrary.ModelActions m : scanned) {
             groups += m.groupCount();
             files += m.motionFileCount;
             orphans += m.orphans.size();
             exprs += m.exprCount();
             exprOrphans += m.exprOrphans.size();
         }
-        tvSummary.setText("共 " + models.size() + " 个模型 · " + groups + " 个动作组 · "
+        totalSummary = "共 " + scanned.size() + " 个模型 · " + groups + " 个动作组 · "
                 + files + " 个动作文件（" + orphans + " 未注册）· "
-                + exprs + " 个表情（" + exprOrphans + " 未注册）");
+                + exprs + " 个表情（" + exprOrphans + " 未注册）";
+        renderList();
+    }
 
-        if (models.isEmpty()) {
+    /**
+     * 按当前搜索词渲染列表（v1.171.0）。过滤只影响**展示**——点播仍用组内原始下标，
+     * 故「看到的项」与「点播的项」不会错位。
+     */
+    private void renderList() {
+        if (listContainer == null) return;
+        listContainer.removeAllViews();
+        String nq = MotionFilter.normalize(searchBox == null ? null : searchBox.getText().toString());
+
+        if (scanned.isEmpty()) {
+            tvSummary.setText(totalSummary);
             listContainer.addView(hint("还没有任何模型，也没有动作文件。\n"
                     + "可在 Agent 对话里发送模型 zip 安装，或先导入一个模型。"));
             return;
         }
-        for (MotionLibrary.ModelActions m : models) {
-            listContainer.addView(buildModelCard(m));
+
+        int shown = 0;
+        for (MotionLibrary.ModelActions m : scanned) {
+            View card = buildModelCard(m, nq);
+            if (card == null) continue;
+            listContainer.addView(card);
+            shown++;
+        }
+
+        if (nq.isEmpty()) {
+            tvSummary.setText(totalSummary);
+        } else {
+            tvSummary.setText("搜索「" + nq + "」· 命中 " + shown + " 个模型 / 共 "
+                    + scanned.size() + " 个");
+            if (shown == 0) {
+                listContainer.addView(hint("没有匹配「" + nq + "」的模型 / 动作 / 表情。"));
+            }
         }
     }
 
     // ==================== 模型卡片 ====================
 
-    private View buildModelCard(MotionLibrary.ModelActions m) {
+    /**
+     * 构建一个模型卡片；{@code nq} 为已归一化的搜索词（空＝不过滤）。
+     * 过滤时只列命中项；整卡无命中则返回 {@code null}（由 {@link #renderList()} 跳过）。
+     * 动作点播索引始终用**组内原始下标**，过滤不重编号。
+     */
+    private View buildModelCard(MotionLibrary.ModelActions m, String nq) {
+        boolean filtered = nq != null && !nq.isEmpty();
+        boolean modelHit = !filtered || MotionFilter.matches(m.dirName, nq);
+
+        // 先筛出要展示的组 → 组内原始下标（LinkedHashMap 保序）
+        java.util.LinkedHashMap<String, List<Integer>> shownGroups = new java.util.LinkedHashMap<>();
+        for (MotionLibrary.Group g : m.groups) {
+            boolean groupHit = modelHit || MotionFilter.matches(g.name, nq);
+            List<Integer> idx = new ArrayList<>();
+            for (int i = 0; i < g.motions.size(); i++) {
+                MotionLibrary.Motion mo = g.motions.get(i);
+                if (groupHit || MotionFilter.anyMatches(nq, mo.displayName(), mo.file, mo.group)) {
+                    idx.add(i);
+                }
+            }
+            if (!idx.isEmpty()) shownGroups.put(g.name, idx);
+        }
+        List<MotionLibrary.Motion> shownOrphans = new ArrayList<>();
+        for (MotionLibrary.Motion o : m.orphans) {
+            if (modelHit || MotionFilter.anyMatches(nq, o.displayName(), o.file, o.group)) {
+                shownOrphans.add(o);
+            }
+        }
+        List<Integer> shownExprIdx = new ArrayList<>();
+        for (int i = 0; i < m.expressions.size(); i++) {
+            MotionLibrary.Expr e = m.expressions.get(i);
+            if (modelHit || MotionFilter.anyMatches(nq, e.displayName(), e.file, e.name)) {
+                shownExprIdx.add(i);
+            }
+        }
+        List<MotionLibrary.Expr> shownExprOrphans = new ArrayList<>();
+        for (MotionLibrary.Expr e : m.exprOrphans) {
+            if (modelHit || MotionFilter.anyMatches(nq, e.displayName(), e.file, e.name)) {
+                shownExprOrphans.add(e);
+            }
+        }
+
+        boolean physicallyEmpty = m.groups.isEmpty() && m.orphans.isEmpty()
+                && m.expressions.isEmpty() && m.exprOrphans.isEmpty();
+        boolean anyShown = !shownGroups.isEmpty() || !shownOrphans.isEmpty()
+                || !shownExprIdx.isEmpty() || !shownExprOrphans.isEmpty();
+        if (filtered && !modelHit && !anyShown) return null;
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackgroundResource(R.drawable.bg_card);
@@ -200,15 +305,13 @@ public class MotionPoolActivity extends Activity {
 
         boolean writable = ModelManager.isWritableModel(this, m.dirName);
 
-        boolean empty = m.groups.isEmpty() && m.orphans.isEmpty()
-                && m.expressions.isEmpty() && m.exprOrphans.isEmpty();
-        if (empty) {
+        if (physicallyEmpty) {
             card.addView(hint("该模型没有动作/表情文件（也没有可播放的动作）。\n"
                     + "可在 Agent 对话里说「给 " + m.dirName + " 补动作」。"));
         }
 
-        // 可写模型才给「导入动作 / 导入表情」入口
-        if (writable) {
+        // 可写模型才给「导入动作 / 导入表情」入口；搜索过滤时只在模型名命中时展示，避免干扰
+        if (writable && (!filtered || modelHit)) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setPadding(0, dp(8), 0, 0);
@@ -219,35 +322,37 @@ public class MotionPoolActivity extends Activity {
             card.addView(row);
         }
 
-        // 动作组
+        // 动作组（按原顺序遍历，命中与否用预筛结果判定；下标沿用 g.motions 的原始 i）
         for (MotionLibrary.Group g : m.groups) {
-            card.addView(groupHeader(m.dirName, g.name, g.motions.size(), writable));
-            for (int i = 0; i < g.motions.size(); i++) {
+            List<Integer> idx = shownGroups.get(g.name);
+            if (idx == null) continue;
+            card.addView(groupHeader(m.dirName, g.name, idx.size(), writable));
+            for (int i : idx) {
                 card.addView(motionRow(m, g.motions.get(i), g.name, i, writable));
             }
         }
 
         // 未注册文件
-        if (!m.orphans.isEmpty()) {
+        if (!shownOrphans.isEmpty()) {
             card.addView(orphanHeader(writable
                     ? "未注册文件（播不出）· 点「注册」可挂进动作组"
                     : "未注册文件（播不出）"));
-            for (MotionLibrary.Motion o : m.orphans) {
+            for (MotionLibrary.Motion o : shownOrphans) {
                 card.addView(motionRow(m, o, null, -1, writable));
             }
         }
 
         // 表情：声明区（引擎按 Name 播放）
-        if (!m.expressions.isEmpty() || !m.exprOrphans.isEmpty()) {
-            card.addView(sectionHeader("◆ 表情  ·  " + m.expressions.size() + " 个已注册"));
-            for (int i = 0; i < m.expressions.size(); i++) {
+        if (!shownExprIdx.isEmpty() || !shownExprOrphans.isEmpty()) {
+            card.addView(sectionHeader("◆ 表情  ·  " + shownExprIdx.size() + " 个已注册"));
+            for (int i : shownExprIdx) {
                 card.addView(exprRow(m, m.expressions.get(i), i, writable));
             }
-            if (!m.exprOrphans.isEmpty()) {
+            if (!shownExprOrphans.isEmpty()) {
                 card.addView(orphanHeader(writable
                         ? "未注册表情（播不出）· 点「注册」可挂进表情名"
                         : "未注册表情（播不出）"));
-                for (MotionLibrary.Expr e : m.exprOrphans) {
+                for (MotionLibrary.Expr e : shownExprOrphans) {
                     card.addView(exprRow(m, e, -1, writable));
                 }
             }
@@ -358,7 +463,7 @@ public class MotionPoolActivity extends Activity {
 
             if (mo.declared && groupName != null) {
                 final int idx = playIndex;
-                TextView play = chip(acts, "播", R.color.brand_operit_light);
+                TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
                 play.setOnClickListener(v -> play(m.dirName, groupName, idx));
             }
             TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
@@ -431,7 +536,7 @@ public class MotionPoolActivity extends Activity {
             acts.setPadding(0, dp(6), 0, 0);
 
             if (ex.declared) {
-                TextView play = chip(acts, "播", R.color.brand_operit_light);
+                TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
                 play.setOnClickListener(v -> playExpression(m.dirName, ex.name));
             }
             TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
@@ -459,18 +564,50 @@ public class MotionPoolActivity extends Activity {
     // ==================== 行为 ====================
 
     private void play(String modelDir, String group, int index) {
-        String current = settings.getDefaultModelDir();
-        if (!modelDir.equals(current)) {
-            toast("该动作属于模型「" + modelDir + "」，请先在「模型管理」里切换为默认模型再播放");
-            return;
-        }
         PetService svc = PetService.getInstance();
         if (svc == null) {
             toast("桌宠未在运行，请先开启桌宠再试");
             return;
         }
-        svc.onMotion(group, index, 3);
-        toast("已播放 " + group + "[" + index + "]");
+        if (isCurrentModel(modelDir)) {
+            svc.onMotion(group, index, 3);
+            toast("已播放 " + group + "[" + index + "]");
+            return;
+        }
+        confirmSwitchAndPlay(svc, modelDir, () -> {
+            svc.onMotion(group, index, 3);
+            toast("已切到「" + modelDir + "」并播放 " + group + "[" + index + "]");
+        });
+    }
+
+    /** 目标模型是否为当前默认模型 */
+    private boolean isCurrentModel(String modelDir) {
+        String cur = settings.getDefaultModelDir();
+        return cur != null && cur.equals(modelDir);
+    }
+
+    /**
+     * 跨模型点播（v1.171.0）：确认后切到目标模型再播放。
+     * 切换（nativeChangeScene）与播放（nativeStartMotion）都经 GL 线程同一 FIFO
+     * {@code queueEvent}，故「先切后播」顺序有保证，无需延迟等待。
+     */
+    private void confirmSwitchAndPlay(PetService svc, String modelDir, Runnable afterSwitch) {
+        String cur = settings.getDefaultModelDir();
+        new AlertDialog.Builder(this)
+                .setTitle("跨模型点播")
+                .setMessage("该内容属于模型「" + modelDir + "」，当前默认是「"
+                        + (cur == null || cur.isEmpty() ? "—" : cur) + "」。\n\n"
+                        + "切到「" + modelDir + "」后播放？会改变当前默认模型（桌宠重载为该模型）。")
+                .setPositiveButton("切换并播放", (d, w) -> {
+                    if (!svc.switchToModelByName(modelDir)) {
+                        toast("切换失败：未找到模型「" + modelDir + "」");
+                        return;
+                    }
+                    afterSwitch.run();
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void exportMotion(MotionLibrary.ModelActions m, MotionLibrary.Motion mo) {
@@ -603,18 +740,20 @@ public class MotionPoolActivity extends Activity {
 
     /** 播放一个已声明表情（引擎按 Name 播，故无需 index） */
     private void playExpression(String modelDir, String name) {
-        String current = settings.getDefaultModelDir();
-        if (!modelDir.equals(current)) {
-            toast("该表情属于模型「" + modelDir + "」，请先在「模型管理」里切换为默认模型再播放");
-            return;
-        }
         PetService svc = PetService.getInstance();
         if (svc == null) {
             toast("桌宠未在运行，请先开启桌宠再试");
             return;
         }
-        svc.onExpression(name);
-        toast("已播放表情「" + name + "」");
+        if (isCurrentModel(modelDir)) {
+            svc.onExpression(name);
+            toast("已播放表情「" + name + "」");
+            return;
+        }
+        confirmSwitchAndPlay(svc, modelDir, () -> {
+            svc.onExpression(name);
+            toast("已切到「" + modelDir + "」并播放表情「" + name + "」");
+        });
     }
 
     private void exportExpression(MotionLibrary.ModelActions m, MotionLibrary.Expr ex) {

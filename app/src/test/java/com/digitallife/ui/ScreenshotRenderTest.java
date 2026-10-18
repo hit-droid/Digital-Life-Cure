@@ -123,6 +123,30 @@ public class ScreenshotRenderTest {
         draw(content, W, H, "motion_pool_writable.png");
     }
 
+    /** 动作池搜索过滤：输入「tap」后应只剩命中 demo 的 TapBody 组，核对过滤后排版 */
+    @Test
+    public void motionPoolSearchFiltered() throws Exception {
+        seedDemoImportedModel();
+        ActivityController<MotionPoolActivity> c =
+                Robolectric.buildActivity(MotionPoolActivity.class).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        android.widget.EditText box = findEditText(content);
+        if (box != null) box.setText("tap");
+        capture(content, W, H, "motion_pool_search.png");
+    }
+
+    private static android.widget.EditText findEditText(View v) {
+        if (v instanceof android.widget.EditText) return (android.widget.EditText) v;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.widget.EditText e = findEditText(g.getChildAt(i));
+                if (e != null) return e;
+            }
+        }
+        return null;
+    }
+
     private static android.widget.ScrollView findScrollView(View v) {
         if (v instanceof android.widget.ScrollView) return (android.widget.ScrollView) v;
         if (v instanceof android.view.ViewGroup) {
