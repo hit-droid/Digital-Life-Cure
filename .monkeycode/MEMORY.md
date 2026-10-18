@@ -313,3 +313,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - 交付内容：动作池「详情 + 轻编辑」——`care/MotionPoolActivity` 动作行加「详情」（所属模型/组/文件、时长、循环、曲线数、当前淡入淡出、参数 ID 清单，参数清单复用 `MotionLibrary.motionParameterIds`）+「淡入淡出」弹窗（仅导入模型 + 已声明动作，两个数字输入，非法/负数拒绝）；`model/ModelManager.setMotionFade` 写回该动作在 `Motions` 组内注册条目的 `FadeInTime`/`FadeOutTime`（先备份 `.bak`、内置只读、负值归零、`round2` 两位小数）；`model/MotionLibrary.Motion` 补 `fadeIn`/`fadeOut`（未声明该键记 `NaN`＝引擎默认 1.0）；`ModelManagerWritebackTest` +6 条含**扫描层同步锁**。表情行加「详情」（名称/文件/大小）。
   - **关键依据（已在源码核实，避免做成静默 no-op）**：引擎确实读模型 json 注册条目的淡入淡出——`app/src/main/cpp/LApp/LAppModel.cpp` 的 `PreLoadMotionGroup`（约 379-389 行）与 `StartMotion`（约 618-628 行）调用 `_modelSetting->GetMotionFadeInTimeValue/GetMotionFadeOutTimeValue(group, i)` 再 `tmpMotion->SetFadeInTime/SetFadeOutTime`，故改 json 会真正生效。
   - 增量 verify 耗时：compile 9s / test 40s / lint 34s / apk 11s；644 单测 / 55 类、lint 0 error、APK(debug) 9,107,329B。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.171.0 动作池搜索筛选 + 跨模型点播
+- Category: Operations & Deployment
+- Instructions:
+  - v1.171.0 已发布：versionCode 174 / versionName 1.171.0、Release id 416296410、APK app-release.apk 8,598,217B、tag v1.171.0、main @ 9a3d3e3；CI run 39106601864 success
+  - 交付内容：动作池「搜索筛选 + 跨模型点播」——`care/MotionPoolActivity` 顶部加搜索框，按模型名/组名/动作名/文件名/表情名实时过滤（`TextWatcher.afterTextChanged` → `renderList()`；`scanned` 缓存最近一次磁盘扫描，避免每次输入重扫）；`buildModelCard` 加 `nq` 参数预筛展示项，整卡无命中返回 `null`，**点播索引仍用组内原始下标**避免过滤后错位；非当前默认模型点播芯片由「播」改「切播」。新增纯逻辑 `care/MotionFilter`（`normalize` trim+小写 / `isBlank` / `matches` 大小写不敏感 contains / `anyMatches`）便于单测，`MotionFilterTest` 8 条锁契约；`ScreenshotRenderTest` 加 `motion_pool_search.png` 过滤态自查（`findEditText` 辅助）。
+  - **跨模型点播顺序保证（关键依据）**：切换 `nativeChangeScene` 与播放 `nativeStartMotion` 都经 GL 线程同一 FIFO `queueEvent`，故「先切后播」天然有序，二次确认后 `PetService.switchToModelByName(modelDir)` 切过去再播，**无需延迟等待**，避免竞态错位。
+  - 增量 verify 耗时：compile 10s / test 41s / lint 34s / apk 17s；653 单测 / 56 类、lint 0 error、APK(debug) 9,109,864B。
