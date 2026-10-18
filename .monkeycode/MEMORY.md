@@ -260,6 +260,18 @@ Entries discovered by the Agent during task execution should follow this format:
   - CI 的 `android-actions/setup-android@v3` 于 2026-09-19 起故障（9-13 仍可用），已改为使用 runner 预装 ANDROID_SDK_ROOT + sdkmanager 补装组件
   - Harness 完善内容：Profile（chat 11 插件 / isolated 8 插件）、Plugin.deactivate + unmount/dispose、AgentRegistry（ctx.agents）、Persona/Memory/Skill/Clock/Compress 插件、ContextCompressor 纯消息投影（6k 字符预算）、GuardPlugin 接 tools/post-execute 审计；单测 110 → 122
 
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.164.0 Agent 工作台页发布（容器重启后全量重装工具链并 verify）
+- Category: Operations & Deployment
+- Instructions:
+  - v1.164.0 已发布：versionCode 167 / versionName 1.164.0、Release id 416154621、APK app-release.apk 8,564,140B、tag v1.164.0 @ 5dc3470、main @ 5dc3470；CI run 39083611720 success
+  - **环境重装（容器重启后 JDK/SDK/NDK 全部丢失，实测一次走通）**：① `apt-get update && apt-get install -y openjdk-17-jdk-headless` → `/usr/lib/jvm/java-17-openjdk-amd64`；② `curl -o cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip` → 解压到 `/opt/android-sdk/cmdline-tools/latest`；③ `yes | sdkmanager --licenses`；④ `sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.3.13750724" "cmake;3.22.1"`；⑤ `/opt/android-sdk` 建 `local.properties`（`sdk.dir=/opt/android-sdk`，被 gitignore）。网络走容器代理 `http://127.0.0.1:18080`，apt 走内网镜像 `mirrors.volces.com` 直连即可。
+  - **NDK 版本已从 26.1.10909125 升级为 27.3.13750724**（见 `app/build.gradle` 的 `ndkVersion` 与 CI workflow 的 `NDK_VERSION`），重装别再按旧记录装 26.1；r27+ 默认 16 KB 对齐。
+  - **Gradle 自身下载需显式代理**：wrapper 不继承 shell 的 HTTP_PROXY，跑 verify 前需 `export JAVA_OPTS="-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080"`（测试 JVM 的代理由 `app/build.gradle` 自动注入，无需额外处理）。
+  - **重装后全量 verify 实测耗时**：compile 76s / test 81s / lint 512s / apk 62s，合计约 12 分钟；lint 最慢（首次 lintAnalyzeDebug 冷缓存 8.5 分钟）；共 588 单测 / 50 类、lint 0 error、APK 9.06MB（debug）。
+  - `app/release-key.p12` 在仓库里已存在（未随容器重启丢失），本地 assembleDebug/Release 可直接签名，不必重新 keytool 生成。
+
 [Technical Learnings]
 - Date: 2026-09-05
 - Context: v1.111.0 多智能体补丁两次 CI 失败教训
