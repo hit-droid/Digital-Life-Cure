@@ -354,4 +354,73 @@ public class ModelManagerWritebackTest {
         }
         assertTrue("扫描层应能读到新注册的表情 F02", found);
     }
+
+    // ── 淡入/淡出轻编辑（v1.170.0）─────────────────────────────
+
+    private MotionLibrary.ModelActions findModel(String dir) {
+        for (MotionLibrary.ModelActions m : MotionLibrary.scanAll(ctx(), dir)) {
+            if (m.dirName.equals(dir)) return m;
+        }
+        return null;
+    }
+
+    @Test
+    public void setMotionFade_writesToRegistrationEntry() throws Exception {
+        File json = writeModel3("fd1", "Idle", "idle.motion3.json");
+        String msg = ModelManager.setMotionFade(
+                ctx(), "fd1", "Idle", "idle.motion3.json", 0.5, 1.2);
+        assertTrue(msg, msg.contains("淡入"));
+
+        JSONObject item = motionsOf(json).getJSONArray("Idle").getJSONObject(0);
+        assertEquals(0.5, item.getDouble("FadeInTime"), 1e-6);
+        assertEquals(1.2, item.getDouble("FadeOutTime"), 1e-6);
+    }
+
+    @Test
+    public void setMotionFade_clampsNegativeToZero() throws Exception {
+        File json = writeModel3("fd2", "Idle", "idle.motion3.json");
+        ModelManager.setMotionFade(ctx(), "fd2", "Idle", "idle.motion3.json", -3, 0.25);
+        JSONObject item = motionsOf(json).getJSONArray("Idle").getJSONObject(0);
+        assertEquals(0.0, item.getDouble("FadeInTime"), 1e-6);
+        assertEquals(0.25, item.getDouble("FadeOutTime"), 1e-6);
+    }
+
+    @Test
+    public void setMotionFade_rejectsUnknownGroup() throws Exception {
+        writeModel3("fd3", "Idle", "idle.motion3.json");
+        String msg = ModelManager.setMotionFade(
+                ctx(), "fd3", "Nope", "idle.motion3.json", 1, 1);
+        assertTrue(msg, msg.contains("未找到动作组"));
+    }
+
+    @Test
+    public void setMotionFade_rejectsBuiltin() {
+        String msg = ModelManager.setMotionFade(
+                ctx(), "huohuo", "Idle", "Scene1.motion3.json", 1, 1);
+        assertTrue(msg, msg.contains("只读") || msg.contains("不可写"));
+    }
+
+    @Test
+    public void setMotionFade_isVisibleToScanLayer() throws Exception {
+        // 落点对齐锁：改完注册条目后，扫描层读到的 fadeIn/fadeOut 应同步
+        writeModel3("fd4", "Idle", "idle.motion3.json");
+        ModelManager.setMotionFade(ctx(), "fd4", "Idle", "idle.motion3.json", 0.7, 0.8);
+
+        MotionLibrary.ModelActions target = findModel("fd4");
+        assertTrue("扫描层应能发现模型 fd4", target != null);
+        MotionLibrary.Motion mo = target.groups.get(0).motions.get(0);
+        assertEquals(0.7, mo.fadeIn, 1e-6);
+        assertEquals(0.8, mo.fadeOut, 1e-6);
+    }
+
+    @Test
+    public void scanLayer_missingFadeIsNaN() throws Exception {
+        // 注册条目未声明 FadeInTime/FadeOutTime 时记为 NaN（引擎默认 1.0），供详情区分
+        writeModel3("fd5", "Idle", "idle.motion3.json");
+        MotionLibrary.ModelActions target = findModel("fd5");
+        assertTrue(target != null);
+        MotionLibrary.Motion mo = target.groups.get(0).motions.get(0);
+        assertTrue(Double.isNaN(mo.fadeIn));
+        assertTrue(Double.isNaN(mo.fadeOut));
+    }
 }

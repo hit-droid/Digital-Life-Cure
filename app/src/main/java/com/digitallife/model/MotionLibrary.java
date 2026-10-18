@@ -54,9 +54,12 @@ public final class MotionLibrary {
         public final double duration;
         public final boolean loop;
         public final int curveCount;
+        /** 注册条目的 FadeInTime/FadeOutTime（秒）；未声明该键为 {@link Double#NaN}（引擎默认 1.0） */
+        public final double fadeIn;
+        public final double fadeOut;
 
         Motion(String file, String group, boolean declared, boolean exists,
-               double duration, boolean loop, int curveCount) {
+               double duration, boolean loop, int curveCount, double fadeIn, double fadeOut) {
             this.file = file;
             this.group = group;
             this.declared = declared;
@@ -64,6 +67,8 @@ public final class MotionLibrary {
             this.duration = duration;
             this.loop = loop;
             this.curveCount = curveCount;
+            this.fadeIn = fadeIn;
+            this.fadeOut = fadeOut;
         }
 
         /** 动作基名（去掉 .motion3.json）。用于展示与导出文件名 */
@@ -363,7 +368,9 @@ public final class MotionLibrary {
                             double dur = meta != null ? meta[0] : 0;
                             boolean loop = meta != null ? meta[1] > 0.5 : item.optBoolean("Loop", false);
                             int curves = meta != null ? (int) meta[2] : 0;
-                            grp.motions.add(new Motion(file, g, true, exists, dur, loop, curves));
+                            double fadeIn = item.has("FadeInTime") ? item.optDouble("FadeInTime", Double.NaN) : Double.NaN;
+                            double fadeOut = item.has("FadeOutTime") ? item.optDouble("FadeOutTime", Double.NaN) : Double.NaN;
+                            grp.motions.add(new Motion(file, g, true, exists, dur, loop, curves, fadeIn, fadeOut));
                             declared.add(file);
                         }
                         if (!grp.motions.isEmpty()) groups.add(grp);
@@ -404,7 +411,8 @@ public final class MotionLibrary {
                 orphans.add(new Motion(f, null, false, true,
                         meta != null ? meta[0] : 0,
                         meta != null && meta[1] > 0.5,
-                        meta != null ? (int) meta[2] : 0));
+                        meta != null ? (int) meta[2] : 0,
+                        Double.NaN, Double.NaN));
             } else if (lower.endsWith(EXPR_SUFFIX)) {
                 exprCount++;
                 if (declaredExpr.contains(f)) continue;

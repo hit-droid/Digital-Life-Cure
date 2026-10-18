@@ -576,6 +576,63 @@ public class ModelManager {
         }
     }
 
+    // ==================== 淡入淡出（动作池「轻编辑」） ====================
+
+    /**
+     * 设置一个已注册动作的淡入/淡出时间：写回该动作在 {@code Motions} 组内注册条目的
+     * {@code FadeInTime} / {@code FadeOutTime}。
+     *
+     * <p>引擎在 {@code LAppModel::PreLoadMotionGroup} / {@code StartMotion} 读取这两个值并
+     * {@code SetFadeInTime/SetFadeOutTime}（见 {@code LAppModel.cpp}），故此处改动会真正生效。
+     * 只改 json、先备份 {@code .bak}；内置模型只读；负值按 0 处理。</p>
+     *
+     * @return 结果描述，供界面提示
+     */
+    public static String setMotionFade(Context ctx, String targetDirName, String groupName,
+                                       String relFile, double fadeIn, double fadeOut) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读";
+        }
+        String rel = normalizeRel(relFile);
+        if (rel.isEmpty() || groupName == null || groupName.isEmpty()) return "参数不完整";
+        double in = round2(Math.max(0, fadeIn));
+        double out = round2(Math.max(0, fadeOut));
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json";
+            org.json.JSONArray arr = mj.motions.optJSONArray(groupName);
+            if (arr == null) return "未找到动作组：" + groupName;
+            boolean found = false;
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject it = arr.optJSONObject(i);
+                if (it == null) continue;
+                if (rel.equals(normalizeRel(it.optString("File", "")))) {
+                    it.put("FadeInTime", in);
+                    it.put("FadeOutTime", out);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return "该动作不在「" + groupName + "」组中，无法设置淡入淡出";
+            saveModelJson(mj);
+            return "已设置「" + baseName(rel) + "」淡入 " + trimNum(in) + " 秒 / 淡出 " + trimNum(out) + " 秒";
+        } catch (Exception e) {
+            Log.w(TAG, "setMotionFade failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    private static double round2(double v) {
+        return Math.round(v * 100.0) / 100.0;
+    }
+
+    /** 秒数展示：整数去掉小数尾巴（2.0 -> 2，0.9 -> 0.9） */
+    private static String trimNum(double v) {
+        if (v == Math.rint(v)) return String.valueOf((long) v);
+        return String.format(Locale.ROOT, "%.2f", v).replaceAll("0+$", "").replaceAll("\\.$", "");
+    }
+
     // ==================== 表情写回（动作池表情区用） ====================
 
     /**

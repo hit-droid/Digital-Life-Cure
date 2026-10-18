@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -47,6 +48,10 @@ import java.util.Set;
  *
  * <p>写入边界：只能写到**导入模型**（{@code files/models/}）；内置模型在 assets、只读。
  * 复用受 Live2D 参数 ID 约束，跨不同骨骼的模型可能错位/无效果。</p>
+ *
+ * <p>详情 / 轻编辑（v1.170.0）：每条动作可点「详情」只读查看时长 / 循环 / 曲线数 / 参数清单；
+ * 导入模型还可「淡入淡出」就地改写注册条目的 {@code FadeInTime/FadeOutTime}（引擎在
+ * {@code LAppModel} 读取并应用，故会真正生效）。表情「详情」展示名称 / 文件 / 大小。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -360,8 +365,12 @@ public class MotionPoolActivity extends Activity {
             exp.setOnClickListener(v -> exportMotion(m, mo));
             TextView reuse = chip(acts, "复用", R.color.operit_text_secondary);
             reuse.setOnClickListener(v -> reuseMotion(m, mo));
+            TextView detail = chip(acts, "详情", R.color.operit_text_secondary);
+            detail.setOnClickListener(v -> showMotionDetail(m, mo));
             if (writable) {
                 if (mo.declared && groupName != null) {
+                    TextView fade = chip(acts, "淡入淡出", R.color.operit_text_secondary);
+                    fade.setOnClickListener(v -> promptMotionFade(m, groupName, mo));
                     TextView del = chip(acts, "删", R.color.operit_text_secondary);
                     del.setOnClickListener(v -> confirmRemove(m.dirName, groupName, mo));
                 } else if (!mo.declared) {
@@ -427,6 +436,8 @@ public class MotionPoolActivity extends Activity {
             }
             TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
             exp.setOnClickListener(v -> exportExpression(m, ex));
+            TextView detail = chip(acts, "详情", R.color.operit_text_secondary);
+            detail.setOnClickListener(v -> showExprDetail(m, ex));
             TextView reuse = chip(acts, "复用", R.color.operit_text_secondary);
             reuse.setOnClickListener(v -> reuseExpression(m, ex));
             if (writable) {
@@ -718,6 +729,141 @@ public class MotionPoolActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    // ==================== 详情 / 轻编辑 ====================
+
+    /** 动作详情（只读）：组、时长、循环、曲线数、淡入淡出、参数清单 */
+    private void showMotionDetail(MotionLibrary.ModelActions m, MotionLibrary.Motion mo) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("所属模型：").append(m.dirName)
+                .append(m.isDefault ? "（当前默认）" : "").append('\n');
+        sb.append("动作组：").append(mo.group == null ? "（未注册）" : mo.group).append('\n');
+        sb.append("文件：").append(mo.file).append('\n');
+        if (!mo.exists) {
+            sb.append("状态：文件缺失");
+        } else {
+            sb.append("时长：").append(trim(mo.duration)).append(" 秒\n");
+            sb.append("循环：").append(mo.loop ? "是" : "否").append('\n');
+            sb.append("曲线数：").append(mo.curveCount).append('\n');
+            sb.append("淡入/淡出：").append(fadeText(mo.fadeIn)).append(" / ")
+                    .append(fadeText(mo.fadeOut)).append(" 秒\n");
+            Set<String> ids = MotionLibrary.motionParameterIds(this, m.dirName, m.imported, mo.file);
+            sb.append("参数（").append(ids.size()).append("）：\n");
+            if (ids.isEmpty()) sb.append("（无，或该文件无 Parameter 曲线）");
+            else for (String id : ids) sb.append("· ").append(id).append('\n');
+        }
+        showLongDialog(mo.displayName() + " · 详情", sb.toString());
+    }
+
+    /**
+     * 淡入 / 淡出「轻编辑」：仅导入模型可写，写回动作注册条目的
+     * FadeInTime/FadeOutTime（引擎在 LAppModel 读取并应用，故会真正生效）。
+     */
+    private void promptMotionFade(MotionLibrary.ModelActions m, String groupName,
+                                  MotionLibrary.Motion mo) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(16), dp(4), dp(16), 0);
+
+        EditText in = numberField(col, "淡入（秒）", Double.isNaN(mo.fadeIn) ? "1.0" : trim(mo.fadeIn));
+        EditText out = numberField(col, "淡出（秒）", Double.isNaN(mo.fadeOut) ? "1.0" : trim(mo.fadeOut));
+
+        new AlertDialog.Builder(this)
+                .setTitle("淡入 / 淡出 · " + mo.displayName())
+                .setMessage("写回动作「" + mo.displayName() + "」在「" + groupName
+                        + "」组内注册条目的 FadeInTime/FadeOutTime（秒）。引擎按此值做进场/退场过渡。")
+                .setView(col)
+                .setPositiveButton("保存", (d, w) -> {
+                    Double vi = parseNum(in.getText().toString());
+                    Double vo = parseNum(out.getText().toString());
+                    if (vi == null || vo == null) {
+                        toast("请输入非负数字（秒），如 0.9");
+                        return;
+                    }
+                    toast(ModelManager.setMotionFade(this, m.dirName, groupName, mo.file, vi, vo));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 表情详情：名称 / 文件 / 状态 / 大小 */
+    private void showExprDetail(MotionLibrary.ModelActions m, MotionLibrary.Expr ex) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("所属模型：").append(m.dirName)
+                .append(m.isDefault ? "（当前默认）" : "").append('\n');
+        sb.append("表情名：").append(ex.name == null || ex.name.isEmpty() ? "（未注册）" : ex.name).append('\n');
+        sb.append("文件：").append(ex.file).append('\n');
+        if (!ex.exists) {
+            sb.append("状态：文件缺失");
+        } else {
+            sb.append("状态：已声明，引擎按名播放\n");
+            String size;
+            try {
+                size = MotionLibrary.readBytes(this, m.dirName, m.imported, ex.file).length + " 字节";
+            } catch (Exception e) {
+                size = "（读取失败： " + UiKit.safeMsg(e) + "）";
+            }
+            sb.append("大小：").append(size);
+        }
+        showLongDialog("表情 " + ex.displayName() + " · 详情", sb.toString());
+    }
+
+    private void showLongDialog(String title, String content) {
+        TextView tv = new TextView(this);
+        tv.setText(content);
+        tv.setTextSize(13f);
+        tv.setTextColor(getColorCompat(R.color.operit_text_primary));
+        tv.setLineSpacing(dp(3), 1f);
+        tv.setIncludeFontPadding(false);
+        tv.setTextIsSelectable(true);
+        ScrollView sv = new ScrollView(this);
+        sv.setPadding(dp(16), dp(6), dp(16), 0);
+        sv.addView(tv, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    /** 一行「标签 + 数字输入框」，返回输入框 */
+    private EditText numberField(LinearLayout col, String label, String value) {
+        TextView tv = new TextView(this);
+        tv.setText(label);
+        tv.setTextSize(12f);
+        tv.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        tv.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.topMargin = dp(8);
+        col.addView(tv, tlp);
+
+        EditText et = new EditText(this);
+        et.setText(value);
+        et.setTextSize(14f);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        et.setPadding(dp(10), dp(8), dp(10), dp(8));
+        col.addView(et, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return et;
+    }
+
+    /** 解析非负秒数；非法或负数返回 null */
+    private static Double parseNum(String s) {
+        if (s == null) return null;
+        try {
+            double v = Double.parseDouble(s.trim());
+            return v < 0 ? null : v;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String fadeText(double v) {
+        return Double.isNaN(v) ? "默认(1.0)" : trim(v);
     }
 
     private void pickImportTo(String targetModel) {

@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.170.0 (2026-10-18)
+
+承接 v1.169.0（动作池纳入表情）。动作池此前只能「播 / 导出 / 复用 / 注册 / 改名」，看不到一个
+动作到底长什么样（时长、循环、动到什么参数），也没法就地把过渡调一调。本版补上**详情 + 轻编辑**，
+仍是纯增量、只改 json/UI、不动 Live2D 渲染链路、不引新依赖。
+
+### 动作详情（只读）
+
+- 每条动作行新增「详情」：展示所属模型 / 动作组 / 文件、时长（秒）、循环与否、曲线数、
+  当前淡入/淡出，以及该动作动到的**参数 ID 清单**（复用 `MotionLibrary.motionParameterIds`）。
+- 表情「详情」：展示名称 / 文件 / 是否存在 / 文件大小。
+
+### 淡入 / 淡出轻编辑（仅导入模型）
+
+- `model/ModelManager.setMotionFade`：写回该动作在 `Motions` 组内注册条目的
+  `FadeInTime` / `FadeOutTime`（先备份 `.bak`；内置只读；负值按 0 处理、保留两位小数）。
+- 依据：引擎在 `LAppModel::PreLoadMotionGroup` / `StartMotion` 读 `GetMotionFadeInTimeValue/
+  GetMotionFadeOutTimeValue` 并 `SetFadeInTime/SetFadeOutTime`（`LAppModel.cpp`），故此改动会真正生效。
+- `model/MotionLibrary.Motion` 补 `fadeIn`/`fadeOut`（未声明该键记 `NaN`，即引擎默认 1.0），
+  供详情区分「已设/默认」，并让扫描层与写回层同步可见。
+
+### 动作池页（`care/MotionPoolActivity`）
+
+- 动作行加「详情」（任意模型）与「淡入淡出」（仅导入模型 + 已声明动作）；
+  淡入淡出弹窗两个数字输入，非法/负数拒绝并提示。
+
+### 校验
+
+`tools/verify.sh` 全绿（644 单测 / 55 类、lint 0 error、APK 通过）。`ModelManagerWritebackTest`
+新增 6 条淡入淡出单测：写回注册条目 / 负值归零 / 未知组拒绝 / 内置只读拒绝 /
+**扫描层同步可见** / 未声明记为 `NaN`。
+
 ## v1.169.0 (2026-10-18)
 
 承接 v1.166.0 / v1.165.0 的动作池。动作池此前只认「动作」（`.motion3.json`），模型里的
