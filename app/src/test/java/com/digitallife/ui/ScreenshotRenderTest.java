@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.view.View;
 
+import com.digitallife.care.AgentWorkbenchActivity;
 import com.digitallife.care.CareModelsActivity;
 import com.digitallife.ui.shell.OperitDrawer;
 import com.digitallife.ui.shell.OperitRoute;
@@ -69,6 +70,21 @@ public class ScreenshotRenderTest {
         capture(content, W, H, "chat_care.png");
     }
 
+    /** Agent 工作台：预置一条工作流 + 一条定时任务，核对只读列表行的渲染 */
+    @Test
+    public void agentWorkbench() throws Exception {
+        android.content.Context ctx = org.robolectric.RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("care_workflows", android.content.Context.MODE_PRIVATE)
+                .edit().putString("晨间简报", "{\"steps\":[1,2,3]}").commit();
+        ctx.getSharedPreferences("care_schedules", android.content.Context.MODE_PRIVATE)
+                .edit().putString("每天九点",
+                        "{\"cronExpr\":\"0 9 * * *\",\"workflowName\":\"晨间简报\"}").commit();
+        ActivityController<AgentWorkbenchActivity> c =
+                Robolectric.buildActivity(AgentWorkbenchActivity.class).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        capture(content, W, H, "agent_workbench.png");
+    }
+
     /** 侧栏抽屉：280dp 宽，选中「对话」 */
     @Test
     public void drawer() throws Exception {
@@ -99,6 +115,7 @@ public class ScreenshotRenderTest {
                 {"about", "com.digitallife.ui.AboutActivity"},
                 {"developer", "com.digitallife.ui.DeveloperActivity"},
                 {"agent_console", "com.digitallife.ui.AgentConsoleActivity"},
+                {"agent_workbench", "com.digitallife.care.AgentWorkbenchActivity"},
         };
         for (String[] s : screens) {
             String name = s[0];

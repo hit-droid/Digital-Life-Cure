@@ -389,14 +389,32 @@ public class ChatActivity extends Activity {
         }
         String[] chipLabels;
         String[] chipInserts;
+        // v1.164.0：跳转项目标（insert 为 null 时用它开页面）+ 可选小节定位
+        Class<?>[] chipTargets;
+        String[] chipSections;
         if (isCare) {
             // insert 为 null = 该项不是提示词，而是跳转到已有页面（见下面的分支）
-            chipLabels = new String[]{"模型管理 ›", "动作", "工作流", "定时"};
+            chipLabels = new String[]{"模型管理 ›", "动作", "工作流 ›", "定时 ›"};
             chipInserts = new String[]{
                     null,
                     "列出当前模型的所有动作，并播放一个给我看看：",
-                    "介绍一下你能编排的工作流，然后帮我建一个：",
-                    "帮我创建一个定时任务："
+                    null,
+                    null
+            };
+            // v1.164.0：工作流/定时此前只能让 AI 在对话里念一遍——本机早已把它们落盘
+            // （care_workflows / care_schedules），却没有查看入口。统一跳「工作台」。
+            // 「动作」仍走提示词：动作清单要按模型逐个解析，不是一份平铺列表，暂不做独立页。
+            chipTargets = new Class<?>[]{
+                    com.digitallife.care.CareModelsActivity.class,
+                    null,
+                    com.digitallife.care.AgentWorkbenchActivity.class,
+                    com.digitallife.care.AgentWorkbenchActivity.class
+            };
+            chipSections = new String[]{
+                    null,
+                    null,
+                    com.digitallife.care.AgentWorkbenchActivity.SECTION_WORKFLOW,
+                    com.digitallife.care.AgentWorkbenchActivity.SECTION_SCHEDULE
             };
         } else {
             chipLabels = new String[]{"语音", "拍照", "翻译", "总结", "联网"};
@@ -407,9 +425,13 @@ public class ChatActivity extends Activity {
                     "请帮我总结要点：",
                     "请联网搜索最新信息："
             };
+            chipTargets = new Class<?>[chipLabels.length];
+            chipSections = new String[chipLabels.length];
         }
         for (int i = 0; i < chipLabels.length; i++) {
             final String insert = chipInserts[i];
+            final Class<?> chipTarget = chipTargets[i];
+            final String chipSection = chipSections[i];
             TextView chip = new TextView(this);
             chip.setText(chipLabels[i]);
             chip.setTextSize(12f);
@@ -424,9 +446,13 @@ public class ChatActivity extends Activity {
             chip.setOnClickListener(v -> {
                 UiKit.flash(v);
                 if (insert == null) {
-                    // v1.163.0：跳转项（insert 为 null）不进输入框，直接开已有页面
-                    startActivity(new Intent(ChatActivity.this,
-                            com.digitallife.care.CareModelsActivity.class));
+                    // v1.163.0/1.164.0：跳转项（insert 为 null）不进输入框，直接开目标页面
+                    Intent it = new Intent(ChatActivity.this, chipTarget);
+                    if (chipSection != null) {
+                        it.putExtra(com.digitallife.care.AgentWorkbenchActivity.EXTRA_SECTION,
+                                chipSection);
+                    }
+                    startActivity(it);
                     return;
                 }
                 etInput.setText(insert);

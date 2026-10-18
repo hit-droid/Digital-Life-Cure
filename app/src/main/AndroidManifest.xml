@@ -80,6 +80,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- Agent 工作台（工作流 / 定时任务查看） -->
+        <activity
+            android:name="com.digitallife.care.AgentWorkbenchActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 记忆管理 -->
         <activity
             android:name="com.digitallife.ui.MemoryManageActivity"
