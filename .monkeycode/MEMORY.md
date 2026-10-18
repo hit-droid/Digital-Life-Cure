@@ -355,3 +355,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - **边界（关键）**：标记为**纯引用**（不复制文件、不写模型 json）；失效判定依赖扫描结果，用户删/改后旧引用自动标「失效」而非错播；列表重渲染用内存中 `scanned`（`renderList()`），不重扫磁盘。
   - 增量 verify 耗时：compile 12s / test 44s / lint 34s / apk 17s；693 单测 / 62 类、lint 0 error、APK(debug) 9,129,110B。
   - CI 发版链路：`git push origin main` → GitHub Actions `.github/workflows/build.yml` 自动 `assembleRelease` + 16KB 对齐门禁 + 「Check if release needed」(release 不存在才发) → 建 tag `v{versionName}` 并上传 `app-release.apk`。取 GitHub token：`git config remote.origin.url` 里内嵌 `https://<token>@github.com/...`，用 python 正则抽出（勿打印）；Actions runs/release API 响应含控制字符，`json.load(...,strict=False)` 才可解析。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.176.0 触摸事件 表情/动作 绑定
+- Category: Operations & Deployment
+- Instructions:
+  - v1.176.0 已发布：versionCode 179 / versionName 1.176.0、Release id 416336485、APK app-release.apk 8,615,521B、tag v1.176.0 → 13d5c9e；CI run success
+  - 交付内容：触摸事件可绑表情/动作。四个事件 id：`Head`/`Body`（复用 `PetTouchReaction` 分区常量）、`DoubleTap`、`None`（点空白处）。新增 `ui/pet/TouchBindings`（纯逻辑 `effective(bound,fallback)`：bound 非空且非哨兵→用 bound、空→回落 fallback、哨兵 `NONE="-none-"`→null；`events()`(返回副本)、`eventFor(id)`、`distinctNames`；存储 prefs `care_touch_bindings`，key `<eventId>.expression` / `<eventId>.motion`，`get`(Binding 两字段非 null)、`setExpression`/`setMotionGroup`(空串=清)、`clear`、`isDefault`）。接入：`PetOverlayView.handleModelTap`（zone ""→`EVENT_NONE`，用绑定覆盖 expr/group，其余气泡/情绪不变）、`PetService.onTapZone`（同样解析绑定，`syncCurrent` 用覆盖后的表情，防冷却期抢回旧表情）、`PetService.onDoubleTap`（expr 默认 "F02"、group 默认 null，`overlayView.setMotion(group,random(6),3)`）。UI：`MotionPoolActivity.buildBindingsSection`+`bindingRow`+`pickBinding`（AlertDialog 单选：用默认/不绑/各模型已声明名去重并集；选完 `preview` 试播）+`恢复默认`。仅覆盖视觉。
+  - **关键设计点**：绑定按**名字**存、不绑具体模型；生效处「绑定优先、为空回落默认」，当前模型缺该内容靠默认兜住（不哑火）；哨兵 `NONE` 与「未设」区分，前者明确关闭默认视觉。候选名 = 各模型**已声明**表情名 / 动作组名的去重并集（`MotionLibrary.ModelActions.expressions[].declared/name`、`.groups[].name`）。
+  - 单测 `TouchBindingsTest`(6 纯 JVM) + `TouchBindingsStoreTest`(7 Robolectric)；增量 verify 706 单测 / 64 类、lint 0 error、APK(debug) 9,133,718B。
