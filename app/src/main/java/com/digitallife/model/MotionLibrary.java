@@ -35,6 +35,7 @@ public final class MotionLibrary {
 
     private static final String TAG = "MotionLibrary";
     private static final String MOTION_SUFFIX = ".motion3.json";
+    private static final String EXPR_SUFFIX = ".exp3.json";
 
     private MotionLibrary() {
     }
@@ -87,7 +88,37 @@ public final class MotionLibrary {
         }
     }
 
-    /** 一个模型里的全部动作 */
+    /**
+     * 一条表情（以「声明」为粒度；同一文件被多个 Name 引用时会各有一份记录）。
+     *
+     * <p>表情与动作不同：Live2D 引擎按 **Name**（如 {@code F01}）播放，没有「组」的概念，
+     * 声明落在模型 json 的 {@code FileReferences.Expressions}（数组，元素 {@code {Name, File}}）。</p>
+     */
+    public static final class Expr {
+        /** 相对模型目录的路径（统一用 '/' 分隔） */
+        public final String file;
+        /** 声明的表情名（引擎按此名播放）；孤立文件为 null */
+        public final String name;
+        /** 是否被声明（= 引擎能播） */
+        public final boolean declared;
+        /** 文件是否真实存在 */
+        public final boolean exists;
+
+        Expr(String file, String name, boolean declared, boolean exists) {
+            this.file = file;
+            this.name = name;
+            this.declared = declared;
+            this.exists = exists;
+        }
+
+        /** 展示名：有声明名用声明名，否则用文件名 base */
+        public String displayName() {
+            if (name != null && !name.isEmpty()) return name;
+            return baseName(file);
+        }
+    }
+
+    /** 一个模型里的全部动作与表情 */
     public static final class ModelActions {
         public final String dirName;
         public final boolean imported;
@@ -96,24 +127,40 @@ public final class MotionLibrary {
         public final String jsonName;
         public final List<Group> groups;
         public final List<Motion> orphans;
+        /** 声明了的表情（按 Name 记）；引擎按 Name 播放 */
+        public final List<Expr> expressions;
+        /** 未声明的孤立 .exp3.json（播不出） */
+        public final List<Expr> exprOrphans;
         /** 目录内 .motion3.json 总数（含孤立） */
         public final int motionFileCount;
+        /** 目录内 .exp3.json 总数（含孤立） */
+        public final int exprFileCount;
         /** 至少有一个「声明 + 文件存在」的动作，即真有可播放动作 */
         public boolean playable;
 
         ModelActions(String dirName, boolean imported, boolean isDefault, String jsonName,
-                     List<Group> groups, List<Motion> orphans, int motionFileCount) {
+                     List<Group> groups, List<Motion> orphans,
+                     List<Expr> expressions, List<Expr> exprOrphans,
+                     int motionFileCount, int exprFileCount) {
             this.dirName = dirName;
             this.imported = imported;
             this.isDefault = isDefault;
             this.jsonName = jsonName;
             this.groups = groups;
             this.orphans = orphans;
+            this.expressions = expressions;
+            this.exprOrphans = exprOrphans;
             this.motionFileCount = motionFileCount;
+            this.exprFileCount = exprFileCount;
         }
 
         public int groupCount() {
             return groups.size();
+        }
+
+        /** 声明表情数（引擎能播的表情条数） */
+        public int exprCount() {
+            return expressions.size();
         }
 
         /** 声明动作数（组内动作之和，同一文件被多组引用会重复计数——这是「动作组视角」的口径） */
@@ -282,15 +329,17 @@ public final class MotionLibrary {
             }
         }
 
-        // 3) 解析声明的动作组
+        // 3) 解析声明的动作组 + 表情
         List<Group> groups = new ArrayList<>();
         Set<String> declared = new HashSet<>();
+        List<Expr> expressions = new ArrayList<>();
+        Set<String> declaredExpr = new HashSet<>();
         if (content != null) {
             try {
                 JSONObject root = new JSONObject(content);
-                JSONObject motions = null;
                 JSONObject fr = root.optJSONObject("FileReferences");
-                if (fr != null) motions = fr.optJSONObject("Motions");
+
+                JSONObject motions = fr != null ? fr.optJSONObject("Motions") : null;
                 if (motions == null) motions = root.optJSONObject("Motions");
                 if (motions == null) motions = root.optJSONObject("motions");
                 if (motions != null) {
@@ -320,27 +369,51 @@ public final class MotionLibrary {
                         if (!grp.motions.isEmpty()) groups.add(grp);
                     }
                 }
+
+                // 表情：FileReferences.Expressions（数组，{Name, File}），按 Name 播放
+                JSONArray exprs = fr != null ? fr.optJSONArray("Expressions") : null;
+                if (exprs == null) exprs = root.optJSONArray("Expressions");
+                if (exprs == null) exprs = root.optJSONArray("expressions");
+                if (exprs != null) {
+                    for (int i = 0; i < exprs.length(); i++) {
+                        JSONObject item = exprs.optJSONObject(i);
+                        if (item == null) continue;
+                        String file = normalize(item.optString("File", ""));
+                        if (file.isEmpty()) continue;
+                        boolean exists = fileSet.contains(file);
+                        expressions.add(new Expr(file, item.optString("Name", ""), true, exists));
+                        declaredExpr.add(file);
+                    }
+                }
             } catch (Exception e) {
                 Log.w(TAG, "parse model json failed: " + dir, e);
             }
         }
 
-        // 4) 孤立文件：所有 .motion3.json 中未被声明的
+        // 4) 孤立文件：所有 .motion3.json / .exp3.json 中未被声明的
         int motionCount = 0;
+        int exprCount = 0;
         List<Motion> orphans = new ArrayList<>();
+        List<Expr> exprOrphans = new ArrayList<>();
         for (String f : files) {
-            if (!f.toLowerCase(Locale.ROOT).endsWith(MOTION_SUFFIX)) continue;
-            motionCount++;
-            if (declared.contains(f)) continue;
-            double[] meta = meta(ctx, dir, imported, f, null);
-            orphans.add(new Motion(f, null, false, true,
-                    meta != null ? meta[0] : 0,
-                    meta != null && meta[1] > 0.5,
-                    meta != null ? (int) meta[2] : 0));
+            String lower = f.toLowerCase(Locale.ROOT);
+            if (lower.endsWith(MOTION_SUFFIX)) {
+                motionCount++;
+                if (declared.contains(f)) continue;
+                double[] meta = meta(ctx, dir, imported, f, null);
+                orphans.add(new Motion(f, null, false, true,
+                        meta != null ? meta[0] : 0,
+                        meta != null && meta[1] > 0.5,
+                        meta != null ? (int) meta[2] : 0));
+            } else if (lower.endsWith(EXPR_SUFFIX)) {
+                exprCount++;
+                if (declaredExpr.contains(f)) continue;
+                exprOrphans.add(new Expr(f, null, false, true));
+            }
         }
 
         ModelActions ma = new ModelActions(dir, imported, isDefault, jsonName,
-                groups, orphans, motionCount);
+                groups, orphans, expressions, exprOrphans, motionCount, exprCount);
         for (Group g : groups) {
             for (Motion m : g.motions) {
                 if (m.exists) {
@@ -420,6 +493,17 @@ public final class MotionLibrary {
 
     private static String normalize(String path) {
         return path == null ? "" : path.replace('\\', '/').trim();
+    }
+
+    /** 文件基名（去目录、去 .exp3.json 后缀），用于孤立表情的展示名 */
+    private static String baseName(String path) {
+        String p = path == null ? "" : path;
+        int slash = p.lastIndexOf('/');
+        String n = slash >= 0 ? p.substring(slash + 1) : p;
+        if (n.toLowerCase(Locale.ROOT).endsWith(EXPR_SUFFIX)) {
+            n = n.substring(0, n.length() - EXPR_SUFFIX.length());
+        }
+        return n;
     }
 
     private static byte[] readAll(InputStream in) throws Exception {

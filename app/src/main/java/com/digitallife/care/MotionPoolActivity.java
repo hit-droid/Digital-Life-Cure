@@ -41,7 +41,9 @@ import java.util.Set;
  * 跨模型浏览。本页补上这个入口：只读浏览 + 点播当前模型动作 + 导出 / 复用 / 导入。</p>
  *
  * <p>「动作」口径含**未声明的孤立文件**：磁盘上存在但没被任何动作组引用的 {@code .motion3.json}
- * 引擎播不出，单独标「未注册文件（播不出）」，方便排查。</p>
+ * 引擎播不出，单独标「未注册文件（播不出）」，方便排查。表情（{@code .exp3.json}）同理：
+ * 声明在 {@code FileReferences.Expressions}（{@code {Name, File}}）的引擎按 **Name** 播放，
+ * 未被声明的同样归入「未注册表情」。</p>
  *
  * <p>写入边界：只能写到**导入模型**（{@code files/models/}）；内置模型在 assets、只读。
  * 复用受 Live2D 参数 ID 约束，跨不同骨骼的模型可能错位/无效果。</p>
@@ -50,6 +52,7 @@ public class MotionPoolActivity extends Activity {
 
     private static final int REQ_EXPORT = 5101;
     private static final int REQ_IMPORT = 5102;
+    private static final int REQ_EXPR_IMPORT = 5103;
 
     private static final int COLOR_MISSING = Color.rgb(224, 96, 96);
     private static final int COLOR_CURRENT = Color.rgb(232, 152, 60);
@@ -67,6 +70,8 @@ public class MotionPoolActivity extends Activity {
     private String pendingExportFile;
     /** 待导入的目标模型 */
     private String pendingImportTarget;
+    /** 待导入表情的目标模型 */
+    private String pendingExprImportTarget;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -134,13 +139,18 @@ public class MotionPoolActivity extends Activity {
         int groups = 0;
         int files = 0;
         int orphans = 0;
+        int exprs = 0;
+        int exprOrphans = 0;
         for (MotionLibrary.ModelActions m : models) {
             groups += m.groupCount();
             files += m.motionFileCount;
             orphans += m.orphans.size();
+            exprs += m.exprCount();
+            exprOrphans += m.exprOrphans.size();
         }
         tvSummary.setText("共 " + models.size() + " 个模型 · " + groups + " 个动作组 · "
-                + files + " 个动作文件 · 其中 " + orphans + " 个未注册（播不出）");
+                + files + " 个动作文件（" + orphans + " 未注册）· "
+                + exprs + " 个表情（" + exprOrphans + " 未注册）");
 
         if (models.isEmpty()) {
             listContainer.addView(hint("还没有任何模型，也没有动作文件。\n"
@@ -185,19 +195,22 @@ public class MotionPoolActivity extends Activity {
 
         boolean writable = ModelManager.isWritableModel(this, m.dirName);
 
-        boolean empty = m.groups.isEmpty() && m.orphans.isEmpty();
+        boolean empty = m.groups.isEmpty() && m.orphans.isEmpty()
+                && m.expressions.isEmpty() && m.exprOrphans.isEmpty();
         if (empty) {
-            card.addView(hint("该模型没有动作文件（也没有可播放的动作）。\n"
+            card.addView(hint("该模型没有动作/表情文件（也没有可播放的动作）。\n"
                     + "可在 Agent 对话里说「给 " + m.dirName + " 补动作」。"));
         }
 
-        // 可写模型才给「导入动作」入口
+        // 可写模型才给「导入动作 / 导入表情」入口
         if (writable) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setPadding(0, dp(8), 0, 0);
             TextView imp = chip(row, "导入动作到此模型…", R.color.brand_operit_light);
             imp.setOnClickListener(v -> pickImportTo(m.dirName));
+            TextView impExpr = chip(row, "导入表情到此模型…", R.color.brand_operit_light);
+            impExpr.setOnClickListener(v -> pickExprImportTo(m.dirName));
             card.addView(row);
         }
 
@@ -216,6 +229,22 @@ public class MotionPoolActivity extends Activity {
                     : "未注册文件（播不出）"));
             for (MotionLibrary.Motion o : m.orphans) {
                 card.addView(motionRow(m, o, null, -1, writable));
+            }
+        }
+
+        // 表情：声明区（引擎按 Name 播放）
+        if (!m.expressions.isEmpty() || !m.exprOrphans.isEmpty()) {
+            card.addView(sectionHeader("◆ 表情  ·  " + m.expressions.size() + " 个已注册"));
+            for (int i = 0; i < m.expressions.size(); i++) {
+                card.addView(exprRow(m, m.expressions.get(i), i, writable));
+            }
+            if (!m.exprOrphans.isEmpty()) {
+                card.addView(orphanHeader(writable
+                        ? "未注册表情（播不出）· 点「注册」可挂进表情名"
+                        : "未注册表情（播不出）"));
+                for (MotionLibrary.Expr e : m.exprOrphans) {
+                    card.addView(exprRow(m, e, -1, writable));
+                }
             }
         }
         return card;
@@ -252,6 +281,21 @@ public class MotionPoolActivity extends Activity {
         tv.setText(text);
         tv.setTextSize(12f);
         tv.setTextColor(COLOR_MISSING);
+        tv.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        tv.setLayoutParams(lp);
+        return tv;
+    }
+
+    /** 分区标题（表情区）：与动作组标题同款强调色，但不带「改名」 */
+    private View sectionHeader(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13f);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(getColorCompat(R.color.operit_accent));
         tv.setIncludeFontPadding(false);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -323,6 +367,77 @@ public class MotionPoolActivity extends Activity {
                 } else if (!mo.declared) {
                     TextView reg = chip(acts, "注册…", R.color.brand_operit_light);
                     reg.setOnClickListener(v -> promptRegisterOrphan(m.dirName, mo.file));
+                }
+            }
+            box.addView(acts);
+        }
+        return box;
+    }
+
+    /**
+     * 一条表情：名称 + 文件名 + 操作（播 / 导出 / 复用 / 移除 / 改名 / 注册）。
+     * playIndex 为 -1 表示孤立文件（未注册，播不出）。
+     */
+    private View exprRow(MotionLibrary.ModelActions m, MotionLibrary.Expr ex,
+                         int playIndex, boolean writable) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = dp(8);
+        box.setLayoutParams(blp);
+
+        LinearLayout line1 = new LinearLayout(this);
+        line1.setOrientation(LinearLayout.HORIZONTAL);
+        line1.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        String prefix = ex.declared ? (playIndex + 1) + ". " : "· ";
+        title.setText(prefix + ex.displayName());
+        title.setTextSize(13f);
+        title.setTextColor(getColorCompat(R.color.operit_text_primary));
+        title.setIncludeFontPadding(false);
+        line1.addView(title, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView meta = new TextView(this);
+        if (!ex.exists) {
+            meta.setText("文件缺失");
+            meta.setTextColor(COLOR_MISSING);
+        } else {
+            meta.setText("  [" + baseName(ex.file) + "]");
+            meta.setTextColor(getColorCompat(R.color.operit_text_hint));
+        }
+        meta.setTextSize(11f);
+        meta.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        mlp.leftMargin = dp(6);
+        line1.addView(meta, mlp);
+        box.addView(line1);
+
+        if (ex.exists) {
+            LinearLayout acts = new LinearLayout(this);
+            acts.setOrientation(LinearLayout.HORIZONTAL);
+            acts.setPadding(0, dp(6), 0, 0);
+
+            if (ex.declared) {
+                TextView play = chip(acts, "播", R.color.brand_operit_light);
+                play.setOnClickListener(v -> playExpression(m.dirName, ex.name));
+            }
+            TextView exp = chip(acts, "导出", R.color.operit_text_secondary);
+            exp.setOnClickListener(v -> exportExpression(m, ex));
+            TextView reuse = chip(acts, "复用", R.color.operit_text_secondary);
+            reuse.setOnClickListener(v -> reuseExpression(m, ex));
+            if (writable) {
+                if (ex.declared) {
+                    TextView rename = chip(acts, "改名", R.color.operit_text_secondary);
+                    rename.setOnClickListener(v -> promptRenameExpression(m.dirName, ex.name));
+                    TextView del = chip(acts, "移除", R.color.operit_text_secondary);
+                    del.setOnClickListener(v -> confirmRemoveExpression(m.dirName, ex));
+                } else {
+                    TextView reg = chip(acts, "注册…", R.color.brand_operit_light);
+                    reg.setOnClickListener(v -> promptRegisterExprOrphan(m.dirName, ex.file));
                 }
             }
             box.addView(acts);
@@ -473,6 +588,138 @@ public class MotionPoolActivity extends Activity {
         }
     }
 
+    // ==================== 表情行为 ====================
+
+    /** 播放一个已声明表情（引擎按 Name 播，故无需 index） */
+    private void playExpression(String modelDir, String name) {
+        String current = settings.getDefaultModelDir();
+        if (!modelDir.equals(current)) {
+            toast("该表情属于模型「" + modelDir + "」，请先在「模型管理」里切换为默认模型再播放");
+            return;
+        }
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            toast("桌宠未在运行，请先开启桌宠再试");
+            return;
+        }
+        svc.onExpression(name);
+        toast("已播放表情「" + name + "」");
+    }
+
+    private void exportExpression(MotionLibrary.ModelActions m, MotionLibrary.Expr ex) {
+        pendingExportModel = m.dirName;
+        pendingExportImported = m.imported;
+        pendingExportFile = ex.file;
+        Intent it = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        it.addCategory(Intent.CATEGORY_OPENABLE);
+        it.setType("application/json");
+        it.putExtra(Intent.EXTRA_TITLE, ex.displayName() + ".exp3.json");
+        try {
+            startActivityForResult(it, REQ_EXPORT);
+        } catch (Exception e) {
+            toast("无法调起保存： " + UiKit.safeMsg(e));
+        }
+    }
+
+    /** 把某个表情复制到另一个「导入」模型并注册（先选目标，再定表情名） */
+    private void reuseExpression(MotionLibrary.ModelActions src, MotionLibrary.Expr ex) {
+        List<String> targets = ModelManager.listImportedModelDirs(this);
+        if (targets.isEmpty()) {
+            toast("内置模型只读，且还没有可写入的导入模型。请先在「模型管理」里导入一个模型。");
+            return;
+        }
+        String[] items = targets.toArray(new String[0]);
+        new AlertDialog.Builder(this)
+                .setTitle("把表情「" + ex.displayName() + "」复用到哪个模型？")
+                .setItems(items, (d, which) -> promptReuseExprName(src, ex, items[which]))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void promptReuseExprName(MotionLibrary.ModelActions src, MotionLibrary.Expr ex,
+                                     String target) {
+        EditText et = new EditText(this);
+        et.setText(ex.displayName());
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("以什么表情名注册？")
+                .setMessage("将把 " + baseName(ex.file) + " 复制进「" + target
+                        + "」并注册。表情重名会互相覆盖，请确认名称。")
+                .setView(et)
+                .setPositiveButton("复用", (d, w) ->
+                        doReuseExpr(src, ex, target, et.getText().toString().trim()))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void doReuseExpr(MotionLibrary.ModelActions src, MotionLibrary.Expr ex,
+                             String target, String name) {
+        try {
+            byte[] data = MotionLibrary.readBytes(this, src.dirName, src.imported, ex.file);
+            String msg = ModelManager.registerExpressionIntoModel(
+                    this, target, baseName(ex.file), data, name);
+            toast(msg);
+            refresh();
+        } catch (Exception e) {
+            toast("读取表情失败： " + UiKit.safeMsg(e));
+        }
+    }
+
+    /** 把「未注册」的孤立表情挂成某个表情名（只改 json，不复制文件） */
+    private void promptRegisterExprOrphan(String modelDir, String relFile) {
+        EditText et = new EditText(this);
+        et.setText(exprBaseName(relFile));
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("注册为哪个表情名？")
+                .setMessage("把未注册表情「" + baseName(relFile) + "」挂进模型「" + modelDir
+                        + "」。引擎按表情名播放（如 F01），重名会互相覆盖。")
+                .setView(et)
+                .setPositiveButton("注册", (d, w) -> {
+                    toast(ModelManager.registerExistingFileAsExpression(
+                            this, modelDir, relFile, et.getText().toString().trim()));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 从模型 Expressions 中移除一个表情的注册（文件保留，变为未注册表情） */
+    private void confirmRemoveExpression(String modelDir, MotionLibrary.Expr ex) {
+        new AlertDialog.Builder(this)
+                .setTitle("移除这个表情？")
+                .setMessage("把「" + ex.displayName() + "」从模型的 Expressions 移除注册。\n"
+                        + "表情文件会保留，随后出现在「未注册表情」区，可再次注册。")
+                .setPositiveButton("移除", (d, w) -> {
+                    toast(ModelManager.removeExpressionFromModel(this, modelDir, ex.name));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 重命名表情的 Name（引擎按名播放，改名即改指向） */
+    private void promptRenameExpression(String modelDir, String name) {
+        EditText et = new EditText(this);
+        et.setText(name);
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("重命名表情")
+                .setMessage("模型「" + modelDir + "」的表情「" + name
+                        + "」改名；引擎按名字播放，改名即换指向。")
+                .setView(et)
+                .setPositiveButton("改名", (d, w) -> {
+                    toast(ModelManager.renameExpression(
+                            this, modelDir, name, et.getText().toString().trim()));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     private void pickImportTo(String targetModel) {
         pendingImportTarget = targetModel;
         Intent it = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -518,6 +765,52 @@ public class MotionPoolActivity extends Activity {
         }
     }
 
+    private void pickExprImportTo(String targetModel) {
+        pendingExprImportTarget = targetModel;
+        Intent it = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        it.addCategory(Intent.CATEGORY_OPENABLE);
+        it.setType("*/*");
+        try {
+            startActivityForResult(it, REQ_EXPR_IMPORT);
+        } catch (Exception e) {
+            toast("无法调起文件选择： " + UiKit.safeMsg(e));
+        }
+    }
+
+    private void promptNameThenImportExpr(Uri uri) {
+        String seg = uri.getLastPathSegment();
+        EditText et = new EditText(this);
+        et.setText(exprBaseName(seg));
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("注册为哪个表情名？")
+                .setMessage("文件将写入模型「" + pendingExprImportTarget
+                        + "」并注册。引擎按表情名播放（如 F01），重名会互相覆盖。")
+                .setView(et)
+                .setPositiveButton("确认", (d, w) -> doImportExpr(uri, et.getText().toString().trim()))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void doImportExpr(Uri uri, String exprName) {
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                toast("无法读取所选文件");
+                return;
+            }
+            byte[] data = readAll(in);
+            String name = baseName(uri.getLastPathSegment());
+            if (name == null || name.isEmpty()) name = "imported.exp3.json";
+            String msg = ModelManager.registerExpressionIntoModel(
+                    this, pendingExprImportTarget, name, data, exprName);
+            toast(msg);
+            refresh();
+        } catch (Exception e) {
+            toast("导入失败： " + UiKit.safeMsg(e));
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -542,6 +835,10 @@ public class MotionPoolActivity extends Activity {
             Uri uri = data.getData();
             if (uri == null || pendingImportTarget == null) return;
             promptGroupThenImport(uri);
+        } else if (requestCode == REQ_EXPR_IMPORT) {
+            Uri uri = data.getData();
+            if (uri == null || pendingExprImportTarget == null) return;
+            promptNameThenImportExpr(uri);
         }
     }
 
@@ -585,6 +882,15 @@ public class MotionPoolActivity extends Activity {
         String p = path == null ? "" : path;
         int slash = p.lastIndexOf('/');
         return slash >= 0 ? p.substring(slash + 1) : p;
+    }
+
+    /** 表情文件基名（去目录、去 .exp3.json 后缀），用于「注册表情名」的默认值 */
+    private static String exprBaseName(String path) {
+        String n = baseName(path);
+        if (n.toLowerCase(Locale.ROOT).endsWith(".exp3.json")) {
+            n = n.substring(0, n.length() - ".exp3.json".length());
+        }
+        return n;
     }
 
     private static String trim(double v) {

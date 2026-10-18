@@ -198,4 +198,160 @@ public class ModelManagerWritebackTest {
         String msg = ModelManager.renameMotionGroup(ctx(), "mdl9", "Idle", "Idle");
         assertTrue(msg, msg.contains("相同"));
     }
+
+    // ── 表情写回（v1.169.0）─────────────────────────────────────
+
+    /** 造一个 model3 模型：FileReferences.Expressions 里一条声明 {Name, File} */
+    private File writeModel3WithExpr(String name, String exprName, String exprFile) throws Exception {
+        JSONObject item = new JSONObject().put("Name", exprName).put("File", exprFile);
+        JSONObject fr = new JSONObject().put("Expressions", new JSONArray().put(item));
+        JSONObject root = new JSONObject().put("Version", 3).put("FileReferences", fr);
+        File json = new File(modelDir(name), name + ".model3.json");
+        write(json, root.toString(2));
+        write(new File(modelDir(name), exprFile), "{\"Version\":3}");
+        return json;
+    }
+
+    private JSONArray expressionsOf(File json) throws Exception {
+        return readJson(json).getJSONObject("FileReferences").getJSONArray("Expressions");
+    }
+
+    @Test
+    public void registerExpressionIntoModel_writesFileAndRegisters() throws Exception {
+        // model3 已有 FileReferences（无 Expressions）→ 新建落 FileReferences.Expressions
+        File json = new File(modelDir("ex1"), "ex1.model3.json");
+        write(json, new JSONObject().put("Version", 3)
+                .put("FileReferences", new JSONObject()).toString(2));
+
+        byte[] data = "{\"Version\":3}".getBytes(StandardCharsets.UTF_8);
+        String msg = ModelManager.registerExpressionIntoModel(
+                ctx(), "ex1", "f07.exp3.json", data, "F07");
+        assertTrue(msg, msg.contains("注册为表情"));
+
+        JSONArray arr = expressionsOf(json);
+        assertEquals(1, arr.length());
+        assertEquals("F07", arr.getJSONObject(0).getString("Name"));
+        assertEquals("f07.exp3.json", arr.getJSONObject(0).getString("File"));
+        assertTrue(new File(modelDir("ex1"), "f07.exp3.json").exists());
+    }
+
+    @Test
+    public void registerExpressionIntoModel_rejectsDuplicateName() throws Exception {
+        JSONObject fr = new JSONObject().put("Expressions",
+                new JSONArray().put(new JSONObject().put("Name", "F01").put("File", "f01.exp3.json")));
+        File json = new File(modelDir("ex2"), "ex2.model3.json");
+        write(json, new JSONObject().put("Version", 3).put("FileReferences", fr).toString(2));
+        write(new File(modelDir("ex2"), "f01.exp3.json"), "{}");
+
+        byte[] data = "{}".getBytes(StandardCharsets.UTF_8);
+        String msg = ModelManager.registerExpressionIntoModel(
+                ctx(), "ex2", "dup.exp3.json", data, "F01");
+        assertTrue(msg, msg.contains("已被占用"));
+        // 未新增条目、未落文件
+        assertEquals(1, expressionsOf(json).length());
+        assertFalse(new File(modelDir("ex2"), "dup.exp3.json").exists());
+    }
+
+    @Test
+    public void registerExpressionIntoModel_rejectsBuiltin() {
+        byte[] data = "{}".getBytes(StandardCharsets.UTF_8);
+        String msg = ModelManager.registerExpressionIntoModel(
+                ctx(), "huohuo", "f.exp3.json", data, "F01");
+        assertTrue(msg, msg.contains("只读") || msg.contains("不可写"));
+    }
+
+    @Test
+    public void registerExistingFileAsExpression_registersWithoutCopying() throws Exception {
+        File json = new File(modelDir("ex3"), "ex3.model3.json");
+        write(json, new JSONObject().put("Version", 3)
+                .put("FileReferences", new JSONObject()).toString(2));
+        write(new File(modelDir("ex3"), "orphan.exp3.json"), "{}");
+
+        String msg = ModelManager.registerExistingFileAsExpression(
+                ctx(), "ex3", "orphan.exp3.json", "F09");
+        assertTrue(msg, msg.contains("注册为表情"));
+        JSONArray arr = expressionsOf(json);
+        assertEquals(1, arr.length());
+        assertEquals("F09", arr.getJSONObject(0).getString("Name"));
+        assertEquals("orphan.exp3.json", arr.getJSONObject(0).getString("File"));
+        // 只注册、不复制：目录里仍只有 1 个 .exp3.json
+        File[] exp = modelDir("ex3").listFiles((d, n) -> n.endsWith(".exp3.json"));
+        assertEquals(1, exp == null ? 0 : exp.length);
+    }
+
+    @Test
+    public void registerExistingFileAsExpression_intoModelJson_usesFileReferences() throws Exception {
+        // .model.json（非 model3）：表情新建仍落 FileReferences.Expressions，与扫描层一致
+        File json = new File(modelDir("ex7"), "ex7.model.json");
+        write(json, new JSONObject().put("Version", 2).toString());
+        write(new File(modelDir("ex7"), "o.exp3.json"), "{}");
+
+        String msg = ModelManager.registerExistingFileAsExpression(ctx(), "ex7", "o.exp3.json", "F01");
+        assertTrue(msg, msg.contains("注册为表情"));
+        JSONObject root = readJson(json);
+        assertEquals(1, root.getJSONObject("FileReferences").getJSONArray("Expressions").length());
+        assertFalse(root.has("Expressions"));
+    }
+
+    @Test
+    public void removeExpressionFromModel_unregistersButKeepsFile() throws Exception {
+        File json = writeModel3WithExpr("ex4", "F03", "f03.exp3.json");
+        String msg = ModelManager.removeExpressionFromModel(ctx(), "ex4", "F03");
+        assertTrue(msg, msg.contains("移除"));
+
+        assertEquals(0, expressionsOf(json).length());
+        // 表情文件保留（变为未注册表情）
+        assertTrue(new File(modelDir("ex4"), "f03.exp3.json").exists());
+    }
+
+    @Test
+    public void renameExpression_changesName() throws Exception {
+        File json = writeModel3WithExpr("ex5", "F02", "f02.exp3.json");
+        String msg = ModelManager.renameExpression(ctx(), "ex5", "F02", "F22");
+        assertTrue(msg, msg.contains("重命名"));
+
+        JSONArray arr = expressionsOf(json);
+        assertEquals(1, arr.length());
+        assertEquals("F22", arr.getJSONObject(0).getString("Name"));
+        // 只改 Name，指向的文件不变
+        assertEquals("f02.exp3.json", arr.getJSONObject(0).getString("File"));
+    }
+
+    @Test
+    public void renameExpression_rejectsDuplicateName() throws Exception {
+        JSONObject fr = new JSONObject().put("Expressions",
+                new JSONArray()
+                        .put(new JSONObject().put("Name", "F01").put("File", "f01.exp3.json"))
+                        .put(new JSONObject().put("Name", "F02").put("File", "f02.exp3.json")));
+        File json = new File(modelDir("ex6"), "ex6.model3.json");
+        write(json, new JSONObject().put("Version", 3).put("FileReferences", fr).toString(2));
+
+        String msg = ModelManager.renameExpression(ctx(), "ex6", "F01", "F02");
+        assertTrue(msg, msg.contains("已被占用"));
+        // 未改动
+        JSONArray arr = expressionsOf(json);
+        assertEquals("F01", arr.getJSONObject(0).getString("Name"));
+    }
+
+    @Test
+    public void registeredExpression_isVisibleToScanLayer() throws Exception {
+        // 落点对齐锁：ModelManager 写回后，MotionLibrary 扫描层应能读到同一个表情，
+        // 否则界面里「看到的表情」和「改到的表情」会分处两地
+        writeModel3WithExpr("ex9", "F01", "f01.exp3.json");
+        ModelManager.registerExistingFileAsExpression(ctx(), "ex9", "f01.exp3.json", "F02");
+
+        MotionLibrary.ModelActions target = null;
+        for (MotionLibrary.ModelActions m : MotionLibrary.scanAll(ctx(), "ex9")) {
+            if (m.dirName.equals("ex9")) {
+                target = m;
+                break;
+            }
+        }
+        assertTrue("扫描层应能发现模型 ex9", target != null);
+        boolean found = false;
+        for (MotionLibrary.Expr e : target.expressions) {
+            if ("F02".equals(e.name)) found = true;
+        }
+        assertTrue("扫描层应能读到新注册的表情 F02", found);
+    }
 }

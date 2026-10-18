@@ -1,5 +1,41 @@
 # Changelog
 
+## v1.169.0 (2026-10-18)
+
+承接 v1.166.0 / v1.165.0 的动作池。动作池此前只认「动作」（`.motion3.json`），模型里的
+**表情**（`.exp3.json`）完全没进池：引擎按 **Name**（如 `F01`）播放、声明落在模型 json 的
+`FileReferences.Expressions`（数组 `{Name, File}`），跨模型浏览时看不到、也改不了。本版把
+表情一并纳入动作池，仍是纯增量、不改 Live2D 渲染链路、不引新依赖。
+
+### 扫描层纳入表情（`model/MotionLibrary`）
+
+- 新增 `.exp3.json` 口径：解析 `FileReferences.Expressions`（兼容根级 `Expressions/expressions`）
+  得到**已声明表情** `Expr{file, name, declared, exists}`（展示名优先 Name、无则文件 base）；
+  未被任何 Name 引用的 `.exp3.json` 归入 `exprOrphans`「未注册表情」。
+- `ModelActions` 补 `expressions` / `exprOrphans` / `exprFileCount` / `exprCount()`。
+
+### 写回层纳入表情（`model/ModelManager`）
+
+- 四项写回，完全镜像动作写回约定（仅导入模型可写、内置只读；json 写回前先备份 `.bak`；
+  重名文件自动 `_1/_2`；落点与扫描层对齐到 `FileReferences.Expressions`）：
+  `registerExpressionIntoModel`（写文件 + 注册 Name）、`registerExistingFileAsExpression`
+  （只注册、不复制文件）、`removeExpressionFromModel`（移除注册、文件保留）、
+  `renameExpression`（改名，重名拒绝）。
+- `saveModelJson` 只在「本就有或本次有内容」时写回，避免表情操作顺带注入空数组。
+
+### 动作池页表情区（`care/MotionPoolActivity`）
+
+- 每个模型卡片新增表情区：已注册表情逐条带「播 / 导出 / 复用 / 改名 / 移除」，未注册表情带
+  「导出 / 复用 / 注册…」；可写模型另加「导入表情到此模型…」入口；汇总行补「N 个表情（M 未注册）」。
+- 播落 `PetService.onExpression(name)`（引擎按 Name 播，需模型为当前默认模型）。
+
+### 校验
+
+`tools/verify.sh` 全绿（638 单测 / 55 类、lint 0 error、APK 通过）。`ModelManagerWritebackTest`
+新增 9 条表情单测：写文件注册 / 重名拒绝 / 内置只读拒绝 / 只注册不复制 / `.model.json` 落
+`FileReferences` / 移除保留文件 / 改名 / 改名重名拒绝 / **扫描层可见性**（锁「看到的」与
+「改到的」同处一地）。
+
 ## v1.168.0 (2026-10-18)
 
 承接 v1.167.0。上一版把工作台补成完整的管理闭环（工作流可查看 / 运行 / 删除，定时任务可

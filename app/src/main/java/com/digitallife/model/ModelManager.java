@@ -576,19 +576,178 @@ public class ModelManager {
         }
     }
 
-    /** 模型 json 的内存视图：记录 Motions 的落点（根 还是 FileReferences），写回时按原样放回 */
+    // ==================== 表情写回（动作池表情区用） ====================
+
+    /**
+     * 把一段表情文件写入目标「导入」模型目录，并以指定 Name 注册进 {@code Expressions}。
+     *
+     * <p>与动作不同，表情由引擎**按 Name 播放**（如 {@code F07}），重名会互相覆盖，
+     * 故先查重再落盘；重名文件自动加 {@code _1/_2} 后缀，json 写回前先备份 {@code .bak}。</p>
+     */
+    public static String registerExpressionIntoModel(Context ctx, String targetDirName,
+                                                     String fileName, byte[] data, String exprName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读，请选择已导入的模型";
+        }
+        if (data == null || data.length == 0) return "表情文件内容为空，已取消";
+        String name = exprName == null ? "" : exprName.trim();
+        if (name.isEmpty()) return "请填写表情名（引擎按名字播放，如 F07）";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json，无法注册表情";
+            if (exprNameExists(mj.expressions, name)) {
+                return "表情名「" + name + "」已被占用（引擎按名字播放，重名会互相覆盖），请换一个";
+            }
+            String safe = sanitizeFileName(fileName, ".exp3.json");
+            File out = new File(dir, safe);
+            int n = 1;
+            while (out.exists()) out = new File(dir, addSuffix(safe, n++));
+            try (FileOutputStream fos = new FileOutputStream(out)) {
+                fos.write(data);
+            }
+            addExpression(mj.expressions, name, out.getName());
+            saveModelJson(mj);
+            Log.i(TAG, "registerExpressionIntoModel: " + out.getName() + " as " + name
+                    + " -> " + targetDirName);
+            return "已把 " + out.getName() + " 注册为表情「" + name + "」";
+        } catch (Exception e) {
+            Log.w(TAG, "registerExpressionIntoModel failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /**
+     * 把模型目录内**已存在**的表情文件（典型：动作池检出的「未注册表情」）按指定 Name 注册。
+     * 与 {@link #registerExpressionIntoModel} 的区别：不复制文件，只改模型 json。
+     */
+    public static String registerExistingFileAsExpression(Context ctx, String targetDirName,
+                                                         String relFile, String exprName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读，请选择已导入的模型";
+        }
+        String rel = normalizeRel(relFile);
+        if (rel.isEmpty()) return "未指定表情文件";
+        String name = exprName == null ? "" : exprName.trim();
+        if (name.isEmpty()) return "请填写表情名（如 F07）";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            if (!new File(dir, rel).isFile()) return "文件不存在：" + rel;
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json，无法注册表情";
+            if (exprNameExists(mj.expressions, name)) {
+                return "表情名「" + name + "」已被占用，请换一个";
+            }
+            addExpression(mj.expressions, name, rel);
+            saveModelJson(mj);
+            return "已把 " + baseName(rel) + " 注册为表情「" + name + "」，可点「播」验证";
+        } catch (Exception e) {
+            Log.w(TAG, "registerExistingFileAsExpression failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 从 Expressions 移除一个表情的注册（只改 json，**文件保留**，会变成「未注册表情」） */
+    public static String removeExpressionFromModel(Context ctx, String targetDirName, String exprName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读";
+        }
+        String name = exprName == null ? "" : exprName.trim();
+        if (name.isEmpty()) return "参数不完整";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json";
+            org.json.JSONArray next = new org.json.JSONArray();
+            boolean removed = false;
+            for (int i = 0; i < mj.expressions.length(); i++) {
+                org.json.JSONObject it = mj.expressions.optJSONObject(i);
+                if (it == null) continue;
+                if (!removed && name.equals(it.optString("Name", ""))) {
+                    removed = true;
+                    continue;
+                }
+                next.put(it);
+            }
+            if (!removed) return "未找到表情：" + name;
+            mj.expressions = next;
+            saveModelJson(mj);
+            return "已移除表情「" + name + "」的注册（文件保留，可在下方「未注册表情」区重新注册）";
+        } catch (Exception e) {
+            Log.w(TAG, "removeExpressionFromModel failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 重命名表情的 Name（引擎按名播放，故旧名→新名即改指向；重名拒绝） */
+    public static String renameExpression(Context ctx, String targetDirName,
+                                          String oldName, String newName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读";
+        }
+        if (oldName == null || oldName.isEmpty()) return "旧表情名缺失";
+        String nn = newName == null ? "" : newName.trim();
+        if (nn.isEmpty()) return "新表情名不能为空";
+        if (nn.equals(oldName)) return "新旧表情名相同";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json";
+            if (exprNameExists(mj.expressions, nn)) return "表情名「" + nn + "」已被占用，请换一个";
+            boolean found = false;
+            for (int i = 0; i < mj.expressions.length(); i++) {
+                org.json.JSONObject it = mj.expressions.optJSONObject(i);
+                if (it != null && oldName.equals(it.optString("Name", ""))) {
+                    it.put("Name", nn);
+                    found = true;
+                }
+            }
+            if (!found) return "未找到表情：" + oldName;
+            saveModelJson(mj);
+            return "已把表情「" + oldName + "」重命名为「" + nn + "」";
+        } catch (Exception e) {
+            Log.w(TAG, "renameExpression failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    private static boolean exprNameExists(org.json.JSONArray arr, String name) {
+        for (int i = 0; i < arr.length(); i++) {
+            org.json.JSONObject it = arr.optJSONObject(i);
+            if (it != null && name.equals(it.optString("Name", ""))) return true;
+        }
+        return false;
+    }
+
+    private static void addExpression(org.json.JSONArray arr, String name, String file) throws Exception {
+        org.json.JSONObject item = new org.json.JSONObject();
+        item.put("Name", name);
+        item.put("File", file);
+        arr.put(item);
+    }
+
+    /** 模型 json 的内存视图：记录 Motions / Expressions 的落点，写回时按原样放回 */
     private static final class ModelJson {
         File file;
         org.json.JSONObject root;
         org.json.JSONObject motions;
         boolean atFileReferences;
         boolean isModel3;
+        /** 装载时 Motions 是否本就存在（避免表情操作把空的 Motions 塞进 json） */
+        boolean motionsExisted;
+        /** 表情声明数组（{@code {Name, File}}） */
+        org.json.JSONArray expressions;
+        /** 表情落点是否为 FileReferences.Expressions（Live2D 规范位置，也是新建时的默认） */
+        boolean exprAtFileReferences;
+        /** 装载时 Expressions 是否本就存在 */
+        boolean expressionsExisted;
     }
 
     /**
      * 装载模型 json。加载顺序与 C++ / MotionLibrary 一致：优先 {@code .model.json}，
      * 其次 {@code .model3.json}；Motions 优先取 {@code FileReferences.Motions}，再退回根级
-     * {@code Motions/motions}——与扫描层完全对齐，确保「看到的」和「写回的」是同一处。
+     * {@code Motions/motions}；Expressions 优先取 {@code FileReferences.Expressions}，再退回根级
+     * {@code Expressions/expressions}——与扫描层完全对齐，确保「看到的」和「写回的」是同一处。
      */
     private static ModelJson loadModelJson(File dir) throws Exception {
         File jsonFile = findJsonFile(dir, ".model.json");
@@ -603,29 +762,62 @@ public class ModelManager {
             motions = root.optJSONObject("Motions");
             if (motions == null) motions = root.optJSONObject("motions");
         }
+        boolean motionsExisted = motions != null;
         if (motions == null) {
             motions = new org.json.JSONObject();
             atFr = isModel3; // 新建：model3 落 FileReferences.Motions，model.json 落根级 Motions
         }
+
+        // 表情：始终是数组；新建时落 FileReferences（Live2D 规范位置，实测内置模型也在此）
+        org.json.JSONArray expressions = fr != null ? fr.optJSONArray("Expressions") : null;
+        boolean exprAtFr = expressions != null;
+        if (expressions == null) expressions = root.optJSONArray("Expressions");
+        if (expressions == null) expressions = root.optJSONArray("expressions");
+        boolean expressionsExisted = expressions != null;
+        if (expressions == null) {
+            expressions = new org.json.JSONArray();
+            exprAtFr = true;
+        }
+
         ModelJson mj = new ModelJson();
         mj.file = jsonFile;
         mj.root = root;
         mj.motions = motions;
         mj.atFileReferences = atFr;
         mj.isModel3 = isModel3;
+        mj.motionsExisted = motionsExisted;
+        mj.expressions = expressions;
+        mj.exprAtFileReferences = exprAtFr;
+        mj.expressionsExisted = expressionsExisted;
         return mj;
     }
 
     private static void saveModelJson(ModelJson mj) throws Exception {
-        if (mj.atFileReferences) {
-            org.json.JSONObject fr = mj.root.optJSONObject("FileReferences");
-            if (fr == null) {
-                fr = new org.json.JSONObject();
-                mj.root.put("FileReferences", fr);
+        // Motions：只在「本就有」或「本次确实加了内容」时写回，避免顺带注入空 Motions
+        if (mj.motionsExisted || mj.motions.length() > 0) {
+            if (mj.atFileReferences) {
+                org.json.JSONObject fr = mj.root.optJSONObject("FileReferences");
+                if (fr == null) {
+                    fr = new org.json.JSONObject();
+                    mj.root.put("FileReferences", fr);
+                }
+                fr.put("Motions", mj.motions);
+            } else {
+                mj.root.put("Motions", mj.motions);
             }
-            fr.put("Motions", mj.motions);
-        } else {
-            mj.root.put("Motions", mj.motions);
+        }
+        // Expressions：同理，避免无谓改动
+        if (mj.expressionsExisted || mj.expressions.length() > 0) {
+            if (mj.exprAtFileReferences) {
+                org.json.JSONObject fr = mj.root.optJSONObject("FileReferences");
+                if (fr == null) {
+                    fr = new org.json.JSONObject();
+                    mj.root.put("FileReferences", fr);
+                }
+                fr.put("Expressions", mj.expressions);
+            } else {
+                mj.root.put("Expressions", mj.expressions);
+            }
         }
         backupFile(mj.file);
         writeFileString(mj.file, mj.root.toString(2));
@@ -678,6 +870,14 @@ public class ModelManager {
         if (name == null || name.trim().isEmpty()) return "motion.motion3.json";
         String n = name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
         if (!n.toLowerCase(Locale.ROOT).endsWith(".json")) n = n + ".motion3.json";
+        return n;
+    }
+
+    /** 表情文件名清洗：空名兜底 {@code file.exp3.json}，并补上 defaultSuffix 后缀 */
+    private static String sanitizeFileName(String name, String defaultSuffix) {
+        if (name == null || name.trim().isEmpty()) return "file" + defaultSuffix;
+        String n = name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        if (!n.toLowerCase(Locale.ROOT).endsWith(".json")) n = n + defaultSuffix;
         return n;
     }
 
