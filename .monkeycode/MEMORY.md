@@ -365,3 +365,13 @@ Entries discovered by the Agent during task execution should follow this format:
   - 交付内容：触摸事件可绑表情/动作。四个事件 id：`Head`/`Body`（复用 `PetTouchReaction` 分区常量）、`DoubleTap`、`None`（点空白处）。新增 `ui/pet/TouchBindings`（纯逻辑 `effective(bound,fallback)`：bound 非空且非哨兵→用 bound、空→回落 fallback、哨兵 `NONE="-none-"`→null；`events()`(返回副本)、`eventFor(id)`、`distinctNames`；存储 prefs `care_touch_bindings`，key `<eventId>.expression` / `<eventId>.motion`，`get`(Binding 两字段非 null)、`setExpression`/`setMotionGroup`(空串=清)、`clear`、`isDefault`）。接入：`PetOverlayView.handleModelTap`（zone ""→`EVENT_NONE`，用绑定覆盖 expr/group，其余气泡/情绪不变）、`PetService.onTapZone`（同样解析绑定，`syncCurrent` 用覆盖后的表情，防冷却期抢回旧表情）、`PetService.onDoubleTap`（expr 默认 "F02"、group 默认 null，`overlayView.setMotion(group,random(6),3)`）。UI：`MotionPoolActivity.buildBindingsSection`+`bindingRow`+`pickBinding`（AlertDialog 单选：用默认/不绑/各模型已声明名去重并集；选完 `preview` 试播）+`恢复默认`。仅覆盖视觉。
   - **关键设计点**：绑定按**名字**存、不绑具体模型；生效处「绑定优先、为空回落默认」，当前模型缺该内容靠默认兜住（不哑火）；哨兵 `NONE` 与「未设」区分，前者明确关闭默认视觉。候选名 = 各模型**已声明**表情名 / 动作组名的去重并集（`MotionLibrary.ModelActions.expressions[].declared/name`、`.groups[].name`）。
   - 单测 `TouchBindingsTest`(6 纯 JVM) + `TouchBindingsStoreTest`(7 Robolectric)；增量 verify 706 单测 / 64 类、lint 0 error、APK(debug) 9,133,718B。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.177.0 连招导出/导入
+- Category: Operations & Deployment
+- Instructions:
+  - v1.177.0 已发布：versionCode 180 / versionName 1.177.0、Release id 416344186、APK app-release.apk 8,617,003B、tag v1.177.0 → 295adf9；CI run success
+  - 交付内容：连招导出/导入。`ComboStore` 新增纯逻辑 `toBundle(list,modelDir)`（包裹 `{"model":<目录>,"combos":[toJson(list)]}`）与 `parseImport(json)`（容 `{model,combos}` 对象与裸数组 `[...]` 两形态；空/坏 JSON/非预期结构 → 空表，不抛），复用既有 `toJson`/`fromJson`。`MotionPoolActivity`：连招区 head 加「导出」（`combos` 非空时，文件名 `<modelDir>-combos.json`）与「导入」（总可用，选文件合并进本模型、同名忽略大小写覆盖，提示「已导入 N 个（覆盖同名 M 个）」）；`comboRow` acts 加「导出」（单条 `<modelDir>-<safeFileName(name)>.json`）。走既有 SAF：导出 `ACTION_CREATE_DOCUMENT`+`setType("application/json")`、导入 `ACTION_OPEN_DOCUMENT`+`setType("*/*")`；新增 `REQ_COMBO_EXPORT=5104`/`REQ_COMBO_IMPORT=5105` 两条 `onActivityResult` 分支；导出**先打包 JSON 到字段、选好位置才写盘**（`pendingComboExportJson.getBytes(StandardCharsets.UTF_8)`）。`safeFileName` = trim + `replaceAll("[\\\\/:*?\"<>|]","_")` + 空回落 `combo`。
+  - **关键设计点**：导出「全部」与「单条」共用同一包裹格式，导入端一套解析（单条就是数组里一条）；`model` 字段仅提示、导入忽略（按目标模型落盘）；跨模型导入步骤解析不到时由连招逻辑播放时跳过并提示，不会错播。
+  - 复用现有动作/表情导出导入通道模式（`REQ_EXPORT=5101`/`REQ_IMPORT=5102`/`REQ_EXPR_IMPORT=5103`，写法见 `exportMotion`/`exportExpression`/`pickImportTo`）。单测并入 `ComboStoreTest`（新增 `bundle_roundTripsThroughParseImport` / `parseImport_acceptsBareArray` / `parseImport_isTolerantOfGarbage`）；增量 verify 709 单测 / 64 类、lint 0 error、APK(debug) 9,135,264B。
