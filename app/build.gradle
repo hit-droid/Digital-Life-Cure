@@ -19,8 +19,8 @@ android {
         applicationId "com.digitallife"
         minSdk 21
         targetSdk 34
-        versionCode 168
-        versionName "1.165.0"
+        versionCode 169
+        versionName "1.166.0"
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86'
         }

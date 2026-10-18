@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -156,6 +157,67 @@ public final class MotionLibrary {
             throws Exception {
         try (InputStream in = openStream(ctx, dirName, imported, rel)) {
             return readAll(in);
+        }
+    }
+
+    /**
+     * 读取一个动作文件引用的参数 ID（{@code Curves} 中 {@code Target=Parameter} 的 {@code Id}）。
+     * 用于跨模型复用的兼容性判定（见 {@link MotionCompat}）。解析失败返回空集。
+     */
+    public static Set<String> motionParameterIds(Context ctx, String dirName, boolean imported,
+                                                 String rel) {
+        Set<String> out = new LinkedHashSet<>();
+        try {
+            JSONObject o = new JSONObject(new String(readBytes(ctx, dirName, imported, rel),
+                    StandardCharsets.UTF_8));
+            JSONArray curves = o.optJSONArray("Curves");
+            if (curves != null) {
+                for (int i = 0; i < curves.length(); i++) {
+                    JSONObject c = curves.optJSONObject(i);
+                    if (c == null) continue;
+                    if (!"Parameter".equals(c.optString("Target", "Parameter"))) continue;
+                    String id = c.optString("Id", "");
+                    if (!id.isEmpty()) out.add(id);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    /**
+     * 读取目标模型拥有的参数 ID 清单（{@code .cdi3.json} 的 {@code Parameters[].Id}）。
+     *
+     * @return 参数 ID 集合；<b>null</b> 表示该模型没有 {@code .cdi3.json}（取不到清单，无法判定）
+     */
+    public static Set<String> modelParameterIds(Context ctx, String dirName, boolean imported) {
+        try {
+            List<String> files = new ArrayList<>();
+            if (imported) collectFiles(modelFile(ctx, dirName), "", files);
+            else collectAssets(ctx, dirName, "", files);
+            String cdi = null;
+            for (String f : files) {
+                if (f.toLowerCase(Locale.ROOT).endsWith(".cdi3.json")) {
+                    cdi = f;
+                    break;
+                }
+            }
+            if (cdi == null) return null;
+            JSONObject o = new JSONObject(new String(readBytes(ctx, dirName, imported, cdi),
+                    StandardCharsets.UTF_8));
+            JSONArray ps = o.optJSONArray("Parameters");
+            Set<String> out = new HashSet<>();
+            if (ps != null) {
+                for (int i = 0; i < ps.length(); i++) {
+                    JSONObject p = ps.optJSONObject(i);
+                    if (p == null) continue;
+                    String id = p.optString("Id", "");
+                    if (!id.isEmpty()) out.add(id);
+                }
+            }
+            return out;
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

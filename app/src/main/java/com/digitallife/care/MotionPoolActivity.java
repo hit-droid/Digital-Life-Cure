@@ -19,6 +19,7 @@ import android.widget.Toast;
 
 import com.digitallife.R;
 import com.digitallife.model.ModelManager;
+import com.digitallife.model.MotionCompat;
 import com.digitallife.model.MotionLibrary;
 import com.digitallife.service.PetService;
 import com.digitallife.ui.UiKit;
@@ -29,6 +30,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 动作池：把散落在各模型里的动作集中到一个库里看。
@@ -181,6 +183,8 @@ public class MotionPoolActivity extends Activity {
                 m.playable ? COLOR_PLAYABLE : COLOR_MISSING));
         card.addView(head);
 
+        boolean writable = ModelManager.isWritableModel(this, m.dirName);
+
         boolean empty = m.groups.isEmpty() && m.orphans.isEmpty();
         if (empty) {
             card.addView(hint("该模型没有动作文件（也没有可播放的动作）。\n"
@@ -188,7 +192,7 @@ public class MotionPoolActivity extends Activity {
         }
 
         // 可写模型才给「导入动作」入口
-        if (ModelManager.isWritableModel(this, m.dirName)) {
+        if (writable) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setPadding(0, dp(8), 0, 0);
@@ -199,34 +203,48 @@ public class MotionPoolActivity extends Activity {
 
         // 动作组
         for (MotionLibrary.Group g : m.groups) {
-            card.addView(groupHeader(g.name + "  ·  " + g.motions.size() + " 个动作"));
+            card.addView(groupHeader(m.dirName, g.name, g.motions.size(), writable));
             for (int i = 0; i < g.motions.size(); i++) {
-                card.addView(motionRow(m, g.motions.get(i), g.name, i));
+                card.addView(motionRow(m, g.motions.get(i), g.name, i, writable));
             }
         }
 
         // 未注册文件
         if (!m.orphans.isEmpty()) {
-            card.addView(orphanHeader("未注册文件（播不出）"));
+            card.addView(orphanHeader(writable
+                    ? "未注册文件（播不出）· 点「注册」可挂进动作组"
+                    : "未注册文件（播不出）"));
             for (MotionLibrary.Motion o : m.orphans) {
-                card.addView(motionRow(m, o, null, -1));
+                card.addView(motionRow(m, o, null, -1, writable));
             }
         }
         return card;
     }
 
-    private View groupHeader(String text) {
+    /** 动作组标题行：组名 + 动作数 +（可写模型）「改名」 */
+    private View groupHeader(String modelDir, String groupName, int count, boolean writable) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        row.setLayoutParams(lp);
+
         TextView tv = new TextView(this);
-        tv.setText("◆ " + text);
+        tv.setText("◆ " + groupName + "  ·  " + count + " 个动作");
         tv.setTextSize(13f);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setTextColor(getColorCompat(R.color.operit_accent));
         tv.setIncludeFontPadding(false);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(10);
-        tv.setLayoutParams(lp);
-        return tv;
+        row.addView(tv, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (writable) {
+            TextView rename = chip(row, "改名", R.color.operit_text_secondary);
+            rename.setOnClickListener(v -> promptRenameGroup(modelDir, groupName));
+        }
+        return row;
     }
 
     private View orphanHeader(String text) {
@@ -242,9 +260,9 @@ public class MotionPoolActivity extends Activity {
         return tv;
     }
 
-    /** 一条动作：名称 + 元数据 +（播 / 导出 / 复用）按钮。groupName 为 null 表示孤立文件 */
+    /** 一条动作：名称 + 元数据 + 操作按钮（播 / 导出 / 复用 / 删 / 注册）。groupName 为 null 表示孤立文件 */
     private View motionRow(MotionLibrary.ModelActions m, MotionLibrary.Motion mo,
-                           String groupName, int playIndex) {
+                           String groupName, int playIndex, boolean writable) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
@@ -298,6 +316,15 @@ public class MotionPoolActivity extends Activity {
             exp.setOnClickListener(v -> exportMotion(m, mo));
             TextView reuse = chip(acts, "复用", R.color.operit_text_secondary);
             reuse.setOnClickListener(v -> reuseMotion(m, mo));
+            if (writable) {
+                if (mo.declared && groupName != null) {
+                    TextView del = chip(acts, "删", R.color.operit_text_secondary);
+                    del.setOnClickListener(v -> confirmRemove(m.dirName, groupName, mo));
+                } else if (!mo.declared) {
+                    TextView reg = chip(acts, "注册…", R.color.brand_operit_light);
+                    reg.setOnClickListener(v -> promptRegisterOrphan(m.dirName, mo.file));
+                }
+            }
             box.addView(acts);
         }
         return box;
@@ -335,7 +362,7 @@ public class MotionPoolActivity extends Activity {
         }
     }
 
-    /** 把某个动作复制到另一个「导入」模型并注册进动作组 */
+    /** 把某个动作复制到另一个「导入」模型并注册进动作组（先选目标） */
     private void reuseMotion(MotionLibrary.ModelActions src, MotionLibrary.Motion mo) {
         List<String> targets = ModelManager.listImportedModelDirs(this);
         if (targets.isEmpty()) {
@@ -346,10 +373,89 @@ public class MotionPoolActivity extends Activity {
         final String group = mo.group != null ? mo.group : "TapBody";
         new AlertDialog.Builder(this)
                 .setTitle("把「" + mo.displayName() + "」复用到哪个模型？")
-                .setMessage("将文件复制进目标模型目录，并注册到「" + group + "」组。\n"
-                        + "提示：Live2D 动作绑定参数 ID，跨不同骨骼的模型复用可能错位/无效果，"
-                        + "建议只用于同源模型。")
-                .setItems(items, (d, which) -> doCopyInto(src, mo, items[which], group))
+                .setItems(items, (d, which) -> confirmReuse(src, mo, items[which], group))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 复用前先算一次参数兼容性，把「可能错位」这个隐性约束变成可见判定，再由用户决定 */
+    private void confirmReuse(MotionLibrary.ModelActions src, MotionLibrary.Motion mo,
+                              String target, String group) {
+        Set<String> motionParams =
+                MotionLibrary.motionParameterIds(this, src.dirName, src.imported, mo.file);
+        Set<String> targetParams = MotionLibrary.modelParameterIds(this, target, true);
+        MotionCompat.Verdict v = MotionCompat.judge(motionParams, targetParams);
+
+        StringBuilder msg = new StringBuilder();
+        msg.append("将复制进「").append(target).append("」并注册到「").append(group).append("」组。\n\n");
+        msg.append("兼容性：").append(v.label);
+        if (v.total > 0) {
+            msg.append("（命中参数 ").append(v.matched).append("/").append(v.total);
+            if (!v.missing.isEmpty()) {
+                msg.append("，目标缺失：").append(String.join(", ", v.missing));
+            }
+            msg.append("）");
+        }
+        msg.append("\n\n仅同源模型间的复用才可靠；强行复用可在模型切换后点「播」验证。");
+
+        new AlertDialog.Builder(this)
+                .setTitle("确认复用")
+                .setMessage(msg.toString())
+                .setPositiveButton("仍然复用", (d, w) -> doCopyInto(src, mo, target, group))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 把「未注册」的孤立文件挂进某个动作组（只改 json，不复制文件） */
+    private void promptRegisterOrphan(String modelDir, String relFile) {
+        EditText et = new EditText(this);
+        et.setText("TapBody");
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("注册到哪个动作组？")
+                .setMessage("把未注册文件「" + baseName(relFile) + "」挂进模型「" + modelDir
+                        + "」的动作组（填已有组名即并入，填新名则新建组）。")
+                .setView(et)
+                .setPositiveButton("注册", (d, w) -> {
+                    toast(ModelManager.registerExistingFileIntoModel(
+                            this, modelDir, relFile, et.getText().toString().trim()));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 从动作组中移除一个动作的注册（文件保留，变为未注册文件） */
+    private void confirmRemove(String modelDir, String groupName, MotionLibrary.Motion mo) {
+        new AlertDialog.Builder(this)
+                .setTitle("从组中移除？")
+                .setMessage("把「" + mo.displayName() + "」从「" + groupName + "」组移除注册。\n"
+                        + "动作文件会保留，随后出现在「未注册文件」区，可再次注册。")
+                .setPositiveButton("移除", (d, w) -> {
+                    toast(ModelManager.removeMotionFromModel(this, modelDir, groupName, mo.file));
+                    refresh();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 重命名动作组 */
+    private void promptRenameGroup(String modelDir, String groupName) {
+        EditText et = new EditText(this);
+        et.setText(groupName);
+        et.setTextSize(14f);
+        et.setPadding(dp(12), dp(8), dp(12), dp(8));
+        new AlertDialog.Builder(this)
+                .setTitle("重命名动作组")
+                .setMessage("模型「" + modelDir + "」的动作组「" + groupName
+                        + "」改名；若新名已存在则把动作并入其中。")
+                .setView(et)
+                .setPositiveButton("改名", (d, w) -> {
+                    toast(ModelManager.renameMotionGroup(
+                            this, modelDir, groupName, et.getText().toString().trim()));
+                    refresh();
+                })
                 .setNegativeButton("取消", null)
                 .show();
     }

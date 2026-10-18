@@ -457,41 +457,12 @@ public class ModelManager {
             }
 
             // 2) 找到模型 json，把新文件追加进 Motions 的指定组
-            //    加载顺序与 C++ / MotionLibrary 一致：优先 .model.json，其次 .model3.json
-            File jsonFile = findJsonFile(dir, ".model.json");
-            if (jsonFile == null) jsonFile = findJsonFile(dir, ".model3.json");
-            if (jsonFile == null) {
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) {
                 return "已写入动作文件 " + out.getName() + "，但未找到模型 json，未注册动作组";
             }
-            boolean isModel3 = jsonFile.getName().toLowerCase(Locale.ROOT).endsWith(".model3.json");
-            org.json.JSONObject root = new org.json.JSONObject(readFileString(jsonFile));
-            org.json.JSONObject fr = isModel3 ? root.optJSONObject("FileReferences") : null;
-            org.json.JSONObject motions = fr != null ? fr.optJSONObject("Motions") : null;
-            if (motions == null) motions = root.optJSONObject("Motions");
-            if (motions == null) motions = root.optJSONObject("motions");
-            if (motions == null) motions = new org.json.JSONObject();
-
-            org.json.JSONArray arr = motions.optJSONArray(groupName);
-            if (arr == null) {
-                arr = new org.json.JSONArray();
-                motions.put(groupName, arr);
-            }
-            org.json.JSONObject item = new org.json.JSONObject();
-            item.put("File", out.getName());
-            arr.put(item);
-
-            if (isModel3) {
-                if (fr == null) {
-                    fr = new org.json.JSONObject();
-                    root.put("FileReferences", fr);
-                }
-                fr.put("Motions", motions);
-            } else {
-                root.put("Motions", motions);
-            }
-
-            backupFile(jsonFile);
-            writeFileString(jsonFile, root.toString(2));
+            addMotionToGroup(mj.motions, groupName, out.getName());
+            saveModelJson(mj);
             Log.i(TAG, "registerMotionIntoModel: " + out.getName() + " -> "
                     + targetDirName + "/" + groupName);
             return "已把 " + out.getName() + " 注册到「" + groupName + "」组";
@@ -499,6 +470,193 @@ public class ModelManager {
             Log.w(TAG, "registerMotionIntoModel failed", e);
             return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
         }
+    }
+
+    /**
+     * 把模型目录内**已存在**的动作文件（典型：动作池里检出的「未注册文件」）注册进指定动作组。
+     *
+     * <p>与 {@link #registerMotionIntoModel} 的唯一区别：不复制文件，只改模型 json——用于把
+     * 磁盘上孤立、引擎播不出的 {@code .motion3.json} 一键挂进某个组。同组已有同文件则跳过。</p>
+     */
+    public static String registerExistingFileIntoModel(Context ctx, String targetDirName,
+                                                       String relFile, String groupName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读，请选择已导入的模型";
+        }
+        String rel = normalizeRel(relFile);
+        if (rel.isEmpty()) return "未指定动作文件";
+        if (groupName == null || groupName.trim().isEmpty()) return "请填写动作组名";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            if (!new File(dir, rel).isFile()) return "文件不存在：" + rel;
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json，无法注册动作组";
+            boolean added = addMotionToGroup(mj.motions, groupName.trim(), rel);
+            if (!added) return rel + " 已在「" + groupName + "」组中，未重复注册";
+            saveModelJson(mj);
+            return "已把 " + baseName(rel) + " 注册到「" + groupName + "」组，可点「播」验证";
+        } catch (Exception e) {
+            Log.w(TAG, "registerExistingFileIntoModel failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /**
+     * 从指定动作组移除一个动作的注册（只改 json，**文件保留**，会变成「未注册文件」）。
+     * 组因此变空则删除该组。
+     */
+    public static String removeMotionFromModel(Context ctx, String targetDirName,
+                                               String groupName, String relFile) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读";
+        }
+        String rel = normalizeRel(relFile);
+        if (rel.isEmpty() || groupName == null || groupName.isEmpty()) return "参数不完整";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json";
+            org.json.JSONArray arr = mj.motions.optJSONArray(groupName);
+            if (arr == null) return "未找到动作组：" + groupName;
+            org.json.JSONArray next = new org.json.JSONArray();
+            boolean removed = false;
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject it = arr.optJSONObject(i);
+                if (it == null) continue;
+                if (!removed && rel.equals(normalizeRel(it.optString("File", "")))) {
+                    removed = true;
+                    continue;
+                }
+                next.put(it);
+            }
+            if (!removed) return "该动作不在「" + groupName + "」组中";
+            if (next.length() == 0) mj.motions.remove(groupName);
+            else mj.motions.put(groupName, next);
+            saveModelJson(mj);
+            return "已从「" + groupName + "」移除注册（文件保留，可在下方「未注册文件」区重新注册）";
+        } catch (Exception e) {
+            Log.w(TAG, "removeMotionFromModel failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 重命名动作组（改 Motions 的 key）；新名已存在则把旧组成员并入新组 */
+    public static String renameMotionGroup(Context ctx, String targetDirName,
+                                           String oldName, String newName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读";
+        }
+        if (oldName == null || oldName.isEmpty()) return "旧组名缺失";
+        String nn = newName == null ? "" : newName.trim();
+        if (nn.isEmpty()) return "新组名不能为空";
+        if (nn.equals(oldName)) return "新旧组名相同";
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            ModelJson mj = loadModelJson(dir);
+            if (mj == null) return "未找到模型 json";
+            org.json.JSONArray arr = mj.motions.optJSONArray(oldName);
+            if (arr == null) return "未找到动作组：" + oldName;
+            org.json.JSONArray exist = mj.motions.optJSONArray(nn);
+            if (exist == null) {
+                mj.motions.put(nn, arr);
+                mj.motions.remove(oldName);
+                saveModelJson(mj);
+                return "已把动作组「" + oldName + "」重命名为「" + nn + "」";
+            }
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject it = arr.optJSONObject(i);
+                if (it != null) exist.put(it);
+            }
+            mj.motions.remove(oldName);
+            saveModelJson(mj);
+            return "「" + nn + "」已存在，已把「" + oldName + "」的动作并入其中";
+        } catch (Exception e) {
+            Log.w(TAG, "renameMotionGroup failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 模型 json 的内存视图：记录 Motions 的落点（根 还是 FileReferences），写回时按原样放回 */
+    private static final class ModelJson {
+        File file;
+        org.json.JSONObject root;
+        org.json.JSONObject motions;
+        boolean atFileReferences;
+        boolean isModel3;
+    }
+
+    /**
+     * 装载模型 json。加载顺序与 C++ / MotionLibrary 一致：优先 {@code .model.json}，
+     * 其次 {@code .model3.json}；Motions 优先取 {@code FileReferences.Motions}，再退回根级
+     * {@code Motions/motions}——与扫描层完全对齐，确保「看到的」和「写回的」是同一处。
+     */
+    private static ModelJson loadModelJson(File dir) throws Exception {
+        File jsonFile = findJsonFile(dir, ".model.json");
+        if (jsonFile == null) jsonFile = findJsonFile(dir, ".model3.json");
+        if (jsonFile == null) return null;
+        boolean isModel3 = jsonFile.getName().toLowerCase(Locale.ROOT).endsWith(".model3.json");
+        org.json.JSONObject root = new org.json.JSONObject(readFileString(jsonFile));
+        org.json.JSONObject fr = root.optJSONObject("FileReferences");
+        org.json.JSONObject motions = fr != null ? fr.optJSONObject("Motions") : null;
+        boolean atFr = motions != null;
+        if (motions == null) {
+            motions = root.optJSONObject("Motions");
+            if (motions == null) motions = root.optJSONObject("motions");
+        }
+        if (motions == null) {
+            motions = new org.json.JSONObject();
+            atFr = isModel3; // 新建：model3 落 FileReferences.Motions，model.json 落根级 Motions
+        }
+        ModelJson mj = new ModelJson();
+        mj.file = jsonFile;
+        mj.root = root;
+        mj.motions = motions;
+        mj.atFileReferences = atFr;
+        mj.isModel3 = isModel3;
+        return mj;
+    }
+
+    private static void saveModelJson(ModelJson mj) throws Exception {
+        if (mj.atFileReferences) {
+            org.json.JSONObject fr = mj.root.optJSONObject("FileReferences");
+            if (fr == null) {
+                fr = new org.json.JSONObject();
+                mj.root.put("FileReferences", fr);
+            }
+            fr.put("Motions", mj.motions);
+        } else {
+            mj.root.put("Motions", mj.motions);
+        }
+        backupFile(mj.file);
+        writeFileString(mj.file, mj.root.toString(2));
+    }
+
+    /** 把文件加进动作组；返回 false 表示该组已含此文件（不重复注册） */
+    private static boolean addMotionToGroup(org.json.JSONObject motions, String group, String file)
+            throws Exception {
+        org.json.JSONArray arr = motions.optJSONArray(group);
+        if (arr == null) {
+            arr = new org.json.JSONArray();
+            motions.put(group, arr);
+        }
+        for (int i = 0; i < arr.length(); i++) {
+            org.json.JSONObject it = arr.optJSONObject(i);
+            if (it != null && file.equals(normalizeRel(it.optString("File", "")))) return false;
+        }
+        org.json.JSONObject item = new org.json.JSONObject();
+        item.put("File", file);
+        arr.put(item);
+        return true;
+    }
+
+    private static String normalizeRel(String path) {
+        return path == null ? "" : path.replace('\\', '/').trim();
+    }
+
+    private static String baseName(String path) {
+        String p = path == null ? "" : path;
+        int slash = p.lastIndexOf('/');
+        return slash >= 0 ? p.substring(slash + 1) : p;
     }
 
     /** 写回模型 json 前先备份为 {@code .bak}，出错可手工还原 */

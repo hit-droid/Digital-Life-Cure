@@ -1,6 +1,7 @@
 package com.digitallife.ui;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -71,28 +72,67 @@ public class ScreenshotRenderTest {
         capture(content, W, H, "chat_care.png");
     }
 
-    /** Agent 工作台：预置一条工作流 + 一条定时任务，核对只读列表行的渲染 */
+    /** Agent 工作台：预置工作流 + 定时任务（一条启用、一条暂停），核对「可运行 / 可暂停」列表行 */
     @Test
     public void agentWorkbench() throws Exception {
-        android.content.Context ctx = org.robolectric.RuntimeEnvironment.getApplication();
-        ctx.getSharedPreferences("care_workflows", android.content.Context.MODE_PRIVATE)
+        Context ctx = org.robolectric.RuntimeEnvironment.getApplication();
+        ctx.getSharedPreferences("care_workflows", Context.MODE_PRIVATE)
                 .edit().putString("晨间简报", "{\"steps\":[1,2,3]}").commit();
-        ctx.getSharedPreferences("care_schedules", android.content.Context.MODE_PRIVATE)
+        ctx.getSharedPreferences("care_schedules", Context.MODE_PRIVATE)
                 .edit().putString("每天九点",
-                        "{\"cronExpr\":\"0 9 * * *\",\"workflowName\":\"晨间简报\"}").commit();
+                        "{\"cronExpr\":\"0 9 * * *\",\"workflowName\":\"晨间简报\"}")
+                .putString("每小时巡检",
+                        "{\"cronExpr\":\"0 * * * *\",\"workflowName\":\"晨间简报\",\"enabled\":false}")
+                .commit();
         ActivityController<AgentWorkbenchActivity> c =
                 Robolectric.buildActivity(AgentWorkbenchActivity.class).setup();
         View content = c.get().findViewById(android.R.id.content);
         capture(content, W, H, "agent_workbench.png");
     }
 
-    /** 动作池：跨模型浏览动作（内置模型卡片 + 分组 / 孤立文件行） */
+    /**
+     * 动作池：跨模型浏览动作。预置一个可写「导入」模型（demo），
+     * 以覆盖内置模型看不到的写回按钮：组「改名」、动作「删」、孤立文件「注册…」。
+     */
     @Test
     public void motionPoolPage() throws Exception {
+        seedDemoImportedModel();
         ActivityController<MotionPoolActivity> c =
                 Robolectric.buildActivity(MotionPoolActivity.class).setup();
         View content = c.get().findViewById(android.R.id.content);
         capture(content, W, H, "motion_pool.png");
+    }
+
+    /**
+     * 动作池滚到底：内置 huohuo 动作很多、把可写模型 demo 顶到屏幕外，
+     * 故先把列表滚到底再截，专门核对写回按钮（组「改名」、动作「删」、孤立文件「注册…」）。
+     */
+    @Test
+    public void motionPoolWritableCard() throws Exception {
+        seedDemoImportedModel();
+        ActivityController<MotionPoolActivity> c =
+                Robolectric.buildActivity(MotionPoolActivity.class).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        content.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY));
+        content.layout(0, 0, W, H);
+        android.widget.ScrollView sv = findScrollView(content);
+        if (sv != null && sv.getChildCount() > 0) {
+            sv.scrollTo(0, sv.getChildAt(0).getHeight());
+        }
+        draw(content, W, H, "motion_pool_writable.png");
+    }
+
+    private static android.widget.ScrollView findScrollView(View v) {
+        if (v instanceof android.widget.ScrollView) return (android.widget.ScrollView) v;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.widget.ScrollView s = findScrollView(g.getChildAt(i));
+                if (s != null) return s;
+            }
+        }
+        return null;
     }
 
     /** 侧栏抽屉：280dp 宽，选中「对话」 */
@@ -115,6 +155,10 @@ public class ScreenshotRenderTest {
      */
     @Test
     public void allScreens() {
+        try {
+            seedDemoImportedModel();
+        } catch (Exception ignored) {
+        }
         String[][] screens = {
                 {"main_shell", "com.digitallife.ui.MainActivity"},
                 {"chat", "com.digitallife.ui.ChatActivity"},
@@ -147,11 +191,55 @@ public class ScreenshotRenderTest {
         }
     }
 
+    /**
+     * 预置一个「导入（可写）」模型 demo：一个已声明组 Idle + 两个未注册孤立文件，
+     * 外加一份 cdi3 参数清单。用于在动作池截图里显示写回按钮与「未注册文件」区。
+     */
+    private void seedDemoImportedModel() throws Exception {
+        Context ctx = org.robolectric.RuntimeEnvironment.getApplication();
+        File dir = new File(new File(ctx.getFilesDir(), "models"), "demo");
+        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        write(new File(dir, "demo.model3.json"),
+                "{\"Version\":3,\"FileReferences\":{\"Motions\":{"
+                        + "\"Idle\":[{\"File\":\"idle.motion3.json\"}],"
+                        + "\"TapBody\":[{\"File\":\"tap.motion3.json\"}]}}}");
+        write(new File(dir, "idle.motion3.json"),
+                motionJson("ParamAngleX", "ParamAngleY", "ParamBodyAngleX"));
+        write(new File(dir, "tap.motion3.json"), motionJson("ParamAngleX", "ParamAngleZ"));
+        write(new File(dir, "wave.motion3.json"), motionJson("ParamAngleX", "ParamArmLA"));
+        write(new File(dir, "extra.motion3.json"), motionJson("ParamAngleY"));
+        write(new File(dir, "demo.cdi3.json"),
+                "{\"Version\":3,\"Parameters\":[{\"Id\":\"ParamAngleX\"},"
+                        + "{\"Id\":\"ParamAngleY\"},{\"Id\":\"ParamBodyAngleX\"}]}");
+    }
+
+    private static String motionJson(String... paramIds) {
+        StringBuilder sb = new StringBuilder(
+                "{\"Version\":3,\"Meta\":{\"Duration\":2.0,\"Loop\":true,\"CurveCount\":")
+                .append(paramIds.length).append("},\"Curves\":[");
+        for (int i = 0; i < paramIds.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append("{\"Target\":\"Parameter\",\"Id\":\"").append(paramIds[i]).append("\"}");
+        }
+        return sb.append("]}").toString();
+    }
+
+    private static void write(File f, String content) throws Exception {
+        //noinspection ResultOfMethodCallIgnored
+        f.getParentFile().mkdirs();
+        java.nio.file.Files.write(f.toPath(),
+                content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     private void capture(View v, int w, int h, String name) throws Exception {
         v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         v.layout(0, 0, w, h);
+        draw(v, w, h, name);
+    }
 
+    /** 把已布局好的视图画成 PNG（供需要先滚动再截的用例复用） */
+    private void draw(View v, int w, int h, String name) throws Exception {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         v.draw(new Canvas(bmp));
 

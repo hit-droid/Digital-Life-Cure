@@ -1,15 +1,19 @@
 package com.digitallife.care;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.digitallife.R;
 import com.digitallife.render.Live2DNative;
@@ -24,16 +28,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Agent 工作台：把 Agent **已经配置好的东西**集中看一眼。
+ * Agent 工作台：把 Agent **已经配置好的东西**集中看一眼，并就地做少量操作。
  *
  * <p>背景（v1.164.0）：v1.163.0 给 Agent 页底部 chips 接了「模型管理 ›」真跳转，
  * 但「工作流 / 定时」两类能力**只能让 AI 在对话里念一遍**——本机其实早把它们持久化
  * 在 {@code care_workflows} / {@code care_schedules} 两个 prefs 里（见 {@code CareTools}），
- * 用户没有任何界面能看到自己存了什么、什么时候会触发。本页补上这个「看」的入口。</p>
+ * 用户没有任何界面能看到自己存了什么、什么时候会触发。v1.164.0 先补了「看」的入口。</p>
  *
- * <p>只读展示，不做增删改：创建仍回到对话里让 AI 编排（那是 Agent 的主场），
- * 这里只负责「现状可见」。动作列表要按模型逐个解析、不是一份平铺清单，故仍留在
- * 「模型管理」页（其入口卡片在本页给出）。</p>
+ * <p>v1.166.0 起从「只看」变「可操作」：工作流可**立即运行**，定时任务可**暂停 / 启用**
+ * （{@code enabled} 字段，由 {@code CareAutomation} 判定）。创建 / 编辑仍回到对话里让 AI
+ * 编排（那是 Agent 的主场），这里只做「已配置的东西」的查看与轻操作。动作浏览已移到
+ * 「动作池」页（其入口卡片在本页给出）。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -45,6 +50,13 @@ public class AgentWorkbenchActivity extends Activity {
     /** 与 {@code CareTools} 中的常量保持一致（工作流 / 定时任务的落盘位置） */
     private static final String PREFS_WORKFLOW = "care_workflows";
     private static final String PREFS_SCHEDULE = "care_schedules";
+
+    private static final int COLOR_PAUSED = 0xFFB08040;
+
+    private LinearLayout body;
+    private ScrollView scroll;
+    private View wfHeader;
+    private View scHeader;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -60,9 +72,9 @@ public class AgentWorkbenchActivity extends Activity {
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        ScrollView scroll = new ScrollView(this);
+        scroll = new ScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
-        LinearLayout body = new LinearLayout(this);
+        body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(14), dp(4), dp(14), dp(16));
         scroll.addView(body, new ScrollView.LayoutParams(
@@ -71,17 +83,24 @@ public class AgentWorkbenchActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
 
-        buildModelsSection(body);
-        View wfHeader = buildWorkflowSection(body);
-        View scHeader = buildScheduleSection(body);
+        refresh();
 
         // 从 Agent 页 chips 进来时定位到对应小节（布局完成后再滚，Top 才有值）
         String section = getIntent().getStringExtra(EXTRA_SECTION);
         View target = SECTION_WORKFLOW.equals(section) ? wfHeader
                 : SECTION_SCHEDULE.equals(section) ? scHeader : null;
         if (target != null) {
-            scroll.post(() -> scroll.smoothScrollTo(0, target.getTop()));
+            final View t = target;
+            scroll.post(() -> scroll.smoothScrollTo(0, t.getTop()));
         }
+    }
+
+    /** 重建全部小节（暂停 / 启用、运行后刷新用） */
+    private void refresh() {
+        body.removeAllViews();
+        buildModelsSection(body);
+        wfHeader = buildWorkflowSection(body);
+        scHeader = buildScheduleSection(body);
     }
 
     // ============ 模型与动作（入口） ============
@@ -115,13 +134,21 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 工作流 ============
 
     private View buildWorkflowSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程");
+        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程 · 可立即运行");
         LinearLayout panel = UiKit.panel(this, body);
         List<String[]> rows = readWorkflows();
         if (rows.isEmpty()) {
             panel.addView(hint("还没有工作流。在对话里说「帮我建一个工作流」即可创建。"));
         } else {
-            for (String[] r : rows) panel.addView(row(r[0], r[1]));
+            for (String[] r : rows) {
+                LinearLayout box = rowBox(r[0], r[1]);
+                LinearLayout acts = actionRow();
+                final String wf = r[0];
+                chip(acts, "立即运行", R.color.brand_operit_light)
+                        .setOnClickListener(v -> runWorkflowNow(wf, "工作流"));
+                box.addView(acts);
+                panel.addView(box);
+            }
         }
         return header;
     }
@@ -148,17 +175,35 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 定时任务 ============
 
     private View buildScheduleSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 表达式周期触发工作流");
+        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 表达式周期触发工作流 · 可暂停");
         LinearLayout panel = UiKit.panel(this, body);
         List<String[]> rows = readSchedules();
         if (rows.isEmpty()) {
             panel.addView(hint("还没有定时任务。在对话里说「帮我建一个定时任务」即可创建。"));
         } else {
-            for (String[] r : rows) panel.addView(row(r[0], r[1]));
+            for (String[] r : rows) {
+                boolean enabled = "1".equals(r[2]);
+                String subtitle = "cron " + r[1] + (enabled ? "" : "  ·  已暂停");
+                LinearLayout box = rowBox(r[0], subtitle);
+                if (!enabled) {
+                    TextView t = (TextView) box.getChildAt(0);
+                    t.setTextColor(COLOR_PAUSED);
+                }
+                LinearLayout acts = actionRow();
+                final String taskName = r[0];
+                final String wf = r[3];
+                chip(acts, "立即运行", R.color.brand_operit_light)
+                        .setOnClickListener(v -> runWorkflowNow(wf, "定时任务「" + taskName + "」"));
+                chip(acts, enabled ? "暂停" : "启用", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> toggleSchedule(taskName));
+                box.addView(acts);
+                panel.addView(box);
+            }
         }
         return header;
     }
 
+    /** {name, "cron → workflow", enabled("1"/"0"), workflowName} */
     private List<String[]> readSchedules() {
         List<String[]> out = new ArrayList<>();
         try {
@@ -166,13 +211,15 @@ public class AgentWorkbenchActivity extends Activity {
             for (String name : all.keySet()) {
                 String cron = "?";
                 String workflow = "?";
+                boolean enabled = true;
                 try {
                     JSONObject o = new JSONObject(String.valueOf(all.get(name)));
                     cron = o.optString("cronExpr", "?");
                     workflow = o.optString("workflowName", "?");
+                    enabled = o.optBoolean("enabled", true);
                 } catch (Exception ignored) {
                 }
-                out.add(new String[]{name, "cron " + cron + " → " + workflow});
+                out.add(new String[]{name, cron + " → " + workflow, enabled ? "1" : "0", workflow});
             }
         } catch (Throwable ignored) {
         }
@@ -180,10 +227,58 @@ public class AgentWorkbenchActivity extends Activity {
         return out;
     }
 
+    // ============ 操作 ============
+
+    /** 立即运行某个工作流（可能含网络 / 文件步骤，放后台线程，勿占主线程） */
+    private void runWorkflowNow(String workflowName, String label) {
+        if (workflowName == null || workflowName.isEmpty() || "?".equals(workflowName)) {
+            toast("找不到对应的工作流");
+            return;
+        }
+        toast("正在运行…");
+        new Thread(() -> {
+            String res;
+            try {
+                JSONObject args = new JSONObject();
+                args.put("name", workflowName);
+                res = new CareTools(getApplicationContext()).execute("run_workflow", args);
+            } catch (Exception e) {
+                res = "运行失败：" + UiKit.safeMsg(e);
+            }
+            final String out = res;
+            runOnUiThread(() -> showResult(label + " 执行结果", out));
+        }).start();
+    }
+
+    /** 暂停 / 启用一个定时任务（写回 {@code enabled} 字段） */
+    private void toggleSchedule(String name) {
+        SharedPreferences sp = getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE);
+        try {
+            JSONObject o = new JSONObject(String.valueOf(sp.getString(name, "{}")));
+            boolean enabled = o.optBoolean("enabled", true);
+            o.put("enabled", !enabled);
+            sp.edit().putString(name, o.toString()).apply();
+            toast(enabled ? "已暂停「" + name + "」" : "已启用「" + name + "」");
+            refresh();
+        } catch (Exception e) {
+            toast("操作失败：" + UiKit.safeMsg(e));
+        }
+    }
+
+    private void showResult(String title, String text) {
+        String body = text == null ? "（无输出）" : text;
+        if (body.length() > 4000) body = body.substring(0, 4000) + "\n…（已截断）";
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(body)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
     // ============ 行 / 空态 ============
 
-    /** 一条只读记录：主标题 + 次级说明 */
-    private View row(String title, String subtitle) {
+    /** 一条记录：主标题 + 次级说明 */
+    private LinearLayout rowBox(String title, String subtitle) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
@@ -211,6 +306,23 @@ public class AgentWorkbenchActivity extends Activity {
         return box;
     }
 
+    private LinearLayout actionRow() {
+        LinearLayout acts = new LinearLayout(this);
+        acts.setOrientation(LinearLayout.HORIZONTAL);
+        acts.setGravity(Gravity.CENTER_VERTICAL);
+        acts.setPadding(0, dp(6), 0, 0);
+        return acts;
+    }
+
+    private TextView chip(LinearLayout row, String text, int colorRes) {
+        TextView c = UiKit.chipButton(this, row, text, colorRes);
+        ViewGroup.LayoutParams lp = c.getLayoutParams();
+        if (lp instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) lp).rightMargin = dp(6);
+        }
+        return c;
+    }
+
     private TextView hint(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
@@ -219,6 +331,10 @@ public class AgentWorkbenchActivity extends Activity {
         tv.setLineSpacing(dp(2), 1f);
         tv.setIncludeFontPadding(false);
         return tv;
+    }
+
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 
     private int getColorCompat(int res) {

@@ -1,5 +1,50 @@
 # Changelog
 
+## v1.166.0 (2026-10-18)
+
+承接 v1.165.0。上一版把动作池放出来，但它是**只读**的：孤立文件只能干看、动作删不掉、
+动作组改不了名；跨模型「复用」只给一句「可能错位」的提示，不给任何量化依据；Agent 工作台
+也只停在「只看」——工作流存了没法在这跑、定时任务存了没法从这开关。本版把这三处补成闭环，
+全程纯增量、不改既有渲染、不引入新依赖。
+
+### 动作池写回（新）
+
+- 孤立文件行新增「注册…」：把磁盘上存在、却没被任何动作组声明的 `.motion3.json`
+  **一键注册进指定动作组**（默认落 `Idle`），注册后引擎才播得出。落点与扫描层对齐，
+  复用统一的 `model3 → FileReferences.Motions` / `model.json → 根级 Motions` 两套 json 形状。
+- 已声明动作行新增「删」：从所属动作组移除该动作引用（只改 json 声明，不删文件）；
+  组内清空后自动移除空组，避免留下空壳。
+- 动作组标题行新增「改名」：重命名组名，目标同名即**合并**（引用去重）。
+- 写回仅限**导入模型**（`isWritableModel` 判定），内置 `assets/` 仍只读；json 写回前
+  先备份 `.bak`，重名自动 `_1/_2`——沿用既有 `ModelManager` 约定。三项操作完成后自动 `refresh`。
+
+### 跨模型复用兼容性校验（新）
+
+- 新增纯逻辑 `model/MotionCompat`：以**参数 ID 命中率**量化「跨模型复用会不会错位」——
+  Live2D 动作通过 Parameter ID 绑定骨骼，不同参数集的模型复用大概率错位。
+  判定四档：命中 ≥0.8 **可直接复用** / 0.5~0.8 **轻微错位** / 0~0.5 **明显错位** / 0 **无效果**。
+- `MotionLibrary` 新增 `motionParameterIds`（读动作文件的 Parameter ID 集合）与
+  `modelParameterIds`（读目标模型 `.cdi3.json` 参数清单），供判定调用。
+- 动作池「复用」流程改为**先算兼容性再弹窗**：提示命中率与缺失参数示例，
+  **不做硬阻断**，用户仍可强行复用后自行验证。
+
+### 工作台可操作化（新）
+
+- `care/AgentWorkbenchActivity` 由「只读展示」升级为「可操作」：
+  - 工作流行新增「立即运行」：后台线程调用 `CareTools.run_workflow`，结果回主线程弹窗。
+  - 定时任务行新增「暂停 / 启用」：写回 `enabled` 字段；暂停任务标题用棕色调区分。
+  - 新增 `refresh()` 重建全部小节，操作后即时反映。
+- `care/CareAutomation` 新增 `isTaskEnabled(JSONObject)`：缺省 `enabled` 视为 `true`
+  （兼容加开关前的历史任务），cron 匹配前先判启用。
+
+### 校验
+
+`tools/verify.sh` 全绿（612 单测 / 53 类、lint 0 error、APK 通过）。新增 3 个测试类：
+`ModelManagerWritebackTest`（去重 / 空组删除 / 合并 / 内置只读 / model.json 落点）、
+`MotionCompatTest`（四档阈值映射）、`CareAutomationTest`（旧任务无 `enabled` 字段仍启用）。
+`ScreenshotRenderTest` 加 `agent_workbench.png`（预置一条启用、一条暂停定时任务）与
+`motionPoolWritableCard`（预置可写 demo 模型，覆盖「注册 / 删 / 改名」按钮渲染）。
+
 ## v1.165.0 (2026-10-18)
 
 承接 v1.164.0。v1.163.0/v1.164.0 已让 Agent 页里「模型管理 / 工作流 / 定时」都成了**真页面

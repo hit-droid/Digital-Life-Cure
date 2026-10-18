@@ -160,6 +160,7 @@ public class CareAutomation {
                 String cron = task.optString("cronExpr", "");
                 String workflowName = task.optString("workflowName", "");
                 if (cron.isEmpty() || workflowName.isEmpty()) continue;
+                if (!isTaskEnabled(task)) continue; // 工作台里被暂停的任务不触发
                 if (!cronMatches(cron, minute, hour, day, month, cronDow)) continue;
 
                 // 去重：同一任务同一分钟内只触发一次（检查间隔 30s 会重复命中）
@@ -181,6 +182,11 @@ public class CareAutomation {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /** 定时任务是否启用：缺省 {@code enabled} 字段视为启用（兼容工作台加开关前的旧数据） */
+    static boolean isTaskEnabled(org.json.JSONObject task) {
+        return task == null || task.optBoolean("enabled", true);
     }
 
     /** 简化 cron 匹配：支持 分 时 日 月 周，字段支持 *、步进、具体值、a-b 范围。dow 为 0=周日 */
