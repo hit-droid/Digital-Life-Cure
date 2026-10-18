@@ -34,6 +34,7 @@ import com.digitallife.util.Settings;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -86,12 +87,20 @@ import java.util.Set;
  * 已声明内容（去重并集，按名字绑、不绑具体模型），保存经 {@link TouchBindings}；不设则用默认，
  * 生效处（{@code PetOverlayView.handleModelTap} / {@code PetService.onTapZone/onDoubleTap}）按
  * 「绑定优先、为空回落默认」解析，当前模型缺该内容也靠默认兜住。仅覆盖视觉，气泡与情绪仍走默认。</p>
+ *
+ * <p>连招导出 / 导入（v1.177.0）：连招此前只进不出。连招区加「导出」（该模型全部打包一个
+ * {@code <模型目录>-combos.json}）与「导入」（选文件合并进本模型，同名忽略大小写覆盖），每条连招
+ * 行再加「导出」（单条一个 {@code <模型目录>-<名>.json}）。两者共用 {@link ComboStore#toBundle}
+ * 的包裹格式 {@code {model,combos:[...]}}，导入端 {@link ComboStore#parseImport} 一套解析，
+ * 并容裸数组 / 坏 JSON（→ 空表，不抛）。跨模型导入步骤可能解析不到，播放时由连招逻辑跳过并提示。</p>
  */
 public class MotionPoolActivity extends Activity {
 
     private static final int REQ_EXPORT = 5101;
     private static final int REQ_IMPORT = 5102;
     private static final int REQ_EXPR_IMPORT = 5103;
+    private static final int REQ_COMBO_EXPORT = 5104;
+    private static final int REQ_COMBO_IMPORT = 5105;
 
     private static final int COLOR_MISSING = Color.rgb(224, 96, 96);
     private static final int COLOR_CURRENT = Color.rgb(232, 152, 60);
@@ -121,6 +130,10 @@ public class MotionPoolActivity extends Activity {
     private String pendingImportTarget;
     /** 待导入表情的目标模型 */
     private String pendingExprImportTarget;
+    /** 待导出的连招 JSON 文本（选好保存位置后写盘，v1.177.0） */
+    private String pendingComboExportJson;
+    /** 待导入连招的目标模型（v1.177.0） */
+    private String pendingComboImportTarget;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -989,6 +1002,13 @@ public class MotionPoolActivity extends Activity {
             TextView add = chip(head, "＋ 新建连招", R.color.brand_operit_light);
             add.setOnClickListener(v -> showComboBuilder(m));
         }
+        // 导出 / 导入（v1.177.0）：导入对本模型总可用（即便现在没连招）；导出仅在有连招时出现
+        TextView imp = chip(head, "导入", R.color.operit_text_secondary);
+        imp.setOnClickListener(v -> importCombos(m));
+        if (!combos.isEmpty()) {
+            TextView expAll = chip(head, "导出", R.color.operit_text_secondary);
+            expAll.setOnClickListener(v -> exportCombos(m, combos, m.dirName + "-combos.json"));
+        }
         box.addView(head);
 
         if (cands.isEmpty()) {
@@ -1060,6 +1080,9 @@ public class MotionPoolActivity extends Activity {
         play.setOnClickListener(v -> playCombo(m, combo));
         TextView copy = chip(acts, "复制", R.color.operit_text_secondary);
         copy.setOnClickListener(v -> duplicateCombo(m, combo));
+        TextView exp1 = chip(acts, "导出", R.color.operit_text_secondary);
+        exp1.setOnClickListener(v -> exportCombos(m, java.util.Collections.singletonList(combo),
+                m.dirName + "-" + safeFileName(combo.name) + ".json"));
         TextView del = chip(acts, "删", R.color.operit_text_secondary);
         del.setOnClickListener(v -> confirmDeleteCombo(m, combo));
         box.addView(acts);
@@ -1151,6 +1174,73 @@ public class MotionPoolActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    // ==================== 连招导出 / 导入（v1.177.0） ====================
+
+    /**
+     * 导出若干连招：先打包成 JSON 文本存着，再让用户选保存位置（选好才写盘，避免白跑一趟）。
+     * 「导出全部」（连招区）与「导出」（单条，列表里就是一条）共用这条路径，导入端一套解析即可。
+     */
+    private void exportCombos(MotionLibrary.ModelActions m, List<ComboPlan.Combo> combos, String fileName) {
+        if (combos == null || combos.isEmpty()) return;
+        pendingComboExportJson = ComboStore.toBundle(combos, m.dirName);
+        Intent it = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        it.addCategory(Intent.CATEGORY_OPENABLE);
+        it.setType("application/json");
+        it.putExtra(Intent.EXTRA_TITLE, fileName);
+        try {
+            startActivityForResult(it, REQ_COMBO_EXPORT);
+        } catch (Exception e) {
+            toast("无法调起保存： " + UiKit.safeMsg(e));
+        }
+    }
+
+    /** 从文件导入连招到本模型：解析出连招后合并落盘（同名忽略大小写覆盖），提示导入 / 覆盖数 */
+    private void importCombos(MotionLibrary.ModelActions m) {
+        pendingComboImportTarget = m.dirName;
+        Intent it = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        it.addCategory(Intent.CATEGORY_OPENABLE);
+        it.setType("*/*");
+        try {
+            startActivityForResult(it, REQ_COMBO_IMPORT);
+        } catch (Exception e) {
+            toast("无法调起文件选择： " + UiKit.safeMsg(e));
+        }
+    }
+
+    private void doImportCombos(Uri uri) {
+        String target = pendingComboImportTarget;
+        if (target == null) return;
+        try (InputStream in = getContentResolver().openInputStream(uri)) {
+            if (in == null) {
+                toast("无法读取所选文件");
+                return;
+            }
+            List<ComboPlan.Combo> parsed =
+                    ComboStore.parseImport(new String(readAll(in), StandardCharsets.UTF_8));
+            if (parsed.isEmpty()) {
+                toast("这个文件里没有可导入的连招");
+                return;
+            }
+            List<ComboPlan.Combo> existing = ComboStore.list(this, target);
+            int overwrite = 0;
+            for (ComboPlan.Combo c : parsed) {
+                if (ComboPlan.hasName(existing, c.name)) overwrite++;
+                ComboStore.save(this, target, c);
+            }
+            toast("已导入 " + parsed.size() + " 个连招到「" + target + "」"
+                    + (overwrite > 0 ? "（覆盖同名 " + overwrite + " 个）" : ""));
+            refresh();
+        } catch (Exception e) {
+            toast("导入失败： " + UiKit.safeMsg(e));
+        }
+    }
+
+    /** 连招名 → 安全文件名（去掉路径分隔等非法字符，空则回落 combo） */
+    private static String safeFileName(String name) {
+        String n = name == null ? "" : name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        return n.isEmpty() ? "combo" : n;
     }
 
     /** 单步试播：在编排弹窗里试听某一个动作 / 表情（非当前模型走「切播」确认） */
@@ -1951,6 +2041,24 @@ public class MotionPoolActivity extends Activity {
             Uri uri = data.getData();
             if (uri == null || pendingExprImportTarget == null) return;
             promptNameThenImportExpr(uri);
+        } else if (requestCode == REQ_COMBO_EXPORT) {
+            Uri uri = data.getData();
+            if (uri == null || pendingComboExportJson == null) return;
+            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                if (os == null) {
+                    toast("无法写入所选位置");
+                    return;
+                }
+                os.write(pendingComboExportJson.getBytes(StandardCharsets.UTF_8));
+                toast("已导出连招");
+            } catch (Exception e) {
+                toast("导出失败： " + UiKit.safeMsg(e));
+            }
+            pendingComboExportJson = null;
+        } else if (requestCode == REQ_COMBO_IMPORT) {
+            Uri uri = data.getData();
+            if (uri == null || pendingComboImportTarget == null) return;
+            doImportCombos(uri);
         }
     }
 

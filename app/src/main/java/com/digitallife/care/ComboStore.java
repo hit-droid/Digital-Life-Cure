@@ -119,4 +119,39 @@ public final class ComboStore {
         }
         return out;
     }
+
+    // ==================== 导出 / 导入（v1.177.0） ====================
+
+    /**
+     * 打包成可导出的文本：{@code {"model":<模型目录>,"combos":[...]}}。{@code model} 仅作提示，
+     * 导入方忽略它、按自己的目标模型落盘（连招步骤引用的是模型内内容，跨模型可能失效，由
+     * {@link ComboPlan} 播放时跳过）。导出「单条」也走同一包裹（数组里就一条），故导入端一套解析即可。
+     */
+    public static String toBundle(List<ComboPlan.Combo> list, String modelDir) {
+        JSONObject o = new JSONObject();
+        try {
+            if (modelDir != null && !modelDir.isEmpty()) o.put("model", modelDir);
+            o.put("combos", toJson(list));
+        } catch (Exception ignored) {
+        }
+        return o.toString();
+    }
+
+    /**
+     * 解析导入文本，容两种形态：包裹对象 {@code {model,combos:[...]}} 与裸数组 {@code [...]}。
+     * 空 / 坏 JSON / 非预期结构一律返回空表，**不抛**（坏文件当「没有可导入的连招」处理）。
+     */
+    public static List<ComboPlan.Combo> parseImport(String json) {
+        List<ComboPlan.Combo> empty = new ArrayList<>();
+        if (json == null) return empty;
+        String t = json.trim();
+        if (t.isEmpty()) return empty;
+        try {
+            if (t.startsWith("[")) return fromJson(new JSONArray(t));
+            JSONObject o = new JSONObject(t);
+            return fromJson(o.optJSONArray("combos"));
+        } catch (Exception e) {
+            return empty;
+        }
+    }
 }

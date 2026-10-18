@@ -110,4 +110,51 @@ public class ComboStoreTest {
         assertEquals(1, list.size());
         assertEquals("ok", list.get(0).name);
     }
+
+    // ==================== 导出 / 导入（v1.177.0） ====================
+
+    @Test
+    public void bundle_roundTripsThroughParseImport() throws Exception {
+        List<ComboPlan.Combo> out = new java.util.ArrayList<>();
+        out.add(combo("打招呼", "m:idle.motion3.json", "e:f01.exp3.json"));
+        out.add(combo("睡觉", "m:sleep.motion3.json"));
+
+        String json = ComboStore.toBundle(out, "demo");
+        JSONObject bundle = new JSONObject(json);
+        assertEquals("demo", bundle.getString("model"));
+        assertEquals(2, bundle.getJSONArray("combos").length());
+
+        List<ComboPlan.Combo> back = ComboStore.parseImport(json);
+        assertEquals(2, back.size());
+        assertEquals("打招呼", back.get(0).name);
+        assertEquals(2, back.get(0).size());
+        assertEquals("Idle", back.get(0).steps.get(0).group);
+        assertEquals("F01", back.get(0).steps.get(1).name);
+        assertEquals("睡觉", back.get(1).name);
+        assertEquals("sleep.motion3.json", back.get(1).steps.get(0).file);
+    }
+
+    @Test
+    public void parseImport_acceptsBareArray() {
+        JSONArray arr = new JSONArray();
+        arr.put(new JSONObject());  // 无名，读回时跳过
+        List<ComboPlan.Combo> list = ComboStore.parseImport(arr.toString());
+        assertTrue(list.isEmpty());
+
+        String okArray = ComboStore.toJson(java.util.Collections.singletonList(
+                combo("A", "m:idle.motion3.json"))).toString();
+        List<ComboPlan.Combo> ok = ComboStore.parseImport(okArray);
+        assertEquals(1, ok.size());
+        assertEquals("A", ok.get(0).name);
+    }
+
+    @Test
+    public void parseImport_isTolerantOfGarbage() {
+        assertTrue(ComboStore.parseImport(null).isEmpty());
+        assertTrue(ComboStore.parseImport("").isEmpty());
+        assertTrue(ComboStore.parseImport("   ").isEmpty());
+        assertTrue(ComboStore.parseImport("not json").isEmpty());
+        assertTrue(ComboStore.parseImport("{\"x\":1}").isEmpty());
+        assertTrue(ComboStore.parseImport("[1,2,3]").isEmpty());
+    }
 }
