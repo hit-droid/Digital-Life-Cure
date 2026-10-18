@@ -36,9 +36,11 @@ import java.util.Map;
  * 用户没有任何界面能看到自己存了什么、什么时候会触发。v1.164.0 先补了「看」的入口。</p>
  *
  * <p>v1.166.0 起从「只看」变「可操作」：工作流可**立即运行**，定时任务可**暂停 / 启用**
- * （{@code enabled} 字段，由 {@code CareAutomation} 判定）。创建 / 编辑仍回到对话里让 AI
- * 编排（那是 Agent 的主场），这里只做「已配置的东西」的查看与轻操作。动作浏览已移到
- * 「动作池」页（其入口卡片在本页给出）。</p>
+ * （{@code enabled} 字段，由 {@code CareAutomation} 判定）。v1.167.0 补齐管理闭环：工作流可
+ * **查看步骤**（只读弹窗）与**删除**，定时任务可**删除**——删除走 {@code CareTools} 的
+ * {@code delete_workflow} / {@code remove_scheduled_task} 工具（与对话里同一条语义），
+ * 删除前二次确认。创建 / 编辑仍回到对话里让 AI 编排（那是 Agent 的主场），这里只做
+ * 「已配置的东西」的查看与轻操作。动作浏览已移到「动作池」页（其入口卡片在本页给出）。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -134,7 +136,7 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 工作流 ============
 
     private View buildWorkflowSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程 · 可立即运行");
+        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程 · 可查看 / 运行 / 删除");
         LinearLayout panel = UiKit.panel(this, body);
         List<String[]> rows = readWorkflows();
         if (rows.isEmpty()) {
@@ -146,6 +148,10 @@ public class AgentWorkbenchActivity extends Activity {
                 final String wf = r[0];
                 chip(acts, "立即运行", R.color.brand_operit_light)
                         .setOnClickListener(v -> runWorkflowNow(wf, "工作流"));
+                chip(acts, "查看", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> showWorkflowSteps(wf));
+                chip(acts, "删除", R.color.danger)
+                        .setOnClickListener(v -> deleteWorkflow(wf));
                 box.addView(acts);
                 panel.addView(box);
             }
@@ -196,6 +202,8 @@ public class AgentWorkbenchActivity extends Activity {
                         .setOnClickListener(v -> runWorkflowNow(wf, "定时任务「" + taskName + "」"));
                 chip(acts, enabled ? "暂停" : "启用", R.color.operit_text_secondary)
                         .setOnClickListener(v -> toggleSchedule(taskName));
+                chip(acts, "删除", R.color.danger)
+                        .setOnClickListener(v -> deleteSchedule(taskName));
                 box.addView(acts);
                 panel.addView(box);
             }
@@ -263,6 +271,81 @@ public class AgentWorkbenchActivity extends Activity {
         } catch (Exception e) {
             toast("操作失败：" + UiKit.safeMsg(e));
         }
+    }
+
+    /** 查看某工作流的步骤清单（只读，不执行）——此前「跑起来才知道里面是什么」 */
+    private void showWorkflowSteps(String name) {
+        String raw = getSharedPreferences(PREFS_WORKFLOW, MODE_PRIVATE).getString(name, null);
+        if (raw == null) {
+            toast("找不到该工作流");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        try {
+            JSONArray steps = new JSONObject(raw).optJSONArray("steps");
+            if (steps == null || steps.length() == 0) {
+                sb.append("（没有步骤）");
+            } else {
+                for (int i = 0; i < steps.length(); i++) {
+                    JSONObject step = steps.optJSONObject(i);
+                    if (step == null) continue;
+                    JSONObject args = step.optJSONObject("args");
+                    sb.append(i + 1).append(". ").append(step.optString("tool", "?"));
+                    if (args != null && args.length() > 0) sb.append("  ").append(args);
+                    sb.append('\n');
+                }
+            }
+        } catch (Exception e) {
+            sb.append("步骤解析失败：").append(UiKit.safeMsg(e));
+        }
+        String text = sb.toString().trim();
+        if (text.length() > 4000) text = text.substring(0, 4000) + "\n…（已截断）";
+        new AlertDialog.Builder(this)
+                .setTitle("工作流「" + name + "」步骤")
+                .setMessage(text)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    private void deleteWorkflow(String name) {
+        confirmDelete("删除工作流",
+                "确定删除「" + name + "」？删除后不可恢复；引用它的定时任务将无法执行。",
+                "delete_workflow", name);
+    }
+
+    private void deleteSchedule(String name) {
+        confirmDelete("删除定时任务",
+                "确定删除「" + name + "」？删除后不再按 cron 触发（已执行的工作流不受影响）。",
+                "remove_scheduled_task", name);
+    }
+
+    /** 删除类操作统一二次确认 */
+    private void confirmDelete(String title, String message, String tool, String name) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", (d, w) -> runToolThenRefresh(tool, name))
+                .show();
+    }
+
+    /** 后台调用 CareTools 的删除工具（复用其语义与提示），回主线程提示并刷新 */
+    private void runToolThenRefresh(String tool, String name) {
+        new Thread(() -> {
+            String res;
+            try {
+                JSONObject args = new JSONObject();
+                args.put("name", name);
+                res = new CareTools(getApplicationContext()).execute(tool, args);
+            } catch (Exception e) {
+                res = "删除失败：" + UiKit.safeMsg(e);
+            }
+            final String out = res;
+            runOnUiThread(() -> {
+                toast(out);
+                refresh();
+            });
+        }).start();
     }
 
     private void showResult(String title, String text) {
