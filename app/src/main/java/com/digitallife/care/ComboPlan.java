@@ -196,6 +196,19 @@ public final class ComboPlan {
         return "连招";
     }
 
+    /** 生成不重名的副本名（base / base2 / base3 …）；base 为空时回落到「连招」 */
+    public static String copyName(List<Combo> combos, String base) {
+        String b = sanitizeName(base);
+        if (b.isEmpty()) b = "连招";
+        String candidate = b;
+        int i = 2;
+        while (hasName(combos, candidate)) {
+            candidate = b + i;
+            i++;
+        }
+        return candidate;
+    }
+
     private static boolean eq(String a, String b) {
         return (a == null ? "" : a).equals(b == null ? "" : b);
     }

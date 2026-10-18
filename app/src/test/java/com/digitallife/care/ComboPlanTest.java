@@ -141,4 +141,16 @@ public class ComboPlanTest {
         // 默认名递推跳过已存在
         assertEquals("连招2", ComboPlan.suggestName(combos));
     }
+
+    @Test
+    public void copyNameAvoidsCollisions() {
+        List<ComboPlan.Combo> combos = new ArrayList<>();
+        assertEquals("A-副本", ComboPlan.copyName(combos, "A-副本"));
+        combos.add(new ComboPlan.Combo("A-副本"));
+        assertEquals("A-副本2", ComboPlan.copyName(combos, "A-副本"));
+        combos.add(new ComboPlan.Combo("A-副本2"));
+        assertEquals("A-副本3", ComboPlan.copyName(combos, "A-副本"));
+        // base 为空回落为「连招」
+        assertEquals("连招", ComboPlan.copyName(new ArrayList<>(), "  "));
+    }
 }

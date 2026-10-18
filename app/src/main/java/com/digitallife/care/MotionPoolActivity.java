@@ -69,6 +69,10 @@ import java.util.Set;
  * 封顶、表情固定停顿）。播放经主线程 {@code Handler} 逐步调度，同一条连招用 generation 计数
  * 防串台；由于 {@code nativeStartMotion} / {@code nativeSetExpression} 同走 GL 线程 FIFO，
  * 逐步下发天然有序。连招只引用模型已有内容、不写模型 json，故内置模型也能编。</p>
+ *
+ * <p>连招打磨（v1.174.0）：编排弹窗里每个候选旁加「试」，可**单步试播**（非当前模型走「切播」
+ * 确认），避免「编完整条才发现某一步不对」；已存连招加「复制」，另起不重名的副本名
+ * （{@link ComboPlan#copyName}）原样拷贝步骤，便于派生变体。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -689,6 +693,8 @@ public class MotionPoolActivity extends Activity {
 
         TextView play = chip(acts, m.isDefault ? "播" : "切播", R.color.brand_operit_light);
         play.setOnClickListener(v -> playCombo(m, combo));
+        TextView copy = chip(acts, "复制", R.color.operit_text_secondary);
+        copy.setOnClickListener(v -> duplicateCombo(m, combo));
         TextView del = chip(acts, "删", R.color.operit_text_secondary);
         del.setOnClickListener(v -> confirmDeleteCombo(m, combo));
         box.addView(acts);
@@ -782,7 +788,69 @@ public class MotionPoolActivity extends Activity {
                 .show();
     }
 
-    /** 新建连招弹窗：填名 + 点「＋」依次追加可播动作 / 表情，实时预览序列 */
+    /** 单步试播：在编排弹窗里试听某一个动作 / 表情（非当前模型走「切播」确认） */
+    private void previewCandidate(MotionLibrary.ModelActions m, ComboPlan.Candidate c) {
+        PetService svc = PetService.getInstance();
+        if (svc == null) {
+            toast("桌宠未在运行，请先开启桌宠再试");
+            return;
+        }
+        final ComboPlan.Resolved r = ComboPlan.resolve(
+                new ComboPlan.Step(c.motion ? ComboPlan.KIND_MOTION : ComboPlan.KIND_EXPR,
+                        c.group, c.file, c.name),
+                comboCandidates(m));
+        if (r == null) {
+            toast("这一步暂时播不出");
+            return;
+        }
+        Runnable play = () -> {
+            if (r.motion) svc.onMotion(r.group, r.index, 3);
+            else svc.onExpression(r.exprName);
+        };
+        if (isCurrentModel(m.dirName)) {
+            play.run();
+        } else {
+            confirmSwitchAndPlay(svc, m.dirName, play);
+        }
+    }
+
+    /** 复制一条连招为副本（另起一个不重名的名字，步骤原样拷贝） */
+    private void duplicateCombo(MotionLibrary.ModelActions m, ComboPlan.Combo combo) {
+        final List<ComboPlan.Combo> existing = ComboStore.list(this, m.dirName);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(18), dp(6), dp(18), dp(6));
+        final EditText etName = UiKit.input(this, col, "新连招名",
+                ComboPlan.copyName(existing, combo.name + "-副本"));
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("复制连招「" + combo.name + "」")
+                .setView(col)
+                .setPositiveButton("复制", null)
+                .setNegativeButton("取消", null)
+                .create();
+        dialog.setOnShowListener(d ->
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                    String name = ComboPlan.sanitizeName(etName.getText().toString());
+                    if (name.isEmpty()) {
+                        toast("请填写连招名");
+                        return;
+                    }
+                    if (ComboPlan.hasName(existing, name)) {
+                        toast("已存在同名连招，换个名字");
+                        return;
+                    }
+                    ComboPlan.Combo copy = new ComboPlan.Combo(name);
+                    copy.steps.addAll(combo.steps);
+                    ComboStore.save(this, m.dirName, copy);
+                    toast("已复制为「" + name + "」（" + copy.size() + " 步）");
+                    dialog.dismiss();
+                    refresh();
+                }));
+        dialog.show();
+    }
+
+    /** 新建连招弹窗：填名 + 点「＋」依次追加可播动作 / 表情（「试」可单步试播），实时预览序列 */
     private void showComboBuilder(MotionLibrary.ModelActions m) {
         List<ComboPlan.Candidate> cands = comboCandidates(m);
         if (cands.isEmpty()) {
@@ -834,8 +902,10 @@ public class MotionPoolActivity extends Activity {
 
         for (ComboPlan.Candidate c : cands) {
             final ComboPlan.Candidate cand = c;
-            TextView add = vchip(stepList, "＋ " + candidateLabel(cand),
-                    R.color.brand_operit_light);
+            LinearLayout crow = new LinearLayout(this);
+            crow.setOrientation(LinearLayout.HORIZONTAL);
+            crow.setGravity(Gravity.CENTER_VERTICAL);
+            TextView add = chip(crow, "＋ " + candidateLabel(cand), R.color.brand_operit_light);
             add.setOnClickListener(v -> {
                 if (draft.steps.size() >= ComboPlan.MAX_STEPS) {
                     toast("一条连招最多 " + ComboPlan.MAX_STEPS + " 步");
@@ -846,6 +916,9 @@ public class MotionPoolActivity extends Activity {
                         cand.group, cand.file, cand.name));
                 refreshSeqView(seqView, draft);
             });
+            TextView tryIt = chip(crow, "试", R.color.operit_text_secondary);
+            tryIt.setOnClickListener(v -> previewCandidate(m, cand));
+            stepList.addView(crow);
         }
 
         LinearLayout editRow = new LinearLayout(this);
@@ -895,16 +968,7 @@ public class MotionPoolActivity extends Activity {
         dialog.show();
     }
 
-    /** 弹窗里「＋」用的竖向 chip（与横向 chip 区别：加下间距，便于竖排堆叠） */
-    private TextView vchip(LinearLayout col, String text, int colorRes) {
-        TextView c = UiKit.chipButton(this, col, text, colorRes);
-        ViewGroup.LayoutParams lp = c.getLayoutParams();
-        if (lp instanceof LinearLayout.LayoutParams) {
-            ((LinearLayout.LayoutParams) lp).bottomMargin = dp(6);
-        }
-        return c;
-    }
-
+    /** 刷新弹窗里的「当前序列」预览 */
     private void refreshSeqView(TextView seqView, ComboPlan.Combo draft) {
         seqView.setText("当前序列（" + draft.size() + " 步）：" + comboSeqText(draft));
     }
