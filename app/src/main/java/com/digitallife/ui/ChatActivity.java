@@ -394,19 +394,20 @@ public class ChatActivity extends Activity {
         String[] chipSections;
         if (isCare) {
             // insert 为 null = 该项不是提示词，而是跳转到已有页面（见下面的分支）
-            chipLabels = new String[]{"模型管理 ›", "动作", "工作流 ›", "定时 ›"};
+            chipLabels = new String[]{"模型管理 ›", "动作池 ›", "工作流 ›", "定时 ›"};
             chipInserts = new String[]{
                     null,
-                    "列出当前模型的所有动作，并播放一个给我看看：",
+                    null,
                     null,
                     null
             };
             // v1.164.0：工作流/定时此前只能让 AI 在对话里念一遍——本机早已把它们落盘
             // （care_workflows / care_schedules），却没有查看入口。统一跳「工作台」。
-            // 「动作」仍走提示词：动作清单要按模型逐个解析，不是一份平铺列表，暂不做独立页。
+            // v1.165.0：「动作」升为独立页「动作池」——跨模型集中浏览动作（含未声明孤立
+            // 文件），并支持点播当前模型动作 / 导出 / 跨模型复用 / 导入，不再只让 AI 复述。
             chipTargets = new Class<?>[]{
                     com.digitallife.care.CareModelsActivity.class,
-                    null,
+                    com.digitallife.care.MotionPoolActivity.class,
                     com.digitallife.care.AgentWorkbenchActivity.class,
                     com.digitallife.care.AgentWorkbenchActivity.class
             };

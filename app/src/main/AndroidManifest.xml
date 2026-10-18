@@ -88,6 +88,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait" />
 
+        <!-- 动作池：跨模型集中浏览动作 + 点播/导出/复用/导入 -->
+        <activity
+            android:name="com.digitallife.care.MotionPoolActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="portrait" />
+
         <!-- 记忆管理 -->
         <activity
             android:name="com.digitallife.ui.MemoryManageActivity"

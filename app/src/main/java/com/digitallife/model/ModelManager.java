@@ -419,6 +419,116 @@ public class ModelManager {
         return null;
     }
 
+    // ==================== 动作写回（跨模型动作池用） ====================
+
+    /** 目标模型是否可写：必须是已导入模型（files/models/&lt;dir&gt; 且含模型 json）。内置模型在 assets，只读。 */
+    public static boolean isWritableModel(Context ctx, String dirName) {
+        if (dirName == null || dirName.isEmpty()) return false;
+        File dir = new File(new File(ctx.getFilesDir(), "models"), dirName);
+        return dir.isDirectory() && containsModelJson(dir);
+    }
+
+    /**
+     * 把一段动作文件写入目标「导入」模型目录，并注册到指定动作组。
+     *
+     * <p>对应动作池页的「复用 / 导入」：文件落在模型目录根（与 {@link #autoPatchMotions} 同约定，
+     * 重名自动加 {@code _1/_2} 后缀），json 写回前先备份为 {@code .bak}。
+     * 注意 Live2D 动作绑定参数 ID，跨不同骨骼的模型复用可能错位/无效果——仅同源模型间有意义。</p>
+     *
+     * @return 结果描述（成功或失败原因），供界面直接提示
+     */
+    public static String registerMotionIntoModel(Context ctx, String targetDirName,
+                                                 String fileName, byte[] data, String groupName) {
+        if (!isWritableModel(ctx, targetDirName)) {
+            return "目标不可写：内置模型只读，请选择已导入的模型";
+        }
+        if (data == null || data.length == 0) {
+            return "动作文件内容为空，已取消";
+        }
+        try {
+            File dir = new File(new File(ctx.getFilesDir(), "models"), targetDirName);
+            // 1) 写入动作文件（重名则加后缀，不覆盖已有动作）
+            String safe = sanitizeFileName(fileName);
+            File out = new File(dir, safe);
+            int n = 1;
+            while (out.exists()) out = new File(dir, addSuffix(safe, n++));
+            try (FileOutputStream fos = new FileOutputStream(out)) {
+                fos.write(data);
+            }
+
+            // 2) 找到模型 json，把新文件追加进 Motions 的指定组
+            //    加载顺序与 C++ / MotionLibrary 一致：优先 .model.json，其次 .model3.json
+            File jsonFile = findJsonFile(dir, ".model.json");
+            if (jsonFile == null) jsonFile = findJsonFile(dir, ".model3.json");
+            if (jsonFile == null) {
+                return "已写入动作文件 " + out.getName() + "，但未找到模型 json，未注册动作组";
+            }
+            boolean isModel3 = jsonFile.getName().toLowerCase(Locale.ROOT).endsWith(".model3.json");
+            org.json.JSONObject root = new org.json.JSONObject(readFileString(jsonFile));
+            org.json.JSONObject fr = isModel3 ? root.optJSONObject("FileReferences") : null;
+            org.json.JSONObject motions = fr != null ? fr.optJSONObject("Motions") : null;
+            if (motions == null) motions = root.optJSONObject("Motions");
+            if (motions == null) motions = root.optJSONObject("motions");
+            if (motions == null) motions = new org.json.JSONObject();
+
+            org.json.JSONArray arr = motions.optJSONArray(groupName);
+            if (arr == null) {
+                arr = new org.json.JSONArray();
+                motions.put(groupName, arr);
+            }
+            org.json.JSONObject item = new org.json.JSONObject();
+            item.put("File", out.getName());
+            arr.put(item);
+
+            if (isModel3) {
+                if (fr == null) {
+                    fr = new org.json.JSONObject();
+                    root.put("FileReferences", fr);
+                }
+                fr.put("Motions", motions);
+            } else {
+                root.put("Motions", motions);
+            }
+
+            backupFile(jsonFile);
+            writeFileString(jsonFile, root.toString(2));
+            Log.i(TAG, "registerMotionIntoModel: " + out.getName() + " -> "
+                    + targetDirName + "/" + groupName);
+            return "已把 " + out.getName() + " 注册到「" + groupName + "」组";
+        } catch (Exception e) {
+            Log.w(TAG, "registerMotionIntoModel failed", e);
+            return "操作失败：" + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 写回模型 json 前先备份为 {@code .bak}，出错可手工还原 */
+    private static void backupFile(File f) {
+        try {
+            File bak = new File(f.getAbsolutePath() + ".bak");
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f);
+                 FileOutputStream out = new FileOutputStream(bak)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "backupFile failed: " + f.getName(), e);
+        }
+    }
+
+    private static String sanitizeFileName(String name) {
+        if (name == null || name.trim().isEmpty()) return "motion.motion3.json";
+        String n = name.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        if (!n.toLowerCase(Locale.ROOT).endsWith(".json")) n = n + ".motion3.json";
+        return n;
+    }
+
+    private static String addSuffix(String name, int n) {
+        int dot = name.lastIndexOf('.');
+        if (dot <= 0) return name + "_" + n;
+        return name.substring(0, dot) + "_" + n + name.substring(dot);
+    }
+
     /** 删除目录（含子文件） */
     private static void deleteRecursively(File f) {
         if (f == null || !f.exists()) return;

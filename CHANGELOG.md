@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.165.0 (2026-10-18)
+
+承接 v1.164.0。v1.163.0/v1.164.0 已让 Agent 页里「模型管理 / 工作流 / 定时」都成了**真页面
+跳转**，唯独「动作」还停在提示词占位——因为动作不是一份平铺清单，而是**按模型逐个解析**的。
+本版把它升为独立页「动作池」，补齐跨模型浏览这个一直缺的入口。
+
+### 动作池页（新）
+
+- 新增 `care/MotionPoolActivity`：一页看全**跨模型**动作，复用统一顶栏 `UiKit.pageTopBar`，
+  不新增布局 XML、不新建色板。
+- 只读浏览：扫描内置（`assets/`）+ 导入（`files/models/`）两类模型，按模型分组展示
+  动作组与组内动作，每项带「时长 / 循环 / 曲线数」元数据；模型头部打「当前 / 内置·已导入 /
+  可播放·零动作」标签。
+- 点播当前模型动作：直接落点 `PetService.onMotion(group, index, priority)`；
+  非默认模型的动作点击时提示先切换默认模型（Live2D 只能播当前加载的模型）。
+- 导出 / 复用 / 导入（写回仅限**导入模型**，内置在 assets 只读）：
+  - 导出：`SAF ACTION_CREATE_DOCUMENT` 存出该 `.motion3.json`。
+  - 复用：把动作文件复制进另一个导入模型并注册进动作组，重名自动 `_1/_2`，json 写回前
+    先备份 `.bak`（复用既有 `ModelManager` 写回约定）；界面显式提示「跨不同骨骼可能错位」。
+  - 导入：`SAF ACTION_OPEN_DOCUMENT` 选本地 `.motion3.json`，填组名后写入并注册。
+- 动作口径**含未声明的孤立文件**：磁盘上存在但没被任何动作组引用的 `.motion3.json` 引擎播不出，
+  单独归「未注册文件（播不出）」区块，方便排查。
+
+### 扫描层（新）
+
+- 新增 `model/MotionLibrary`：跨模型只读扫描，与 C++ 侧加载顺序对齐（优先 `.model.json`，
+  其次 `.model3.json`），解析 `FileReferences.Motions` 后枚举动作组并统计孤立文件。
+- `ModelManager` 新增 `isWritableModel` / `registerMotionIntoModel`（写导入模型 + 注册组）
+  与 `listImportedModelDirs` 复用，形成「读—写」闭环。
+
+### 接线与入口
+
+- Agent 页 chips：「动作」由提示词占位改为**真页面跳转** `MotionPoolActivity`（标签改「动作池 ›」）。
+- Agent 工作台「模型与动作」入口卡新增「浏览跨模型动作池 ›」按钮，形成闭环入口。
+
+### 校验
+
+`tools/verify.sh` 全绿（589 单测 / 50 类、lint 0 error、APK 通过）。动作池由
+`ScreenshotRenderTest` 出图核对（`motion_pool.png`）：内置 huohuo「9 个动作组 / 7 个动作文件」
+卡片、各动作组（Excited / Happy / Idle / …）与每项的「播 / 导出 / 复用」按钮渲染正常，
+无白底白字 / 裁切 / 对比度问题。
+
+> 附：修正一次扫描缺陷——`AssetManager.list()` 在 Robolectric 下返回**扁平化相对路径**、
+> 真机返回**直接子项**两种契约，原枚举只按后者写会漏掉内置模型；已改为按首段归一的兼容写法，
+> 使内置模型在两端都能被扫到。
+
 ## v1.164.0 (2026-10-18)
 
 承接 v1.163.0。v1.163.0 给 Agent 页 chips 接了「模型管理 ›」真跳转，但**工作流 / 定时任务**

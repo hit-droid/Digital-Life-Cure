@@ -106,6 +106,10 @@ public class AgentWorkbenchActivity extends Activity {
 
         Button open = UiKit.secondaryButton(this, panel, "打开模型管理 ›");
         open.setOnClickListener(v -> startActivity(new Intent(this, CareModelsActivity.class)));
+
+        // 跨模型动作池：把各模型的动作集中看（v1.165.0）
+        Button pool = UiKit.secondaryButton(this, panel, "浏览跨模型动作池 ›");
+        pool.setOnClickListener(v -> startActivity(new Intent(this, MotionPoolActivity.class)));
     }
 
     // ============ 工作流 ============

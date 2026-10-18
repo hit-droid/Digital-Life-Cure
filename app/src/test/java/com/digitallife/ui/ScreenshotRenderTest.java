@@ -8,6 +8,7 @@ import android.view.View;
 
 import com.digitallife.care.AgentWorkbenchActivity;
 import com.digitallife.care.CareModelsActivity;
+import com.digitallife.care.MotionPoolActivity;
 import com.digitallife.ui.shell.OperitDrawer;
 import com.digitallife.ui.shell.OperitRoute;
 import com.digitallife.util.ChatStore;
@@ -85,6 +86,15 @@ public class ScreenshotRenderTest {
         capture(content, W, H, "agent_workbench.png");
     }
 
+    /** 动作池：跨模型浏览动作（内置模型卡片 + 分组 / 孤立文件行） */
+    @Test
+    public void motionPoolPage() throws Exception {
+        ActivityController<MotionPoolActivity> c =
+                Robolectric.buildActivity(MotionPoolActivity.class).setup();
+        View content = c.get().findViewById(android.R.id.content);
+        capture(content, W, H, "motion_pool.png");
+    }
+
     /** 侧栏抽屉：280dp 宽，选中「对话」 */
     @Test
     public void drawer() throws Exception {
@@ -116,6 +126,7 @@ public class ScreenshotRenderTest {
                 {"developer", "com.digitallife.ui.DeveloperActivity"},
                 {"agent_console", "com.digitallife.ui.AgentConsoleActivity"},
                 {"agent_workbench", "com.digitallife.care.AgentWorkbenchActivity"},
+                {"motion_pool", "com.digitallife.care.MotionPoolActivity"},
         };
         for (String[] s : screens) {
             String name = s[0];
