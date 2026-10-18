@@ -6,10 +6,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,8 +27,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -39,8 +45,11 @@ import java.util.Map;
  * （{@code enabled} 字段，由 {@code CareAutomation} 判定）。v1.167.0 补齐管理闭环：工作流可
  * **查看步骤**（只读弹窗）与**删除**，定时任务可**删除**——删除走 {@code CareTools} 的
  * {@code delete_workflow} / {@code remove_scheduled_task} 工具（与对话里同一条语义），
- * 删除前二次确认。创建 / 编辑仍回到对话里让 AI 编排（那是 Agent 的主场），这里只做
- * 「已配置的东西」的查看与轻操作。动作浏览已移到「动作池」页（其入口卡片在本页给出）。</p>
+ * 删除前二次确认。v1.168.0 让定时任务**看得懂、加得上**：行里把生 cron 翻成人话并给出
+ * **下次触发**时间（{@code CronText}），并新增「＋ 新建定时任务」表单（选工作流 + cron 预设 /
+ * 自定义 + 实时预览），复用 {@code add_scheduled_task}——定时任务是纯配置，不需要 AI 编排。
+ * 工作流创建 / 编辑仍回到对话里让 AI 编排（那是 Agent 的主场），这里只做「已配置的东西」
+ * 的查看与轻操作。动作浏览已移到「动作池」页（其入口卡片在本页给出）。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -181,15 +190,27 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 定时任务 ============
 
     private View buildScheduleSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 表达式周期触发工作流 · 可暂停");
+        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 周期触发工作流 · 可新建 / 暂停 / 删除");
         LinearLayout panel = UiKit.panel(this, body);
+
+        LinearLayout addRow = actionRow();
+        chip(addRow, "＋ 新建定时任务", R.color.brand_operit_light)
+                .setOnClickListener(v -> promptNewSchedule());
+        panel.addView(addRow);
+
         List<String[]> rows = readSchedules();
         if (rows.isEmpty()) {
-            panel.addView(hint("还没有定时任务。在对话里说「帮我建一个定时任务」即可创建。"));
+            panel.addView(hint("还没有定时任务，点上方「＋ 新建定时任务」创建（需先有一个工作流）。"));
         } else {
+            long now = System.currentTimeMillis();
             for (String[] r : rows) {
                 boolean enabled = "1".equals(r[2]);
-                String subtitle = "cron " + r[1] + (enabled ? "" : "  ·  已暂停");
+                String cron = r[1];
+                long next = CronText.nextFireMillis(cron, now);
+                String when = next > 0 ? "下次 " + formatWhen(next, now) : "近一年内不触发";
+                String subtitle = CronText.describe(cron)
+                        + "\n" + cron + "  →  " + r[3]
+                        + "  ·  " + (enabled ? when : "已暂停");
                 LinearLayout box = rowBox(r[0], subtitle);
                 if (!enabled) {
                     TextView t = (TextView) box.getChildAt(0);
@@ -211,7 +232,7 @@ public class AgentWorkbenchActivity extends Activity {
         return header;
     }
 
-    /** {name, "cron → workflow", enabled("1"/"0"), workflowName} */
+    /** {name, cron, enabled("1"/"0"), workflowName} */
     private List<String[]> readSchedules() {
         List<String[]> out = new ArrayList<>();
         try {
@@ -227,7 +248,7 @@ public class AgentWorkbenchActivity extends Activity {
                     enabled = o.optBoolean("enabled", true);
                 } catch (Exception ignored) {
                 }
-                out.add(new String[]{name, cron + " → " + workflow, enabled ? "1" : "0", workflow});
+                out.add(new String[]{name, cron, enabled ? "1" : "0", workflow});
             }
         } catch (Throwable ignored) {
         }
@@ -271,6 +292,174 @@ public class AgentWorkbenchActivity extends Activity {
         } catch (Exception e) {
             toast("操作失败：" + UiKit.safeMsg(e));
         }
+    }
+
+    // ============ 新建定时任务 ============
+
+    /** 新建定时任务表单：先选工作流（工作流创建仍归对话，这里只做纯配置的挂载） */
+    private void promptNewSchedule() {
+        List<String[]> wfs = readWorkflows();
+        if (wfs.isEmpty()) {
+            toast("还没有工作流——先在对话里让 Agent 建一个工作流，再回来加定时任务。");
+            return;
+        }
+        if (wfs.size() == 1) {
+            showScheduleForm(wfs.get(0)[0]);
+            return;
+        }
+        String[] names = new String[wfs.size()];
+        for (int i = 0; i < wfs.size(); i++) names[i] = wfs.get(i)[0];
+        new AlertDialog.Builder(this)
+                .setTitle("定时触发哪个工作流？")
+                .setItems(names, (d, w) -> showScheduleForm(names[w]))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 表单：任务名 + cron（预设 / 自定义）+ 实时预览（人话 + 下次触发） */
+    private void showScheduleForm(String workflow) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(6), dp(18), dp(6));
+
+        EditText etName = UiKit.input(this, form, "任务名称（如：每日晨报）", "");
+
+        TextView wfLabel = new TextView(this);
+        wfLabel.setText("工作流：" + workflow);
+        wfLabel.setTextSize(13f);
+        wfLabel.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        wfLabel.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = dp(8);
+        form.addView(wfLabel, wlp);
+
+        EditText etCron = UiKit.input(this, form, "cron（分 时 日 月 周）", "0 9 * * *");
+
+        // cron 预设胶囊
+        HorizontalScrollView hsv = new HorizontalScrollView(this);
+        hsv.setHorizontalScrollBarEnabled(false);
+        LinearLayout presets = new LinearLayout(this);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        presets.setPadding(0, dp(4), 0, dp(4));
+        hsv.addView(presets);
+        String[][] ps = {
+                {"每天 09:00", "0 9 * * *"},
+                {"每天 20:00", "0 20 * * *"},
+                {"每周一 09:00", "0 9 * * 1"},
+                {"每小时", "0 * * * *"},
+                {"每 30 分钟", "*/30 * * * *"},
+        };
+        for (String[] pr : ps) {
+            TextView p = UiKit.chipButton(this, presets, pr[0], R.color.operit_text_secondary);
+            LinearLayout.LayoutParams plp = (LinearLayout.LayoutParams) p.getLayoutParams();
+            plp.rightMargin = dp(6);
+            p.setOnClickListener(v -> etCron.setText(pr[1]));
+        }
+        form.addView(hsv);
+
+        TextView preview = new TextView(this);
+        preview.setTextSize(12f);
+        preview.setTextColor(getColorCompat(R.color.operit_accent));
+        preview.setLineSpacing(dp(2), 1f);
+        preview.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        vlp.topMargin = dp(6);
+        form.addView(preview, vlp);
+
+        final Runnable updatePreview = () -> preview.setText(previewCron(etCron.getText().toString()));
+        etCron.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) { updatePreview.run(); }
+        });
+        updatePreview.run();
+
+        ScrollView wrap = new ScrollView(this);
+        wrap.addView(form);
+
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("新建定时任务")
+                .setView(wrap)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("创建", null)
+                .create();
+        // 自定义确定键：校验失败时留在弹窗内（默认行为会直接掉）
+        dlg.setOnShowListener(x -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = etName.getText().toString().trim();
+            String cron = etCron.getText().toString().trim();
+            if (name.isEmpty()) {
+                toast("请填写任务名称");
+                return;
+            }
+            if (!CronText.isValid(cron)) {
+                toast("cron 不合法：需 5 个字段（分 时 日 月 周）");
+                return;
+            }
+            dlg.dismiss();
+            createSchedule(name, cron, workflow);
+        }));
+        dlg.show();
+    }
+
+    /** cron 预览文案：人话 + 下次触发（非法给出可读提示） */
+    private String previewCron(String cron) {
+        if (!CronText.isValid(cron)) {
+            return "cron 不合法（应为 5 个字段：分 时 日 月 周）";
+        }
+        long now = System.currentTimeMillis();
+        long next = CronText.nextFireMillis(cron, now);
+        String when = next > 0 ? "下次触发：" + formatWhen(next, now) : "近一年内不会触发";
+        return "将按「" + CronText.describe(cron) + "」触发　" + when;
+    }
+
+    private void createSchedule(String name, String cron, String workflow) {
+        if (getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).contains(name)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("任务已存在")
+                    .setMessage("已存在同名任务「" + name + "」，继续将覆盖它的 cron 与工作流。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("覆盖", (d, w) -> doCreateSchedule(name, cron, workflow))
+                    .show();
+            return;
+        }
+        doCreateSchedule(name, cron, workflow);
+    }
+
+    /** 后台调用 CareTools.add_scheduled_task（与对话同一条语义），回主线程提示并刷新 */
+    private void doCreateSchedule(String name, String cron, String workflow) {
+        new Thread(() -> {
+            String res;
+            try {
+                JSONObject args = new JSONObject();
+                args.put("name", name);
+                args.put("cronExpr", cron);
+                args.put("workflowName", workflow);
+                res = new CareTools(getApplicationContext()).execute("add_scheduled_task", args);
+            } catch (Exception e) {
+                res = "创建失败：" + UiKit.safeMsg(e);
+            }
+            final String out = res;
+            runOnUiThread(() -> {
+                toast(out);
+                refresh();
+            });
+        }).start();
+    }
+
+    /** 把绝对时间说成人话：今天 / 明天 / M月d日 + HH:mm */
+    private String formatWhen(long millis, long now) {
+        Calendar a = Calendar.getInstance();
+        a.setTimeInMillis(now);
+        Calendar b = Calendar.getInstance();
+        b.setTimeInMillis(millis);
+        String hm = String.format(Locale.ROOT, "%02d:%02d",
+                b.get(Calendar.HOUR_OF_DAY), b.get(Calendar.MINUTE));
+        int dayDiff = b.get(Calendar.DAY_OF_YEAR) - a.get(Calendar.DAY_OF_YEAR);
+        if (dayDiff == 0 && b.get(Calendar.YEAR) == a.get(Calendar.YEAR)) return "今天 " + hm;
+        if (dayDiff == 1 && b.get(Calendar.YEAR) == a.get(Calendar.YEAR)) return "明天 " + hm;
+        return (b.get(Calendar.MONTH) + 1) + "月" + b.get(Calendar.DAY_OF_MONTH) + "日 " + hm;
     }
 
     /** 查看某工作流的步骤清单（只读，不执行）——此前「跑起来才知道里面是什么」 */

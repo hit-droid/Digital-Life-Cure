@@ -1,5 +1,6 @@
 package com.digitallife.care;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -80,5 +81,29 @@ public class AgentWorkbenchToolsTest {
         String res = new CareTools(ctx).execute("remove_scheduled_task",
                 new JSONObject().put("name", "不存在的任务"));
         assertTrue("删不存在的应给出可读提示，实际：" + res, res.contains("未找到"));
+    }
+
+    @Test
+    public void addScheduledTaskWritesCronAndWorkflow() throws Exception {
+        String res = new CareTools(ctx).execute("add_scheduled_task",
+                new JSONObject().put("name", "每日晨报")
+                        .put("cronExpr", "0 9 * * *")
+                        .put("workflowName", "晨间简报"));
+        assertTrue("应提示已添加，实际：" + res, res.contains("已添加"));
+
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE);
+        assertTrue("新建后应存在于 prefs", sp.contains("每日晨报"));
+        JSONObject saved = new JSONObject(sp.getString("每日晨报", "{}"));
+        assertEquals("0 9 * * *", saved.optString("cronExpr"));
+        assertEquals("晨间简报", saved.optString("workflowName"));
+    }
+
+    @Test
+    public void addScheduledTaskMissingFieldsIsRejected() throws Exception {
+        String res = new CareTools(ctx).execute("add_scheduled_task",
+                new JSONObject().put("name", "缺字段").put("cronExpr", ""));
+        assertTrue("缺字段应被拒绝并给出可读提示，实际：" + res, res.contains("请填写"));
+        assertFalse("拒绝时不应落盘",
+                ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE).contains("缺字段"));
     }
 }
