@@ -54,6 +54,15 @@ public final class ComboStore {
         write(ctx, modelDir, list);
     }
 
+    /** 按名字（忽略大小写）找一条连招；找不到返回 {@code null}（v1.178.0，供 ComboPlayer / 自动化复用） */
+    public static ComboPlan.Combo find(Context ctx, String modelDir, String name) {
+        if (name == null || name.isEmpty()) return null;
+        for (ComboPlan.Combo c : list(ctx, modelDir)) {
+            if (c.name != null && c.name.equalsIgnoreCase(name)) return c;
+        }
+        return null;
+    }
+
     /** 删除某模型下的一个连招（严格同名） */
     public static void delete(Context ctx, String modelDir, String name) {
         if (modelDir == null || modelDir.isEmpty() || name == null) return;

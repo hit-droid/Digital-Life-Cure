@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.178.0 (2026-10-18)
+
+承接 v1.172.0 起的连招线。连招此前只能**进动作池手动点播**——编好的编排无法接系统事件。
+本版让连招能**接开机与定时**。纯增量：把播放调度抽成可复用组件，不动渲染链路、不写模型 json。
+
+### 连招接系统事件
+
+- **抽出 `ComboPlayer`**：把「按模型目录 + 连招名扫描候选 → 解析步骤 → 主线程逐步下发」从
+  动作池页面抽成可复用组件（generation 防串台、GL 线程 FIFO 保证有序），界面 / 开机 / 定时
+  三处共用；页面侧只保留「跨模型切播确认」。
+- **开机自动播放**：动作池每条连招加「**开机播放**」芯片（点击切换，同一时刻只留一条，
+  落盘到 `pet_settings`）。桌宠首帧就绪（`PetService.onModelReady`）时，若该连招属于**当前
+  默认模型**即自动播放一次；模型不匹配则静默跳过。
+- **定时播放连招**：`care_schedules` 支持 `kind:"combo"`（缺省 `kind` 的旧数据仍按工作流走）。
+  工作台「＋ 新建定时任务」先选「触发工作流 / 播放连招」，后者从各模型已编连招里挑一条，
+  填任务名 + cron 落盘；`CareAutomation` 命中即播放连招，结果与工作流一样落入 `RunLog`
+  （「上次运行 / 记录」）。工作台行显示「播放连招」，「立即运行」改为就地播放。
+
+### 新增 / 变更
+
+- 新增 `ComboPlayer`（`care/`）：复用组件，`play(modelDir, comboName)` / `playSteps(...)` +
+  `flatten(m)` / `candidatesFor(ctx, modelDir)` 静态映射；返回可播步骤数（`-1` 无桌宠 /
+  找不到连招，`0` 无可播步骤）。
+- `ComboStore`：新增 `find(ctx, modelDir, name)`（忽略大小写按名查一条，供播放器 / 自动化复用）。
+- `Settings`：新增 `getStartupComboModel` / `getStartupComboName` / `setStartupCombo`。
+- `CareAutomation`：定时任务按 `isComboTask` 分流，连招任务播放连招、其余执行工作流。
+- `AgentWorkbenchActivity`：新建定时任务区分工作流 / 连招；`readSchedules` 增加 kind / 目标 /
+  模型字段，行内文案与「立即运行」据此分流。
+- `MotionPoolActivity`：改用 `ComboPlayer`，连招行加「开机播放」芯片。
+
+### 校验
+
+`tools/verify.sh` 全绿（单测 / lint 0 error / APK 通过）。新增连招按名查找、`isComboTask`
+兼容判定、`ComboPlayer` 边界单测。
+
 ## v1.177.0 (2026-10-18)
 
 承接 v1.172.0 起的连招线。连招此前**只进不出**——编好的编排换机、分享都带不走。本版补上

@@ -106,6 +106,21 @@ public class Settings {
     public String getDefaultModelDir() { return sp.getString("default_model_dir", ""); }
     public void setDefaultModelDir(String v) { sp.edit().putString("default_model_dir", v == null ? "" : v).apply(); }
 
+    /**
+     * 开机自动播放的连招（v1.178.0）：模型目录名 + 连招名；连招名为空 = 不自动播放。
+     * 只有该连招所属模型恰好是当前默认模型时才会在桌宠就绪时播放（否则静默跳过）。
+     */
+    public String getStartupComboModel() { return sp.getString("startup_combo_model", ""); }
+    public String getStartupComboName() { return sp.getString("startup_combo_name", ""); }
+
+    /** 设置 / 清空开机自动播放的连招（传空串即清空） */
+    public void setStartupCombo(String modelDir, String comboName) {
+        sp.edit()
+                .putString("startup_combo_model", modelDir == null ? "" : modelDir)
+                .putString("startup_combo_name", comboName == null ? "" : comboName)
+                .apply();
+    }
+
     /** 是否已配置 API */
     public boolean isConfigured() {
         return !getApiBase().trim().isEmpty() && !getApiKey().trim().isEmpty() && !getModel().trim().isEmpty();

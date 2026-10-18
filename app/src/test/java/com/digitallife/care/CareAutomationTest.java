@@ -42,4 +42,30 @@ public class CareAutomationTest {
     public void enabled_nullTask_treatedEnabled() {
         assertTrue(CareAutomation.isTaskEnabled(null));
     }
+
+    // ==================== 定时连招任务判定（v1.178.0） ====================
+
+    @Test
+    public void kind_absent_isWorkflow_legacyCompat() throws Exception {
+        JSONObject task = new JSONObject()
+                .put("cronExpr", "0 9 * * *")
+                .put("workflowName", "晨间简报");
+        assertFalse(CareAutomation.isComboTask(task));
+    }
+
+    @Test
+    public void kind_combo_isComboTask() throws Exception {
+        JSONObject task = new JSONObject()
+                .put("cronExpr", "0 20 * * *")
+                .put("kind", "combo")
+                .put("modelDir", "demo")
+                .put("comboName", "打招呼");
+        assertTrue(CareAutomation.isComboTask(task));
+    }
+
+    @Test
+    public void kind_unknownValue_fallsBackToWorkflow() throws Exception {
+        assertFalse(CareAutomation.isComboTask(new JSONObject().put("kind", "whatever")));
+        assertFalse(CareAutomation.isComboTask(null));
+    }
 }

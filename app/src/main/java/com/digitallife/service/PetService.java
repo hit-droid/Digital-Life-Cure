@@ -29,6 +29,7 @@ import com.digitallife.brain.ThoughtLoopManager;
 import com.digitallife.care.CareAI;
 import com.digitallife.care.CareAutomation;
 import com.digitallife.care.CareExecutor;
+import com.digitallife.care.ComboPlayer;
 import com.digitallife.brain.Heartbeat;
 import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
@@ -76,6 +77,8 @@ public class PetService extends Service implements AICore.Output,
 
     public AICore aiCore; // v1.24.0: AgentConsoleActivity 需访问
     private CareAutomation careAutomation;
+    /** v1.178.0：开机自动播放连招的播放器（懒建，就绪时触发一次） */
+    private ComboPlayer comboPlayer;
     private TTSEngine tts;
     private STTEngine stt;
     private Settings settings;
@@ -490,6 +493,28 @@ public class PetService extends Service implements AICore.Output,
         } else if (def == null || def.isEmpty()) {
             updateModelCapability(0);
         }
+        maybeAutoPlayStartupCombo();
+    }
+
+    /**
+     * 开机自动播放连招（v1.178.0）：配置的连招若属于当前默认模型，模型就绪即播放一次。
+     * 切换模型（{@code nativeChangeScene}）与播放动作（{@code nativeStartMotion}）都经 GL 线程
+     * 同一 FIFO {@code queueEvent}，故「先切后播」天然有序，无需延迟等待；模型不匹配则静默跳过。
+     */
+    private void maybeAutoPlayStartupCombo() {
+        if (settings == null) return;
+        final String model = settings.getStartupComboModel();
+        final String combo = settings.getStartupComboName();
+        if (combo == null || combo.isEmpty()) return;
+        if (model == null || model.isEmpty() || !model.equals(settings.getDefaultModelDir())) return;
+        if (comboPlayer == null) {
+            comboPlayer = new ComboPlayer(this, text -> {
+                if (overlayView != null) {
+                    overlayView.showBubble(text, Math.max(2f, text.length() * 0.06f));
+                }
+            });
+        }
+        comboPlayer.play(model, combo);
     }
 
     @Override

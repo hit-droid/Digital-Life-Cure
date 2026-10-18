@@ -42,6 +42,8 @@ public class CareAutomation {
     private boolean running = false;
     /** 定时任务去重：taskName -> 最近一次触发的分钟键（yyyy-M-d H:m） */
     private final Map<String, String> lastFired = new HashMap<>();
+    /** v1.178.0：定时连招播放器（静默播放，结果经 Report 反馈） */
+    private final ComboPlayer comboPlayer;
 
     public CareAutomation(Context ctx, CareExecutor executor, CareAI careAI, Report report) {
         this.ctx = ctx.getApplicationContext();
@@ -49,6 +51,7 @@ public class CareAutomation {
         this.careAI = careAI;
         this.report = report;
         this.handler = new Handler(Looper.getMainLooper());
+        this.comboPlayer = new ComboPlayer(this.ctx, null);
     }
 
     /** 启动自动化引擎 */
@@ -158,8 +161,11 @@ public class CareAutomation {
             try {
                 JSONObject task = new JSONObject((String) all.get(name));
                 String cron = task.optString("cronExpr", "");
+                if (cron.isEmpty()) continue;
+                boolean combo = isComboTask(task);
                 String workflowName = task.optString("workflowName", "");
-                if (cron.isEmpty() || workflowName.isEmpty()) continue;
+                String comboName = task.optString("comboName", "");
+                if (combo ? comboName.isEmpty() : workflowName.isEmpty()) continue;
                 if (!isTaskEnabled(task)) continue; // 工作台里被暂停的任务不触发
                 if (!cronMatches(cron, minute, hour, day, month, cronDow)) continue;
 
@@ -168,23 +174,39 @@ public class CareAutomation {
                 if (fireKey.equals(lastFired.get(name))) continue;
                 lastFired.put(name, fireKey);
 
-                // 命中：执行工作流
+                // 命中：连招任务播放连招（v1.178.0），其余执行工作流
                 String result;
                 try {
-                    JSONObject args = new JSONObject();
-                    args.put("name", workflowName);
-                    result = executor.getTools().execute("run_workflow", args);
+                    if (combo) {
+                        int n = comboPlayer.play(task.optString("modelDir", ""), comboName);
+                        result = n > 0
+                                ? "✅ 已播放连招「" + comboName + "」（" + n + " 步）"
+                                : "❌ 连招「" + comboName + "」" + (n == 0
+                                        ? "没有可播放的步骤（动作 / 表情可能已被删除或改名）"
+                                        : "播放失败（桌宠未运行或找不到连招）");
+                    } else {
+                        JSONObject args = new JSONObject();
+                        args.put("name", workflowName);
+                        result = executor.getTools().execute("run_workflow", args);
+                    }
                 } catch (Exception e) {
                     result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
                 }
                 // 落盘执行记录（v1.173.0）：工作台据此显示「上次运行 / 记录」
                 RunLog.record(ctx, RunLog.scheduleKey(name), RunLog.looksOk(result), result);
-                RunLog.record(ctx, RunLog.workflowKey(workflowName), RunLog.looksOk(result), result);
-                careAI.logAutomationEvent("定时任务「" + name + "」触发，执行工作流「" + workflowName + "」:\n" + result);
+                if (!combo) {
+                    RunLog.record(ctx, RunLog.workflowKey(workflowName), RunLog.looksOk(result), result);
+                }
+                careAI.logAutomationEvent("定时任务「" + name + "」触发:\n" + result);
                 if (report != null) report.onAutoReport("⏰ 定时任务「" + name + "」已触发\n" + result);
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /** 是否为「定时播放连招」任务：缺省 {@code kind} 视为工作流（兼容 v1.178.0 之前的旧数据） */
+    static boolean isComboTask(org.json.JSONObject task) {
+        return task != null && "combo".equals(task.optString("kind", "workflow"));
     }
 
     /** 定时任务是否启用：缺省 {@code enabled} 字段视为启用（兼容工作台加开关前的旧数据） */

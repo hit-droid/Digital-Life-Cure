@@ -20,8 +20,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.digitallife.R;
+import com.digitallife.model.MotionLibrary;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.ui.UiKit;
+import com.digitallife.util.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -56,6 +58,12 @@ import java.util.Map;
  * 一行（来自 {@link RunLog}，无记录显示「尚未运行」）与「记录」入口（回看最近 {@code 20} 次
  * 的时间 + 成败 + 结果摘要）。「立即运行」现在也会落盘并即时刷新；定时任务行的手动运行同时记
  * 到该任务与该工作流两条记录（{@code CareAutomation} 的自动触发同样双记录）。</p>
+ *
+ * <p>定时连招（v1.178.0）：定时任务此前只能触发工作流，连招（见 {@code ComboPlan}）编好后无处
+ * 挂载。本版「＋ 新建定时任务」先让用户选「触发工作流 / 播放连招」，后者从各模型已编连招里挑
+ * 一条，落盘为 {@code kind:"combo"} 的定时任务（{@code modelDir + comboName}，无 kind 的旧数据
+ * 仍按工作流走）。行里据此显示「播放连招」，「立即运行」改为就地播放（{@code ComboPlayer}），
+ * 命中由 {@code CareAutomation} 判定。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -200,7 +208,7 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 定时任务 ============
 
     private View buildScheduleSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 周期触发工作流 · 可新建 / 暂停 / 删除");
+        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 周期触发工作流 / 播放连招 · 可新建 / 暂停 / 删除");
         LinearLayout panel = UiKit.panel(this, body);
 
         LinearLayout addRow = actionRow();
@@ -210,32 +218,45 @@ public class AgentWorkbenchActivity extends Activity {
 
         List<String[]> rows = readSchedules();
         if (rows.isEmpty()) {
-            panel.addView(hint("还没有定时任务，点上方「＋ 新建定时任务」创建（需先有一个工作流）。"));
+            panel.addView(hint("还没有定时任务，点上方「＋ 新建定时任务」创建（可触发工作流，也可播放连招）。"));
         } else {
             long now = System.currentTimeMillis();
             for (String[] r : rows) {
-                boolean enabled = "1".equals(r[2]);
+                final String taskName = r[0];
                 String cron = r[1];
+                boolean enabled = "1".equals(r[2]);
+                final String kind = r[3];
+                final String target = r[4];
+                final String modelDir = r[5];
+                boolean combo = "combo".equals(kind);
                 long next = CronText.nextFireMillis(cron, now);
                 String when = next > 0 ? "下次 " + formatWhen(next, now) : "近一年内不触发";
-                RunLog.Record lastRun = RunLog.last(this, RunLog.scheduleKey(r[0]));
+                RunLog.Record lastRun = RunLog.last(this, RunLog.scheduleKey(taskName));
                 String lastTxt = lastRun == null ? "尚未运行"
                         : (lastRun.ok ? "✅ " : "❌ ") + "上次运行 " + RunLog.whenText(lastRun.at, now);
+                String targetLine = combo
+                        ? "播放连招「" + target + "」" + (modelDir.isEmpty() ? "" : "（" + modelDir + "）")
+                        : "工作流「" + target + "」";
                 String subtitle = CronText.describe(cron)
-                        + "\n" + cron + "  →  " + r[3]
+                        + "\n" + cron + "  →  " + targetLine
                         + "  ·  " + (enabled ? when : "已暂停")
                         + "\n" + lastTxt;
-                LinearLayout box = rowBox(r[0], subtitle);
+                LinearLayout box = rowBox(taskName, subtitle);
                 if (!enabled) {
                     TextView t = (TextView) box.getChildAt(0);
                     t.setTextColor(COLOR_PAUSED);
                 }
                 LinearLayout acts = actionRow();
-                final String taskName = r[0];
-                final String wf = r[3];
+                final String wf = target;
                 chip(acts, "立即运行", R.color.brand_operit_light)
-                        .setOnClickListener(v -> runWorkflowNow(wf, "定时任务「" + taskName + "」",
-                                RunLog.scheduleKey(taskName), RunLog.workflowKey(wf)));
+                        .setOnClickListener(v -> {
+                            if (combo) {
+                                runComboNow(taskName, modelDir, target);
+                            } else {
+                                runWorkflowNow(wf, "定时任务「" + taskName + "」",
+                                        RunLog.scheduleKey(taskName), RunLog.workflowKey(wf));
+                            }
+                        });
                 chip(acts, "记录", R.color.operit_text_secondary)
                         .setOnClickListener(v -> showRunLog(
                                 RunLog.scheduleKey(taskName), "定时任务「" + taskName + "」记录"));
@@ -250,23 +271,29 @@ public class AgentWorkbenchActivity extends Activity {
         return header;
     }
 
-    /** {name, cron, enabled("1"/"0"), workflowName} */
+    /** {name, cron, enabled("1"/"0"), kind, target, modelDir}；kind=combo 时 target=连招名，否则 target=工作流名 */
     private List<String[]> readSchedules() {
         List<String[]> out = new ArrayList<>();
         try {
             Map<String, ?> all = getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).getAll();
             for (String name : all.keySet()) {
                 String cron = "?";
-                String workflow = "?";
+                String target = "?";
+                String kind = "workflow";
+                String modelDir = "";
                 boolean enabled = true;
                 try {
                     JSONObject o = new JSONObject(String.valueOf(all.get(name)));
                     cron = o.optString("cronExpr", "?");
-                    workflow = o.optString("workflowName", "?");
+                    kind = CareAutomation.isComboTask(o) ? "combo" : "workflow";
+                    target = "combo".equals(kind)
+                            ? o.optString("comboName", "?")
+                            : o.optString("workflowName", "?");
+                    modelDir = o.optString("modelDir", "");
                     enabled = o.optBoolean("enabled", true);
                 } catch (Exception ignored) {
                 }
-                out.add(new String[]{name, cron, enabled ? "1" : "0", workflow});
+                out.add(new String[]{name, cron, enabled ? "1" : "0", kind, target, modelDir});
             }
         } catch (Throwable ignored) {
         }
@@ -306,6 +333,27 @@ public class AgentWorkbenchActivity extends Activity {
         }).start();
     }
 
+    /**
+     * 立即播放某个「定时连招」任务（v1.178.0）。连招播放要经主线程 Handler 调度，故留主线程；
+     * 结果落盘到该任务的执行记录，并即时刷新「上次运行」。
+     */
+    private void runComboNow(String taskName, String modelDir, String comboName) {
+        if (comboName == null || comboName.isEmpty() || "?".equals(comboName)) {
+            toast("找不到对应的连招");
+            return;
+        }
+        int n = new ComboPlayer(this, null).play(modelDir, comboName);
+        boolean ok = n > 0;
+        String res = ok
+                ? "✅ 已播放连招「" + comboName + "」（" + n + " 步）"
+                : "❌ 连招「" + comboName + "」" + (n == 0
+                        ? "没有可播放的步骤（动作 / 表情可能已被删除或改名）"
+                        : "播放失败（桌宠未运行或找不到连招）");
+        RunLog.record(this, RunLog.scheduleKey(taskName), ok, res);
+        showResult("定时连招「" + taskName + "」执行结果", res);
+        refresh();
+    }
+
     /** 暂停 / 启用一个定时任务（写回 {@code enabled} 字段） */
     private void toggleSchedule(String name) {
         SharedPreferences sp = getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE);
@@ -323,43 +371,100 @@ public class AgentWorkbenchActivity extends Activity {
 
     // ============ 新建定时任务 ============
 
-    /** 新建定时任务表单：先选工作流（工作流创建仍归对话，这里只做纯配置的挂载） */
+    /** 新建定时任务：先选「触发工作流」还是「播放连招」（工作流创建仍归对话，这里只做纯配置的挂载） */
     private void promptNewSchedule() {
+        String[] kinds = {"触发工作流", "播放连招"};
+        new AlertDialog.Builder(this)
+                .setTitle("定时触发什么？")
+                .setItems(kinds, (d, w) -> {
+                    if (w == 0) promptNewWorkflowSchedule();
+                    else promptNewComboSchedule();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 选工作流后填表单 */
+    private void promptNewWorkflowSchedule() {
         List<String[]> wfs = readWorkflows();
         if (wfs.isEmpty()) {
             toast("还没有工作流——先在对话里让 Agent 建一个工作流，再回来加定时任务。");
             return;
         }
         if (wfs.size() == 1) {
-            showScheduleForm(wfs.get(0)[0]);
+            final String wf = wfs.get(0)[0];
+            showScheduleForm("工作流：" + wf, (n, c) -> createSchedule(n, c, wf));
             return;
         }
         String[] names = new String[wfs.size()];
         for (int i = 0; i < wfs.size(); i++) names[i] = wfs.get(i)[0];
         new AlertDialog.Builder(this)
                 .setTitle("定时触发哪个工作流？")
-                .setItems(names, (d, w) -> showScheduleForm(names[w]))
+                .setItems(names, (d, w) -> {
+                    final String wf = names[w];
+                    showScheduleForm("工作流：" + wf, (n, c) -> createSchedule(n, c, wf));
+                })
                 .setNegativeButton("取消", null)
                 .show();
     }
 
-    /** 表单：任务名 + cron（预设 / 自定义）+ 实时预览（人话 + 下次触发） */
-    private void showScheduleForm(String workflow) {
+    /** 选连招后填表单（连招来自「动作池」里各模型已编好的编排） */
+    private void promptNewComboSchedule() {
+        List<String[]> combos = readCombos();
+        if (combos.isEmpty()) {
+            toast("还没有连招——先去「动作池」给某个模型编一条连招，再回来加定时播放。");
+            return;
+        }
+        String[] labels = new String[combos.size()];
+        for (int i = 0; i < combos.size(); i++) {
+            labels[i] = combos.get(i)[0] + " · " + combos.get(i)[1];
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("定时播放哪条连招？")
+                .setItems(labels, (d, w) -> {
+                    final String modelDir = combos.get(w)[0];
+                    final String comboName = combos.get(w)[1];
+                    showScheduleForm("连招：" + modelDir + " · " + comboName,
+                            (n, c) -> createComboSchedule(n, c, modelDir, comboName));
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 跨全部模型的连招：{模型目录, 连招名} */
+    private List<String[]> readCombos() {
+        List<String[]> out = new ArrayList<>();
+        String def = new Settings(this).getDefaultModelDir();
+        for (MotionLibrary.ModelActions m : MotionLibrary.scanAll(this, def)) {
+            for (ComboPlan.Combo c : ComboStore.list(this, m.dirName)) {
+                out.add(new String[]{m.dirName, c.name});
+            }
+        }
+        return out;
+    }
+
+    /** 定时任务确认回调（用私有接口，避免引入 java.util.function 依赖） */
+    private interface ScheduleCreator {
+        void create(String name, String cron);
+    }
+
+    /** 表单：任务名 + cron（预设 / 自定义）+ 实时预览（人话 + 下次触发）；{@code targetLine} 提示触发对象 */
+    private void showScheduleForm(String targetLine, ScheduleCreator creator) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), dp(6), dp(18), dp(6));
 
         EditText etName = UiKit.input(this, form, "任务名称（如：每日晨报）", "");
 
-        TextView wfLabel = new TextView(this);
-        wfLabel.setText("工作流：" + workflow);
-        wfLabel.setTextSize(13f);
-        wfLabel.setTextColor(getColorCompat(R.color.operit_text_secondary));
-        wfLabel.setIncludeFontPadding(false);
+        TextView target = new TextView(this);
+        target.setText(targetLine);
+        target.setTextSize(13f);
+        target.setTextColor(getColorCompat(R.color.operit_text_secondary));
+        target.setIncludeFontPadding(false);
         LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         wlp.topMargin = dp(8);
-        form.addView(wfLabel, wlp);
+        form.addView(target, wlp);
 
         EditText etCron = UiKit.input(this, form, "cron（分 时 日 月 周）", "0 9 * * *");
 
@@ -425,7 +530,7 @@ public class AgentWorkbenchActivity extends Activity {
                 return;
             }
             dlg.dismiss();
-            createSchedule(name, cron, workflow);
+            creator.create(name, cron);
         }));
         dlg.show();
     }
@@ -473,6 +578,39 @@ public class AgentWorkbenchActivity extends Activity {
                 refresh();
             });
         }).start();
+    }
+
+    /** 新建「定时播放连招」任务：同名先确认覆盖，再直接写入 {@code care_schedules}（kind=combo） */
+    private void createComboSchedule(String name, String cron, String modelDir, String comboName) {
+        if (getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).contains(name)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("任务已存在")
+                    .setMessage("已存在同名任务「" + name + "」，继续将覆盖它的 cron 与目标。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("覆盖",
+                            (d, w) -> doCreateComboSchedule(name, cron, modelDir, comboName))
+                    .show();
+            return;
+        }
+        doCreateComboSchedule(name, cron, modelDir, comboName);
+    }
+
+    /** 定时连招是纯配置（不触发 AI 编排），直接落盘即可；旧数据无 {@code kind} 仍按工作流走 */
+    private void doCreateComboSchedule(String name, String cron, String modelDir, String comboName) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("name", name);
+            o.put("cronExpr", cron);
+            o.put("kind", "combo");
+            o.put("modelDir", modelDir == null ? "" : modelDir);
+            o.put("comboName", comboName);
+            o.put("createdAt", System.currentTimeMillis());
+            getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).edit().putString(name, o.toString()).apply();
+            toast("✅ 已创建定时连招「" + name + "」→ 播放「" + comboName + "」");
+            refresh();
+        } catch (Exception e) {
+            toast("创建失败：" + UiKit.safeMsg(e));
+        }
     }
 
     /** 把绝对时间说成人话：今天 / 明天 / M月d日 + HH:mm */

@@ -98,6 +98,25 @@ public class ComboStoreTest {
         assertTrue(ComboStore.list(ctx(), null).isEmpty());
     }
 
+    // ==================== 按名查找（v1.178.0，供 ComboPlayer / 自动化复用） ====================
+
+    @Test
+    public void find_matchesCaseInsensitively() {
+        ComboStore.save(ctx(), "demo", combo("Hi", "m:idle.motion3.json"));
+        ComboPlan.Combo c = ComboStore.find(ctx(), "demo", "hi");
+        assertEquals("Hi", c.name);
+        assertEquals("idle.motion3.json", c.steps.get(0).file);
+    }
+
+    @Test
+    public void find_missingOrBlankReturnsNull() {
+        ComboStore.save(ctx(), "demo", combo("A", "m:idle.motion3.json"));
+        assertEquals(null, ComboStore.find(ctx(), "demo", "B"));
+        assertEquals(null, ComboStore.find(ctx(), "demo", ""));
+        assertEquals(null, ComboStore.find(ctx(), "demo", null));
+        assertEquals(null, ComboStore.find(ctx(), "nope", "A"));
+    }
+
     @Test
     public void fromJson_skipsNamelessEntries() throws Exception {
         JSONObject good = new JSONObject().put("name", "ok")

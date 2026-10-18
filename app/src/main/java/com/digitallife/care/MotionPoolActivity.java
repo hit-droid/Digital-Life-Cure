@@ -7,8 +7,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -93,6 +91,11 @@ import java.util.Set;
  * 行再加「导出」（单条一个 {@code <模型目录>-<名>.json}）。两者共用 {@link ComboStore#toBundle}
  * 的包裹格式 {@code {model,combos:[...]}}，导入端 {@link ComboStore#parseImport} 一套解析，
  * 并容裸数组 / 坏 JSON（→ 空表，不抛）。跨模型导入步骤可能解析不到，播放时由连招逻辑跳过并提示。</p>
+ *
+ * <p>连招接系统事件（v1.178.0）：播放调度从本页抽成 {@link ComboPlayer}（界面 / 开机 / 定时共用），
+ * 本页只保留「跨模型切播确认」再调它。每条连招加「开机播放」芯片（点击切换，同一时刻只留一条，
+ * 落盘 {@link Settings#getStartupComboName}），开机时 {@code PetService.onModelReady} 若该连招
+ * 属于当前默认模型即自动播放一次。</p>
  */
 public class MotionPoolActivity extends Activity {
 
@@ -117,10 +120,8 @@ public class MotionPoolActivity extends Activity {
     /** 未过滤时的汇总文案 */
     private String totalSummary = "";
 
-    /** 连招逐步播放的主线程调度器 */
-    private Handler comboHandler;
-    /** 连招代次：每次开播 +1，旧代次的延迟任务自我作废，避免多条连招串台 */
-    private int comboGeneration = 0;
+    /** 连招播放器（v1.178.0 抽出为可复用组件，供界面 / 开机 / 定时共用） */
+    private ComboPlayer comboPlayer;
 
     /** 待写出的导出 */
     private String pendingExportModel;
@@ -139,7 +140,7 @@ public class MotionPoolActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         settings = new Settings(this);
-        comboHandler = new Handler(Looper.getMainLooper());
+        comboPlayer = new ComboPlayer(this, this::toast);
         buildUi();
         refresh();
     }
@@ -147,8 +148,7 @@ public class MotionPoolActivity extends Activity {
     @Override
     protected void onDestroy() {
         // 离开页面即作废未播完的连招，避免延迟任务打到已销毁的界面
-        comboGeneration++;
-        if (comboHandler != null) comboHandler.removeCallbacksAndMessages(null);
+        if (comboPlayer != null) comboPlayer.cancel();
         super.onDestroy();
     }
 
@@ -1083,6 +1083,11 @@ public class MotionPoolActivity extends Activity {
         TextView exp1 = chip(acts, "导出", R.color.operit_text_secondary);
         exp1.setOnClickListener(v -> exportCombos(m, java.util.Collections.singletonList(combo),
                 m.dirName + "-" + safeFileName(combo.name) + ".json"));
+        // v1.178.0：把这条连招设为「开机自动播放」（同一时刻只保留一条）
+        boolean boot = m.dirName.equals(settings.getStartupComboModel())
+                && combo.name.equalsIgnoreCase(settings.getStartupComboName());
+        TextView bootChip = chip(acts, boot ? "✓ 开机播放" : "开机播放", R.color.operit_text_secondary);
+        bootChip.setOnClickListener(v -> toggleStartupCombo(m, combo));
         TextView del = chip(acts, "删", R.color.operit_text_secondary);
         del.setOnClickListener(v -> confirmDeleteCombo(m, combo));
         box.addView(acts);
@@ -1091,21 +1096,7 @@ public class MotionPoolActivity extends Activity {
 
     /** 把某模型的扫描结果拍平成解析候选（只取「声明 + 文件存在」的可播项） */
     private List<ComboPlan.Candidate> comboCandidates(MotionLibrary.ModelActions m) {
-        List<ComboPlan.Candidate> out = new ArrayList<>();
-        if (m == null) return out;
-        for (MotionLibrary.Group g : m.groups) {
-            for (int i = 0; i < g.motions.size(); i++) {
-                MotionLibrary.Motion mo = g.motions.get(i);
-                if (!mo.declared || !mo.exists) continue;
-                out.add(new ComboPlan.Candidate(true, g.name, mo.file, null, i,
-                        mo.duration, mo.loop));
-            }
-        }
-        for (MotionLibrary.Expr e : m.expressions) {
-            if (!e.declared || !e.exists) continue;
-            out.add(new ComboPlan.Candidate(false, null, e.file, e.name, -1, 0, false));
-        }
-        return out;
+        return ComboPlayer.flatten(m);
     }
 
     /** 播放一条连招：先解析出可播步骤，非当前模型走「切播」二次确认 */
@@ -1115,18 +1106,13 @@ public class MotionPoolActivity extends Activity {
             toast("桌宠未在运行，请先开启桌宠再试");
             return;
         }
-        List<ComboPlan.Candidate> cands = comboCandidates(m);
-        final List<ComboPlan.Resolved> steps = ComboPlan.resolveAll(combo.steps, cands);
+        final List<ComboPlan.Resolved> steps = ComboPlan.resolveAll(combo.steps, comboCandidates(m));
         if (steps.isEmpty()) {
             toast("连招「" + combo.name + "」没有可播放的步骤（动作 / 表情可能已被删除或改名）");
             return;
         }
-        if (steps.size() < combo.size()) {
-            toast("连招有 " + (combo.size() - steps.size()) + " 步已失效，将播放其余 "
-                    + steps.size() + " 步");
-        }
         final String name = combo.name;
-        Runnable start = () -> runCombo(svc, name, steps);
+        Runnable start = () -> comboPlayer.playSteps(svc, name, combo.size(), steps);
         if (isCurrentModel(m.dirName)) {
             start.run();
         } else {
@@ -1134,32 +1120,21 @@ public class MotionPoolActivity extends Activity {
         }
     }
 
-    /** 开始逐级下发连招；用 generation 作废旧代次的延迟任务，避免多条连招串台 */
-    private void runCombo(PetService svc, String name, List<ComboPlan.Resolved> steps) {
-        final int gen = ++comboGeneration;
-        comboHandler.removeCallbacksAndMessages(null);
-        long total = 0;
-        for (ComboPlan.Resolved r : steps) total += r.dwellMs;
-        toast("▶ 连招「" + name + "」开始（" + steps.size() + " 步，约 "
-                + String.format(Locale.ROOT, "%.1f", total / 1000.0) + " 秒）");
-        playComboStep(svc, steps, 0, gen);
-    }
-
     /**
-     * 下发第 {@code i} 步并在其停留时长后调度下一步。动作 / 表情都经 GL 线程同一 FIFO
-     * {@code queueEvent}，故「逐步下发」天然有序；新动作会打断上一步，无需等它自然结束。
+     * 设为 / 取消「开机自动播放」的连招（v1.178.0）。同一时刻只保留一条：在另一条上再点一次
+     * 即改绑到它；在已绑定的这条上点则清空。仅当该连招所属模型 == 当前默认模型时，开机才播。
      */
-    private void playComboStep(PetService svc, List<ComboPlan.Resolved> steps, int i, int gen) {
-        if (gen != comboGeneration) return;
-        if (i >= steps.size()) {
-            toast("连招播放完成");
-            return;
+    private void toggleStartupCombo(MotionLibrary.ModelActions m, ComboPlan.Combo combo) {
+        boolean on = m.dirName.equals(settings.getStartupComboModel())
+                && combo.name.equalsIgnoreCase(settings.getStartupComboName());
+        if (on) {
+            settings.setStartupCombo("", "");
+            toast("已取消开机自动播放");
+        } else {
+            settings.setStartupCombo(m.dirName, combo.name);
+            toast("已设「" + combo.name + "」为开机自动播放（模型「" + m.dirName + "」）");
         }
-        ComboPlan.Resolved r = steps.get(i);
-        if (r.motion) svc.onMotion(r.group, r.index, 3);
-        else svc.onExpression(r.exprName);
-        final int next = i + 1;
-        comboHandler.postDelayed(() -> playComboStep(svc, steps, next, gen), r.dwellMs);
+        refresh();
     }
 
     private void confirmDeleteCombo(MotionLibrary.ModelActions m, ComboPlan.Combo combo) {
