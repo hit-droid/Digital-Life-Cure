@@ -142,6 +142,17 @@ public final class RunLog {
         prefs(ctx).edit().remove(key).apply();
     }
 
+    /**
+     * 改名迁移（v1.181.0）：把 {@code from} 的记录整段搬到 {@code to}，保住历史。
+     * 定时任务改名后若不搬，「上次运行」会凭空消失；同键 / 空键 / 源无记录一律不动。
+     */
+    public static void move(Context ctx, String from, String to) {
+        if (from == null || to == null || from.isEmpty() || to.isEmpty() || from.equals(to)) return;
+        String raw = prefs(ctx).getString(from, null);
+        if (raw == null) return;
+        prefs(ctx).edit().putString(to, raw).remove(from).apply();
+    }
+
     private static List<Record> read(Context ctx, String key) {
         List<Record> out = new ArrayList<>();
         if (key == null || key.isEmpty()) return out;

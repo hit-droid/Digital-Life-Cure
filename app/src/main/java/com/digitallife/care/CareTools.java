@@ -79,6 +79,7 @@ public class CareTools {
             arr.put(makeSchema("add_scheduled_task", "添加定时任务", new String[]{"name", "cronExpr", "workflowName"}));
             arr.put(makeSchema("list_scheduled_tasks", "列出所有定时任务"));
             arr.put(makeSchema("remove_scheduled_task", "删除定时任务", new String[]{"name"}));
+            arr.put(makeSchema("update_scheduled_task", "修改定时任务：改 cron 表达式（可选改名），保留触发目标与启用状态", new String[]{"name", "cronExpr"}));
         } catch (Exception ignored) {
         }
         return arr;
@@ -126,6 +127,7 @@ public class CareTools {
             case "name": return "名称（唯一标识）";
             case "steps": return "步骤数组 JSON，格式 [{\"tool\":\"工具名\",\"args\":{...}}]";
             case "cronExpr": return "cron 表达式，如 '0 0 * * *' 每天零点";
+            case "newName": return "改名时的新名称（可选；留空则不改名）";
             case "workflowName": return "已创建的工作流名称";
             case "action": return "动作名，如 Idle/TapBody/拍手/挥手";
             default: return name;
@@ -190,6 +192,8 @@ public class CareTools {
                     args.optString("name", ""), args.optString("cronExpr", ""), args.optString("workflowName", ""));
             case "list_scheduled_tasks": return listScheduledTasks();
             case "remove_scheduled_task": return removeScheduledTask(args.optString("name", ""));
+            case "update_scheduled_task": return updateScheduledTask(
+                    args.optString("name", ""), args.optString("cronExpr", ""), args.optString("newName", ""));
             default: return "未知工具: " + toolName;
         }
     }
@@ -1287,6 +1291,35 @@ public class CareTools {
         if (!schedulePrefs.contains(name)) return "未找到定时任务: " + name;
         schedulePrefs.edit().remove(name).apply();
         return "✅ 已删除定时任务: " + name;
+    }
+
+    /**
+     * 修改定时任务（v1.181.0）：改 {@code cronExpr}（可选 {@code newName} 改名）。
+     * 只动这两个字段，**保留** {@code kind} / {@code modelDir} / {@code comboName} /
+     * {@code workflowName} / {@code enabled} / {@code createdAt}——改计划不该把暂停的任务唤醒、
+     * 也不该把连招任务变成工作流任务。改名撞名直接拒绝（不动原记录）。
+     */
+    private String updateScheduledTask(String name, String cronExpr, String newName) {
+        if (name.isEmpty()) return "请指定任务名称。";
+        String raw = schedulePrefs.getString(name, null);
+        if (raw == null) return "未找到定时任务: " + name;
+        String target = (newName == null || newName.trim().isEmpty()) ? name : newName.trim();
+        if (!target.equals(name) && schedulePrefs.contains(target)) {
+            return "已存在同名定时任务「" + target + "」，未做修改。";
+        }
+        try {
+            JSONObject task = new JSONObject(raw);
+            task.put("name", target);
+            if (cronExpr != null && !cronExpr.trim().isEmpty()) task.put("cronExpr", cronExpr.trim());
+            task.put("updatedAt", System.currentTimeMillis());
+            android.content.SharedPreferences.Editor ed = schedulePrefs.edit();
+            if (!target.equals(name)) ed.remove(name);
+            ed.putString(target, task.toString()).apply();
+            return "✅ 已更新定时任务「" + target + "」\n  cron: " + task.optString("cronExpr", "?")
+                    + "\n  将按新计划触发。";
+        } catch (Exception e) {
+            return "更新定时任务失败: " + com.digitallife.ui.UiKit.safeMsg(e);
+        }
     }
 
     // ============ 工具方法 ============

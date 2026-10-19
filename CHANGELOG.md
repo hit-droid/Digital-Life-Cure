@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.181.0 (2026-10-18)
+
+承接 v1.178.0 / v1.168.0 的定时任务线。工作台里的定时任务此前能**新建 / 暂停 / 删除**，
+偏偏**改不了**——想把「每天 9 点」改成 10 点、或给任务换个名字，只能删了重建；重建后
+`care_runs` 里那条执行记录还挂在旧名字下，「上次运行」就此消失。本版补上「编辑」。纯增量：
+只加一个工具、一条记录迁移方法、一个表单入口，不改匹配引擎、不动渲染。
+
+### 工作台「编辑定时任务」
+
+- 定时任务行新增「**编辑**」：复用「＋ 新建定时任务」那套表单（标题「编辑定时任务」、
+  确定键「保存」），预填当前任务名与 cron；cron 预设 / 实时预览（人话 + 下次触发）一并可用。
+- 保存改任务名与 cron 表达式；**触发目标与被暂停状态原样保留**——改计划不会顺手把暂停的
+  任务唤醒，也不会把「定时连招」任务变成工作流任务（改目标仍走「删除后重建」，表单里注明）。
+
+### 新增 / 变更
+
+- `care/CareTools` 新增工具 **`update_scheduled_task`**（`name` + `cronExpr`，可选 `newName`）：
+  只改这两个字段，`kind` / `modelDir` / `comboName` / `workflowName` / `enabled` / `createdAt`
+  原样保留；改名撞名直接拒绝且**不改动任何一条**；任务不存在给可读提示。工作台与对话共用
+  同一条语义。
+- `care/RunLog` 新增 **`move(ctx, from, to)`**：改名时把执行记录整段迁移到新键，避免「改个名
+  上次运行就没了」；同键 / 空键 / 源无记录一律安全 no-op。
+- `care/AgentWorkbenchActivity`：`showScheduleForm` 抽出「标题 / 确定键 / 预填名 / 预填 cron」
+  参数供新建与编辑共用；新增 `editSchedule` / `saveEditedSchedule`；小节说明补「可编辑」。
+
+### 校验
+
+`tools/verify.sh` 全绿（单测 / lint 0 error / APK 通过）。`AgentWorkbenchToolsTest` 补 4 条锁住
+`update_scheduled_task` 契约（改 cron 保留 `enabled`+`kind`+目标、改名保留目标、撞名拒绝且两条
+都不动、任务不存在给出可读提示）；`RunLogStoreTest` 补 1 条锁 `move`（迁移并移除源键、同键 /
+源缺失安全）。`ScreenshotRenderTest` 的 `agent_workbench.png` 覆盖新增「编辑」入口。
+
 ## v1.180.0 (2026-10-18)
 
 路线图收官项「Agent 工具补齐」。此前「信息」类里有两个工具**只挂名不干活**：`get_calendar_today`

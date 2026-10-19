@@ -106,4 +106,68 @@ public class AgentWorkbenchToolsTest {
         assertFalse("拒绝时不应落盘",
                 ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE).contains("缺字段"));
     }
+
+    // ============ update_scheduled_task（v1.181.0 工作台「编辑」复用） ============
+
+    @Test
+    public void updateScheduledTaskChangesCronAndKeepsEnabledAndTarget() throws Exception {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE);
+        // 一条被暂停的「连招」任务
+        sp.edit().putString("早安连招", new JSONObject()
+                .put("cronExpr", "0 9 * * *")
+                .put("kind", "combo")
+                .put("modelDir", "chitose")
+                .put("comboName", "打招呼")
+                .put("enabled", false).toString()).commit();
+
+        String res = new CareTools(ctx).execute("update_scheduled_task",
+                new JSONObject().put("name", "早安连招").put("cronExpr", "0 10 * * *"));
+
+        assertTrue("应提示已更新，实际：" + res, res.contains("已更新"));
+        JSONObject saved = new JSONObject(sp.getString("早安连招", "{}"));
+        assertEquals("0 10 * * *", saved.optString("cronExpr"));
+        assertEquals("combo", saved.optString("kind"));          // 目标类型不变
+        assertEquals("打招呼", saved.optString("comboName"));     // 目标不变
+        assertEquals(false, saved.optBoolean("enabled", true));   // 改计划不该唤醒暂停的任务
+    }
+
+    @Test
+    public void updateScheduledTaskRenamesAndKeepsTarget() throws Exception {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE);
+        sp.edit().putString("旧名", new JSONObject()
+                .put("cronExpr", "0 9 * * *").put("workflowName", "晨间简报").toString()).commit();
+
+        String res = new CareTools(ctx).execute("update_scheduled_task",
+                new JSONObject().put("name", "旧名").put("cronExpr", "0 9 * * *").put("newName", "新名"));
+
+        assertTrue("应提示已更新，实际：" + res, res.contains("已更新"));
+        assertTrue("新名应存在", sp.contains("新名"));
+        assertFalse("旧名应移除", sp.contains("旧名"));
+        assertEquals("晨间简报",
+                new JSONObject(sp.getString("新名", "{}")).optString("workflowName"));
+    }
+
+    @Test
+    public void updateScheduledTaskRenameConflictIsRejected() throws Exception {
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE);
+        sp.edit()
+                .putString("A", new JSONObject().put("cronExpr", "0 9 * * *").put("workflowName", "w").toString())
+                .putString("B", new JSONObject().put("cronExpr", "0 8 * * *").put("workflowName", "w").toString())
+                .commit();
+
+        String res = new CareTools(ctx).execute("update_scheduled_task",
+                new JSONObject().put("name", "A").put("cronExpr", "0 7 * * *").put("newName", "B"));
+
+        assertTrue("撞名应被拒绝，实际：" + res, res.contains("已存在"));
+        // 两条都保持原样，不能被改坏
+        assertEquals("0 9 * * *", new JSONObject(sp.getString("A", "{}")).optString("cronExpr"));
+        assertEquals("0 8 * * *", new JSONObject(sp.getString("B", "{}")).optString("cronExpr"));
+    }
+
+    @Test
+    public void updateMissingScheduledTaskReportsNotFound() throws Exception {
+        String res = new CareTools(ctx).execute("update_scheduled_task",
+                new JSONObject().put("name", "不存在").put("cronExpr", "0 9 * * *"));
+        assertTrue("改不存在的应给出可读提示，实际：" + res, res.contains("未找到"));
+    }
 }

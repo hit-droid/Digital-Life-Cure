@@ -65,6 +65,12 @@ import java.util.Map;
  * 一条，落盘为 {@code kind:"combo"} 的定时任务（{@code modelDir + comboName}，无 kind 的旧数据
  * 仍按工作流走）。行里据此显示「播放连招」，「立即运行」改为就地播放（{@code ComboPlayer}），
  * 命中由 {@code CareAutomation} 判定。</p>
+ *
+ * <p>定时任务可编辑（v1.181.0）：此前能新建 / 暂停 / 删除，却**改不了**——把「每天 9 点」
+ * 改成 10 点只能删了重建，连「上次运行」记录也一并丢掉。本版每行加「编辑」：复用新建表单
+ * （预填任务名 / cron）改名与改 cron，保存走 {@code CareTools.update_scheduled_task}
+ * （**保留**触发目标 {@code kind}/{@code workflowName}/{@code comboName} 与 {@code enabled}，
+ * 不会顺手把暂停的任务唤醒），改名时经 {@link RunLog#move} 迁移执行记录。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -210,7 +216,7 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 定时任务 ============
 
     private View buildScheduleSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 周期触发工作流 / 播放连招 · 可新建 / 暂停 / 删除");
+        View header = UiKit.sectionTitle(this, body, "定时任务", "按 cron 周期触发工作流 / 播放连招 · 可新建 / 编辑 / 暂停 / 删除");
         LinearLayout panel = UiKit.panel(this, body);
 
         LinearLayout addRow = actionRow();
@@ -262,6 +268,8 @@ public class AgentWorkbenchActivity extends Activity {
                 chip(acts, "记录", R.color.operit_text_secondary)
                         .setOnClickListener(v -> showRunLog(
                                 RunLog.scheduleKey(taskName), "定时任务「" + taskName + "」记录"));
+                chip(acts, "编辑", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> editSchedule(r));
                 chip(acts, enabled ? "暂停" : "启用", R.color.operit_text_secondary)
                         .setOnClickListener(v -> toggleSchedule(taskName));
                 chip(acts, "删除", R.color.danger)
@@ -452,11 +460,20 @@ public class AgentWorkbenchActivity extends Activity {
 
     /** 表单：任务名 + cron（预设 / 自定义）+ 实时预览（人话 + 下次触发）；{@code targetLine} 提示触发对象 */
     private void showScheduleForm(String targetLine, ScheduleCreator creator) {
+        showScheduleForm("新建定时任务", "创建", targetLine, "", "0 9 * * *", creator);
+    }
+
+    /**
+     * 表单（新建 / 编辑共用）：{@code title} 标题、{@code positive} 确定键文案；编辑时预填
+     * {@code prefillName} / {@code prefillCron}，并复用同一套校验与实时预览。
+     */
+    private void showScheduleForm(String title, String positive, String targetLine,
+                                  String prefillName, String prefillCron, ScheduleCreator creator) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(18), dp(6), dp(18), dp(6));
 
-        EditText etName = UiKit.input(this, form, "任务名称（如：每日晨报）", "");
+        EditText etName = UiKit.input(this, form, "任务名称（如：每日晨报）", prefillName);
 
         TextView target = new TextView(this);
         target.setText(targetLine);
@@ -468,7 +485,7 @@ public class AgentWorkbenchActivity extends Activity {
         wlp.topMargin = dp(8);
         form.addView(target, wlp);
 
-        EditText etCron = UiKit.input(this, form, "cron（分 时 日 月 周）", "0 9 * * *");
+        EditText etCron = UiKit.input(this, form, "cron（分 时 日 月 周）", prefillCron);
 
         // cron 预设胶囊
         HorizontalScrollView hsv = new HorizontalScrollView(this);
@@ -514,10 +531,10 @@ public class AgentWorkbenchActivity extends Activity {
         wrap.addView(form);
 
         final AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("新建定时任务")
+                .setTitle(title)
                 .setView(wrap)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("创建", null)
+                .setPositiveButton(positive, null)
                 .create();
         // 自定义确定键：校验失败时留在弹窗内（默认行为会直接掉）
         dlg.setOnShowListener(x -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -613,6 +630,54 @@ public class AgentWorkbenchActivity extends Activity {
         } catch (Exception e) {
             toast("创建失败：" + UiKit.safeMsg(e));
         }
+    }
+
+    // ============ 编辑定时任务（v1.181.0） ============
+
+    /**
+     * 编辑一个已有定时任务：改任务名 / cron（触发目标与启用状态保留）。
+     * 此前只能删了重建——不仅麻烦，「上次运行」记录也一并丢掉。
+     */
+    private void editSchedule(String[] r) {
+        final String origName = r[0];
+        final String cron = r[1];
+        final String kind = r[3];
+        final String target = r[4];
+        final String modelDir = r[5];
+        String targetLine = "combo".equals(kind)
+                ? "目标：播放连招「" + target + "」" + (modelDir.isEmpty() ? "" : "（" + modelDir + "）")
+                        + "　（改目标请删除后重建）"
+                : "目标：工作流「" + target + "」　（改目标请删除后重建）";
+        showScheduleForm("编辑定时任务", "保存", targetLine, origName,
+                CronText.isValid(cron) ? cron : "0 9 * * *",
+                (newName, newCron) -> saveEditedSchedule(origName, newName, newCron));
+    }
+
+    /** 保存编辑：走 {@code update_scheduled_task}（保留目标 / 启用状态）；改名时迁移执行记录 */
+    private void saveEditedSchedule(String origName, String newName, String cron) {
+        new Thread(() -> {
+            String res;
+            try {
+                JSONObject args = new JSONObject();
+                args.put("name", origName);
+                args.put("cronExpr", cron);
+                args.put("newName", newName);
+                res = new CareTools(getApplicationContext()).execute("update_scheduled_task", args);
+            } catch (Exception e) {
+                res = "保存失败：" + UiKit.safeMsg(e);
+            }
+            // 改名成功才搬记录（搬早/搬错都会让新名「上次运行」错位）
+            if (!newName.equals(origName)
+                    && getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).contains(newName)) {
+                RunLog.move(getApplicationContext(),
+                        RunLog.scheduleKey(origName), RunLog.scheduleKey(newName));
+            }
+            final String out = res;
+            runOnUiThread(() -> {
+                toast(out);
+                refresh();
+            });
+        }).start();
     }
 
     /** 把绝对时间说成人话：今天 / 明天 / M月d日 + HH:mm */

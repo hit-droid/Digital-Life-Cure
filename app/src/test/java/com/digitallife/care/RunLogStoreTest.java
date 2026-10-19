@@ -85,6 +85,24 @@ public class RunLogStoreTest {
     }
 
     @Test
+    public void move_transfersHistoryAndRemovesSource() {
+        String from = RunLog.scheduleKey("旧名");
+        String to = RunLog.scheduleKey("新名");
+        RunLog.record(ctx(), from, true, "搞定", T0);
+
+        RunLog.move(ctx(), from, to);
+
+        assertEquals(1, RunLog.recent(ctx(), to).size());
+        assertEquals("搞定", RunLog.last(ctx(), to).summary);
+        assertNull("源键应被移除", RunLog.last(ctx(), from));
+
+        // 同键 / 空键 / 源无记录都不应出错、也不应改动目标
+        RunLog.move(ctx(), to, to);
+        RunLog.move(ctx(), RunLog.scheduleKey("无"), RunLog.scheduleKey("也无"));
+        assertEquals(1, RunLog.recent(ctx(), to).size());
+    }
+
+    @Test
     public void fromJson_skipsGarbage() throws Exception {
         JSONArray arr = new JSONArray()
                 .put("not-an-object")
