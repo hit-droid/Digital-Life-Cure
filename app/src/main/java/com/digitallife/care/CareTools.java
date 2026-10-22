@@ -76,6 +76,7 @@ public class CareTools {
             arr.put(makeSchema("list_workflows", "列出所有工作流"));
             arr.put(makeSchema("delete_workflow", "删除工作流", new String[]{"name"}));
             arr.put(makeSchema("run_workflow", "执行工作流", new String[]{"name"}));
+            arr.put(makeSchema("rename_workflow", "给工作流改名：同步更新指向它的定时任务，并迁移执行记录", new String[]{"name", "newName"}));
             arr.put(makeSchema("add_scheduled_task", "添加定时任务", new String[]{"name", "cronExpr", "workflowName"}));
             arr.put(makeSchema("list_scheduled_tasks", "列出所有定时任务"));
             arr.put(makeSchema("remove_scheduled_task", "删除定时任务", new String[]{"name"}));
@@ -127,7 +128,7 @@ public class CareTools {
             case "name": return "名称（唯一标识）";
             case "steps": return "步骤数组 JSON，格式 [{\"tool\":\"工具名\",\"args\":{...}}]";
             case "cronExpr": return "cron 表达式，如 '0 0 * * *' 每天零点";
-            case "newName": return "改名时的新名称（可选；留空则不改名）";
+            case "newName": return "新名称（改名为必填；改定时任务的计划时可省）";
             case "workflowName": return "已创建的工作流名称";
             case "action": return "动作名，如 Idle/TapBody/拍手/挥手";
             default: return name;
@@ -188,6 +189,8 @@ public class CareTools {
             case "list_workflows": return listWorkflows();
             case "delete_workflow": return deleteWorkflow(args.optString("name", ""));
             case "run_workflow": return runWorkflow(args.optString("name", ""));
+            case "rename_workflow": return renameWorkflow(
+                    args.optString("name", ""), args.optString("newName", ""));
             case "add_scheduled_task": return addScheduledTask(
                     args.optString("name", ""), args.optString("cronExpr", ""), args.optString("workflowName", ""));
             case "list_scheduled_tasks": return listScheduledTasks();
@@ -1223,6 +1226,61 @@ public class CareTools {
         if (!workflowPrefs.contains(name)) return "未找到工作流: " + name;
         workflowPrefs.edit().remove(name).apply();
         return "✅ 已删除工作流: " + name;
+    }
+
+    /**
+     * 工作流改名（v1.182.0）：把 {@code name} 改为 {@code newName}，并级联处理两处引用，
+     * 避免「改个名就静默断掉」——
+     * <ol>
+     *   <li>{@code care_schedules} 里所有指向旧名的**工作流**定时任务改指新名
+     *       （连招任务不引用工作流，保持原样）；</li>
+     *   <li>{@code care_runs} 的 {@code workflow|旧名} 执行记录整段迁移，保住「上次运行」。</li>
+     * </ol>
+     * 撞名直接拒绝且**不改动任何一条**；新名与原名相同视为未变。
+     * 改名之前只能「删除后重建」——重建后定时任务仍指向旧名、静默失败，执行记录也一并丢失。
+     */
+    private String renameWorkflow(String name, String newName) {
+        if (name.isEmpty()) return "请指定工作流名称。";
+        String target = newName == null ? "" : newName.trim();
+        if (target.isEmpty()) return "请指定新的工作流名称。";
+        String raw = workflowPrefs.getString(name, null);
+        if (raw == null) return "未找到工作流: " + name;
+        if (target.equals(name)) return "新名称与原名相同，未做修改。";
+        if (workflowPrefs.contains(target)) {
+            return "已存在同名工作流「" + target + "」，未做修改。";
+        }
+        try {
+            JSONObject wf = new JSONObject(raw);
+            wf.put("name", target);
+            wf.put("updatedAt", System.currentTimeMillis());
+            workflowPrefs.edit().putString(target, wf.toString()).remove(name).apply();
+            int moved = retargetSchedules(name, target);
+            RunLog.move(ctx, RunLog.workflowKey(name), RunLog.workflowKey(target));
+            return "✅ 已将工作流「" + name + "」改名为「" + target + "」"
+                    + (moved > 0 ? "\n  ↳ 已同步更新 " + moved + " 个定时任务" : "")
+                    + "\n  ↳ 执行记录已迁移。";
+        } catch (Exception e) {
+            return "工作流改名失败: " + com.digitallife.ui.UiKit.safeMsg(e);
+        }
+    }
+
+    /** 把指向 {@code from} 的工作流定时任务改指 {@code to}；返回实际改动条数 */
+    private int retargetSchedules(String from, String to) {
+        int moved = 0;
+        android.content.SharedPreferences.Editor ed = schedulePrefs.edit();
+        for (java.util.Map.Entry<String, ?> e : schedulePrefs.getAll().entrySet()) {
+            try {
+                JSONObject task = new JSONObject(String.valueOf(e.getValue()));
+                if (CareAutomation.isComboTask(task)) continue;
+                if (!from.equals(task.optString("workflowName", ""))) continue;
+                task.put("workflowName", to);
+                ed.putString(e.getKey(), task.toString());
+                moved++;
+            } catch (Exception ignored) {
+            }
+        }
+        if (moved > 0) ed.apply();
+        return moved;
     }
 
     private String runWorkflow(String name) throws Exception {

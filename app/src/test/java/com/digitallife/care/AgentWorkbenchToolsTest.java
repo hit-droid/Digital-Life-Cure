@@ -38,6 +38,7 @@ public class AgentWorkbenchToolsTest {
         ctx = ApplicationProvider.getApplicationContext();
         ctx.getSharedPreferences(PREFS_WORKFLOW, Context.MODE_PRIVATE).edit().clear().commit();
         ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE).edit().clear().commit();
+        ctx.getSharedPreferences("care_runs", Context.MODE_PRIVATE).edit().clear().commit();
     }
 
     @Test
@@ -169,5 +170,103 @@ public class AgentWorkbenchToolsTest {
         String res = new CareTools(ctx).execute("update_scheduled_task",
                 new JSONObject().put("name", "不存在").put("cronExpr", "0 9 * * *"));
         assertTrue("改不存在的应给出可读提示，实际：" + res, res.contains("未找到"));
+    }
+
+    // ============ rename_workflow（v1.182.0 工作台「改名」复用） ============
+
+    private void putWorkflow(String name, String... tools) throws Exception {
+        JSONArray steps = new JSONArray();
+        for (String t : tools) steps.put(new JSONObject().put("tool", t));
+        ctx.getSharedPreferences(PREFS_WORKFLOW, Context.MODE_PRIVATE).edit()
+                .putString(name, new JSONObject().put("name", name).put("steps", steps).toString())
+                .commit();
+    }
+
+    @Test
+    public void renameWorkflowMovesKeyAndKeepsSteps() throws Exception {
+        putWorkflow("晨间简报", "get_calendar_today", "play_motion");
+
+        String res = new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "晨间简报").put("newName", "每日晨报"));
+
+        assertTrue("应提示已改名，实际：" + res, res.contains("改名为"));
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_WORKFLOW, Context.MODE_PRIVATE);
+        assertFalse("旧名应移除", sp.contains("晨间简报"));
+        JSONObject wf = new JSONObject(sp.getString("每日晨报", "{}"));
+        assertEquals("每日晨报", wf.optString("name"));
+        assertEquals("步骤不能丢", 2, wf.optJSONArray("steps").length());
+    }
+
+    @Test
+    public void renameWorkflowCascadesToSchedulesAndKeepsTheirConfig() throws Exception {
+        putWorkflow("晨间简报", "get_calendar_today");
+        SharedPreferences sched = ctx.getSharedPreferences(PREFS_SCHEDULE, Context.MODE_PRIVATE);
+        sched.edit()
+                .putString("每天九点", new JSONObject()
+                        .put("cronExpr", "0 9 * * *").put("workflowName", "晨间简报")
+                        .put("enabled", false).toString())
+                // 连招任务不引用工作流，不能被误改
+                .putString("早安连招", new JSONObject()
+                        .put("cronExpr", "0 8 * * *").put("kind", "combo")
+                        .put("modelDir", "chitose").put("comboName", "打招呼")
+                        .put("workflowName", "晨间简报") // 即便脏数据撞名也不动
+                        .toString())
+                .commit();
+
+        String res = new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "晨间简报").put("newName", "每日晨报"));
+
+        assertTrue("应提示同步更新了定时任务，实际：" + res, res.contains("同步更新 1 个定时任务"));
+        JSONObject wfTask = new JSONObject(sched.getString("每天九点", "{}"));
+        assertEquals("每日晨报", wfTask.optString("workflowName"));
+        assertEquals("0 9 * * *", wfTask.optString("cronExpr"));
+        assertEquals("暂停状态不能被改名唤醒", false, wfTask.optBoolean("enabled", true));
+        assertEquals("连招任务应原样保留", "晨间简报",
+                new JSONObject(sched.getString("早安连招", "{}")).optString("workflowName"));
+    }
+
+    @Test
+    public void renameWorkflowMigratesRunLog() throws Exception {
+        putWorkflow("晨间简报", "get_calendar_today");
+        RunLog.record(ctx, RunLog.workflowKey("晨间简报"), true, "ok");
+
+        new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "晨间简报").put("newName", "每日晨报"));
+
+        assertTrue("新名下应能看到历史", RunLog.last(ctx, RunLog.workflowKey("每日晨报")) != null);
+        assertEquals("旧名下不应残留",
+                null, RunLog.last(ctx, RunLog.workflowKey("晨间简报")));
+    }
+
+    @Test
+    public void renameWorkflowConflictRejectedAndNothingChanges() throws Exception {
+        putWorkflow("A", "tool_x");
+        putWorkflow("B", "tool_y");
+
+        String res = new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "A").put("newName", "B"));
+
+        assertTrue("撞名应被拒绝，实际：" + res, res.contains("已存在"));
+        SharedPreferences sp = ctx.getSharedPreferences(PREFS_WORKFLOW, Context.MODE_PRIVATE);
+        assertTrue("A 应仍在", sp.contains("A"));
+        assertEquals("B 不能被覆盖", 1,
+                new JSONObject(sp.getString("B", "{}")).optJSONArray("steps").length());
+    }
+
+    @Test
+    public void renameMissingWorkflowReportsNotFound() throws Exception {
+        String res = new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "不存在").put("newName", "新名"));
+        assertTrue("改不存在的应给出可读提示，实际：" + res, res.contains("未找到"));
+    }
+
+    @Test
+    public void renameWorkflowRequiresNewName() throws Exception {
+        putWorkflow("晨间简报", "tool_x");
+        String res = new CareTools(ctx).execute("rename_workflow",
+                new JSONObject().put("name", "晨间简报").put("newName", "  "));
+        assertTrue("缺新名应给出可读提示，实际：" + res, res.contains("新的工作流名称"));
+        assertTrue("原工作流不能被删",
+                ctx.getSharedPreferences(PREFS_WORKFLOW, Context.MODE_PRIVATE).contains("晨间简报"));
     }
 }

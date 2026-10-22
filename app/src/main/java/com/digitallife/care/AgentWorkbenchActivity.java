@@ -71,6 +71,11 @@ import java.util.Map;
  * （预填任务名 / cron）改名与改 cron，保存走 {@code CareTools.update_scheduled_task}
  * （**保留**触发目标 {@code kind}/{@code workflowName}/{@code comboName} 与 {@code enabled}，
  * 不会顺手把暂停的任务唤醒），改名时经 {@link RunLog#move} 迁移执行记录。</p>
+ *
+ * <p>工作流可改名（v1.182.0）：此前只能「删除后重建」，而重建后指向旧名的定时任务会静默
+ * 失效（{@code run_workflow} 报「未找到」）、{@code care_runs} 里的执行记录也一并丢失。
+ * 本版工作流行加「改名」，走 {@code CareTools.rename_workflow}——同一事务里改 prefs 键、
+ * **级联更新**指向它的定时任务、迁移执行记录；撞名直接拒绝且不改动任何一条。</p>
  */
 public class AgentWorkbenchActivity extends Activity {
 
@@ -167,7 +172,7 @@ public class AgentWorkbenchActivity extends Activity {
     // ============ 工作流 ============
 
     private View buildWorkflowSection(LinearLayout body) {
-        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程 · 可查看 / 运行 / 删除");
+        View header = UiKit.sectionTitle(this, body, "工作流", "Agent 编排的多步骤流程 · 可查看 / 运行 / 改名 / 删除");
         LinearLayout panel = UiKit.panel(this, body);
         List<String[]> rows = readWorkflows();
         if (rows.isEmpty()) {
@@ -185,6 +190,8 @@ public class AgentWorkbenchActivity extends Activity {
                                 RunLog.workflowKey(wf), "工作流「" + wf + "」记录"));
                 chip(acts, "查看", R.color.operit_text_secondary)
                         .setOnClickListener(v -> showWorkflowSteps(wf));
+                chip(acts, "改名", R.color.operit_text_secondary)
+                        .setOnClickListener(v -> renameWorkflow(wf));
                 chip(acts, "删除", R.color.danger)
                         .setOnClickListener(v -> deleteWorkflow(wf));
                 box.addView(acts);
@@ -726,6 +733,60 @@ public class AgentWorkbenchActivity extends Activity {
                 .setMessage(text)
                 .setPositiveButton("关闭", null)
                 .show();
+    }
+
+    /**
+     * 工作流改名（v1.182.0）：此前只能「删除后重建」，重建后指向旧名的定时任务会静默失效、
+     * 执行记录也一并丢失。改名走 {@code CareTools.rename_workflow}——同一事务里级联更新
+     * 定时任务引用并迁移 {@code care_runs}。
+     */
+    private void renameWorkflow(String name) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(6), dp(18), dp(6));
+        EditText et = UiKit.input(this, form, "新的工作流名称", name);
+        form.addView(hint("改名会同步更新指向它的定时任务，并保留执行记录。若要换触发目标，请在对应定时任务里改。"));
+
+        final AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle("重命名工作流")
+                .setView(form)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", null)
+                .create();
+        dlg.setOnShowListener(x -> dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String target = et.getText().toString().trim();
+            if (target.isEmpty()) {
+                toast("请填写新的名称");
+                return;
+            }
+            if (target.equals(name)) {
+                dlg.dismiss();
+                return;
+            }
+            dlg.dismiss();
+            doRenameWorkflow(name, target);
+        }));
+        dlg.show();
+    }
+
+    /** 后台调用 {@code rename_workflow}，回主线程提示并刷新 */
+    private void doRenameWorkflow(String from, String to) {
+        new Thread(() -> {
+            String res;
+            try {
+                JSONObject args = new JSONObject();
+                args.put("name", from);
+                args.put("newName", to);
+                res = new CareTools(getApplicationContext()).execute("rename_workflow", args);
+            } catch (Exception e) {
+                res = "改名失败：" + UiKit.safeMsg(e);
+            }
+            final String out = res;
+            runOnUiThread(() -> {
+                toast(out);
+                refresh();
+            });
+        }).start();
     }
 
     private void deleteWorkflow(String name) {
