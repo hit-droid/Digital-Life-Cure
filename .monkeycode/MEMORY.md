@@ -386,3 +386,16 @@ Entries discovered by the Agent during task execution should follow this format:
   - v1.180.0 已发布：versionCode 183 / versionName 1.180.0、tag v1.180.0 @ ac55d6d、main @ ac55d6d。交付内容：「信息」类两个占位工具做成真的——新增纯逻辑 `tools/Agenda`（把今日提醒 `reminders` 与每日例行定时任务 `care_schedules` 合并；定时任务复用 `care/CronText.describe` 翻人话 + `nextFireMillis` 推算下次触发，标工作流/连招与是否暂停）与 `tools/RecentFiles`（扫描 `getExternalFilesDir`/`getFilesDir` + 公共 Downloads/Documents，按 mtime 倒序给文件名·大小·时间·路径，最多 10 条；跳过 `.` 隐藏/`.nomedia`/0 字节，不进入 `models`/`cache` 目录，`SCAN_CAP=500` 上限）。`BuiltinTools` 描述去掉「占位」。**不申请任何存储权限**：公共目录受限时 `listFiles()` 返 null 或抛异常一律静默跳过。单测 `InfoToolsTest`(11) 锁边界；增量 verify 747 单测 / 68 类、lint 0 error、APK(debug) 9,153,981B。
   - **`Tools.register` 的 required 数组一物两用**：既列 properties，又填 schema 的 `required`；所以**不能**用它声明「可选参数」（会被当必填且默认类型 string）。给工具加可选参数需改 `Tools.register`（核心引擎），本次刻意规避——`get_files_recent` 改为无参、默认 10 条。
   - 路线图「v1.177.0 连招导出/导入 → v1.178.0 连招接系统事件 → v1.179.0 主题设置 → v1.180.0 Agent 工具补齐」四项已全部落地并各自发版；v1.178.0 与 v1.179.0 的 tag/Release 均已在 `git pull` 时确认存在（CI 自动发布链路正常）。
+
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.182.0 工作流改名 + 容器工具链重装
+- Category: Operations & Deployment
+- Instructions:
+  - v1.182.0 已发布：versionCode 185 / versionName 1.182.0、Release id 420314245、APK app-release.apk 8,633,861B、tag v1.182.0 @ 366fc10、main @ 366fc10；CI run 39723457613 success（自动建 tag + Release，无需手工）。
+  - 交付内容：工作流改名。新增工具 `CareTools.rename_workflow`（`name` + `newName`）：改 prefs 键与内嵌 `name`、**级联** `care_schedules` 里所有**工作流**任务的 `workflowName` 改指新名（`cronExpr`/`enabled`/`kind`/目标原样保留；连招任务 `kind:"combo"` 不动）、迁移 `care_runs` 的 `workflow|旧名` 记录（`RunLog.move`）；撞名直接拒绝且不改动任何一条。工作台工作流行新增「改名」chip + 复用 `showScheduleForm` 式输入弹窗（`doRenameWorkflow` 后台跑工具后 `refresh()`）。`AgentWorkbenchToolsTest` 补 5 条锁契约。**此前改名的唯一路径是「删除后重建」，重建后定时任务仍指旧名 → 到点 `run_workflow` 报「未找到」，执行记录也一并丢失**。
+  - **本容器会被整体重置（不只是 /tmp）**：本次 `/usr/lib/jvm`、`/opt/android-sdk`、`/tmp/opencode` 全部消失。可用 JDK17 在 mise：`/root/.local/share/mise/installs/java/17.0.20+101`。已做 `ln -sfn <mise-jdk17> /usr/lib/jvm/java-17-openjdk-amd64`（`tools/verify.sh` 硬编码该路径，不建这个软链会直接报 JDK 缺失）。
+  - Android SDK 重装（代理可用，直连 dl.google.com 200）：下载 `commandlinetools-linux-11076708_latest.zip`（约 147MB）→ 解压到 `/opt/android-sdk/cmdline-tools/latest` → `yes | sdkmanager --licenses` → `sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.3.13750724" "cmake;3.22.1"`（总约 2.4GB，几分钟）。`local.properties` 已写 `sdk.dir=/opt/android-sdk`。
+  - 代理：`HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:18080`；Gradle wrapper **不继承** shell 代理，需 `export JAVA_OPTS="-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080"`。全量 verify 本轮：compile 8s / test 44s / lint 46s / apk 62s。
+  - 增量 verify 758 单测 / 68 类、lint 0 error、APK(debug) 9,157,760B。
+
