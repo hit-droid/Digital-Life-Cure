@@ -17,7 +17,10 @@ import java.util.Locale;
 public class TTSEngine implements TextToSpeech.OnInitListener {
 
     public interface Listener {
-        void onSpeakingStart();
+        /** 开始朗读一段文本；text 供口型驱动构建节奏时间线（v1.183.0） */
+        void onSpeakingStart(String text);
+        /** 队列追加了一段文本；口型时间线顺延，避免中途闭嘴（v1.183.0） */
+        void onSpeakingAppend(String text);
         void onSpeakingDone();
         void onError(String error);
         /** 初始化结束（无论成功与否），供上层决定语音降级策略 */
@@ -133,7 +136,7 @@ public class TTSEngine implements TextToSpeech.OnInitListener {
         }
         speaking = true;
         utteranceCount = 1;
-        if (listener != null) listener.onSpeakingStart();
+        if (listener != null) listener.onSpeakingStart(text);
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pet_tts_" + System.currentTimeMillis());
     }
 
@@ -146,6 +149,7 @@ public class TTSEngine implements TextToSpeech.OnInitListener {
         }
         utteranceCount++;
         tts.speak(text, TextToSpeech.QUEUE_ADD, null, "pet_tts_" + System.currentTimeMillis());
+        if (listener != null) listener.onSpeakingAppend(text);
     }
 
     /** 打断当前朗读 */

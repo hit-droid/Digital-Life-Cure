@@ -1,5 +1,43 @@
 # Changelog
 
+## v1.183.0 (2026-10-18)
+
+参考开源 Live2D 项目（pixi-live2d-display / live2d-widget / @chnak/l2d-widget）后补的一项真实
+缺口：**说话口型是「定格」的**。此前 TTS 一开口，`setSpeaking(true)` 就把
+`ParamMouthOpenY` 固定成 0.3，整段话纹丝不动；而 l2d-widget 这类开源挂件的做法是
+**用文本节奏驱动口型**——不需要音频振幅，按音节开合、标点闭嘴也能得到「在说话」的观感。
+
+### 文本节奏口型（新增 `render/LipSync`）
+
+- 纯逻辑、无 Android 依赖，把一段文本编译成音节时间线：
+  - 中文 / 假名 / 谚文 **一字一音节**；拉丁字母按**元音组**计音节（`hello` → 2）；数字一音节；
+  - 句末标点停顿 180ms、句中标点 110ms、空白 60ms（**句首标点不制造干等**）；
+  - 每个音节内部是「快速张嘴 → 保持 → 收嘴」梯形包络，相邻音节之间留 20ms 闭合间隙；
+  - 张幅由字符码确定性推导（0.24~0.88），同一句话每次口型一致、无需随机数；
+  - `append(text)` 支持流式追加：TTS 队列续播时时间线顺延，不会把已说过的口型从头重来。
+- `PetService` 以 40ms（≈25fps）节奏把 `valueAt(now)` 写进 `overlayView.setMouth`，
+  说完 / 被打断即闭嘴；`TTSEngine` 的监听接口补 `onSpeakingStart(text)` /
+  `onSpeakingAppend(text)`，把文本一路传到口型时间线。
+
+### 顺手修掉的相邻缺陷
+
+- **文字模式下嘴永久张开**：`Output.speak()` / `onSpeak()` 此前无条件
+  `setSpeaking(true)`，而关闭语音时没有任何回调会调 `setSpeaking(false)`，于是
+  `ParamMouthOpenY` 停在 0.3 不再归零。现在说话态只在 TTS 真正要发声时开启，
+  文字模式保持闭嘴。
+- `PetOverlayView.setSpeaking(true)` 不再写死 0.3：张嘴交给口型时间线，避免开头
+  一帧 0.3 → 0 → 再张开的抽搐。
+- **最近文件在 cap 较小时返回的不是最新文件**（`tools/RecentFiles.collect`）：原先把
+  `cap` 当成扫描阶段的提前退出条件，`walk` 扫到 cap 个就停，而 `listFiles()` 顺序任意，
+  排序后截断拿到的可能是任意文件。改为「先扫够候选（≥500）→ 按 mtime 倒序 → 再截到 cap」，
+  `InfoToolsTest.collect_sortsNewestFirstAndRespectsCap` 不再依赖文件系统顺序。
+
+### 校验
+
+`tools/verify.sh` 全绿（766 单测 / 69 类、lint 0 error、APK 9,160,868B）。新增 `render/LipSyncTest`（8 条）锁住：空文本闭嘴、中文一字一音节、
+标点处确实闭嘴、英文按元音组切分、流式追加顺延不重启、任意时刻口型落在 0~1 且结果确定、
+未启动不误判播完、开头标点不延误第一个音节。
+
 ## v1.182.0 (2026-10-18)
 
 承接 v1.181.0 的工作流 / 定时任务管理线。工作台里的工作流此前能**查看 / 运行 / 删除**，

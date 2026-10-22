@@ -92,14 +92,21 @@ public final class RecentFiles {
     static List<File> collect(List<File> dirs, int cap) {
         List<File> out = new ArrayList<>();
         if (dirs == null || cap <= 0) return out;
+        // cap 是「返回条数」，不是「扫描条数」：先扫够候选再排序截断。
+        // 此前把 cap 当作 walk 的提前退出条件，cap 较小时只会看到 listFiles() 的前几个
+        // （文件系统顺序任意），排序后拿到的并不是真正的最近文件。
+        int scanBudget = Math.max(cap, SCAN_CAP);
         for (File d : dirs) {
-            if (d == null || out.size() >= cap) continue;
+            if (d == null || out.size() >= scanBudget) continue;
             try {
-                walk(d, MAX_DEPTH, out, cap);
+                walk(d, MAX_DEPTH, out, scanBudget);
             } catch (Exception ignored) {
             }
         }
         Collections.sort(out, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        if (out.size() > cap) {
+            return new ArrayList<>(out.subList(0, cap));
+        }
         return out;
     }
 

@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
@@ -45,6 +46,7 @@ import com.digitallife.ui.pet.TouchBindings;
 import com.digitallife.render.Live2DNative;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.render.ContinuousMotionEngine;
+import com.digitallife.render.LipSync;
 import com.digitallife.speech.STTEngine;
 import com.digitallife.speech.TTSEngine;
 
@@ -67,6 +69,10 @@ public class PetService extends Service implements AICore.Output,
     private static final int NOTIFY_ID = 1001;
     private static final String TAG = "PetService";
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
+    /** v1.183.0：说话口型节奏。TTS 给不出音频振幅，按文本音节时间线驱动 ParamMouthOpenY */
+    private volatile LipSync lipSync;
+    /** 口型刷新间隔：40ms ≈ 25fps，足够跟住音节又不至于每帧抢 GL 线程 */
+    private static final long MOUTH_TICK_MS = 40L;
     private com.digitallife.brain.ProactiveEngine proactiveEngine; // v1.24.0
     private long lastProactiveTickMs = 0;
 
@@ -861,7 +867,8 @@ public class PetService extends Service implements AICore.Output,
 
         @Override
         public void speak(String text) {
-            if (overlayView != null) overlayView.setSpeaking(true);
+            // 只有真的会发声才进入说话态；文字模式不该让嘴一直张着（v1.183.0 修）
+            // 说话态与口型由 TTSEngine.onSpeakingStart(text) 统一开启
             if (voiceEnabled && ttsAvailable && tts != null) tts.speak(text);
         }
 
@@ -915,7 +922,7 @@ public class PetService extends Service implements AICore.Output,
 
     @Override
     public void onSpeak(String text) {
-        if (overlayView != null) overlayView.setSpeaking(true);
+        // 同上：说话态交给 TTS 回调，避免文字模式下嘴永久张开
         if (voiceEnabled && ttsAvailable && tts != null) tts.speak(text);
     }
 
@@ -971,19 +978,63 @@ public class PetService extends Service implements AICore.Output,
     // ================= TTS =================
 
     @Override
-    public void onSpeakingStart() {
-        if (overlayView != null) {
-            overlayView.setSpeaking(true);
-            overlayView.setMouth(0.3f);
-        }
+    public void onSpeakingStart(String text) {
+        if (overlayView == null) return;
+        overlayView.setSpeaking(true);
+        startLipSync(text);
     }
+
+    @Override
+    public void onSpeakingAppend(String text) {
+        // TTS 队列续播：时间线顺延，不打断当前口型
+        if (lipSync != null) lipSync.append(text);
+    }
+
+    /**
+     * 启动文本驱动的口型时间线（v1.183.0）。
+     * 此前说话时嘴恒定张开 0.3，整段话纹丝不动；现在按音节开合、标点处停顿，
+     * 灵感来自开源 Live2D 挂件的「用文本节奏驱动 ParamMouthOpenY」。
+     */
+    private void startLipSync(String text) {
+        mainHandler.removeCallbacks(mouthTick);
+        lipSync = LipSync.forText(text).start(SystemClock.uptimeMillis());
+        if (lipSync.durationMs() <= 0L) {
+            lipSync = null;
+            overlayView.setMouth(0f);
+            return;
+        }
+        mainHandler.post(mouthTick);
+    }
+
+    /** 停止口型并闭嘴 */
+    private void stopLipSync() {
+        mainHandler.removeCallbacks(mouthTick);
+        lipSync = null;
+        if (overlayView != null) overlayView.setMouth(0f);
+    }
+
+    private final Runnable mouthTick = new Runnable() {
+        @Override
+        public void run() {
+            final LipSync ls = lipSync;
+            if (ls == null || overlayView == null) return;
+            final long now = SystemClock.uptimeMillis();
+            if (ls.isFinished(now)) {
+                lipSync = null;
+                overlayView.setMouth(0f);
+                return;
+            }
+            overlayView.setMouth(ls.valueAt(now));
+            mainHandler.postDelayed(this, MOUTH_TICK_MS);
+        }
+    };
 
     @Override
     public void onSpeakingDone() {
         if (overlayView != null) {
             overlayView.setSpeaking(false);
-            overlayView.setMouth(0f);
         }
+        stopLipSync();
         // 仅语音可用时自动续听；TTS 缺失时降级为文字模式，避免反复触发无意义的监听
         if (voiceEnabled && ttsAvailable && stt != null && !listening) {
             stt.startListening();

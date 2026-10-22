@@ -759,8 +759,9 @@ public class PetOverlayView extends FrameLayout {
 
     public void setSpeaking(boolean s) {
         pose.speaking = s;
-        if (live2DReady) {
-            live2DView.setMouth(s ? 0.3f : 0f);
+        if (live2DReady && !s) {
+            // 张嘴不再固定 0.3：口型由 PetService 的文本节奏时间线逐帧驱动（v1.183.0）
+            live2DView.setMouth(0f);
         }
     }
 
