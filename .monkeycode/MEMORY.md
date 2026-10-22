@@ -399,3 +399,15 @@ Entries discovered by the Agent during task execution should follow this format:
   - 代理：`HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:18080`；Gradle wrapper **不继承** shell 代理，需 `export JAVA_OPTS="-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080"`。全量 verify 本轮：compile 8s / test 44s / lint 46s / apk 62s。
   - 增量 verify 758 单测 / 68 类、lint 0 error、APK(debug) 9,157,760B。
 
+[Project Knowledge Summary]
+- Date: 2026-10-18
+- Context: Discovered by Agent while performing v1.183.0 文本节奏口型（参考开源 Live2D 项目）
+- Category: Operations & Deployment
+- Instructions:
+  - v1.183.0 已发布：versionCode 186 / versionName 1.183.0、Release id 420580441、APK app-release.apk 8,636,263B、tag v1.183.0 @ de86289、main @ de86289；CI run 39762511534 success。
+  - **开源 Live2D 参考结论**：`pixi-live2d-display` 的卖点是「自动聚焦 + hit-testing + 更强的动作保留逻辑」；`live2d-widget` 卖点是语录/换模型/截图；`@chnak/l2d-widget` 有一个我们缺的能力——**用文本节奏驱动 `ParamMouthOpenY`**（逐字开合，不需要音频分析）。官方 `CubismMotionSync`（音频驱动口型/眨眼）需要额外 MotionSyncCore 原生库，本仓库未内置，暂不可做。原生 `HitTest`（Head/Body）虽已存在（`LAppModel::HitTest`），但悬浮窗 `PetOverlayView.onInterceptTouchEvent` 吞掉了 ACTION_DOWN，子 GLSurfaceView 只收到 CANCEL，所以桌面宠物的触摸分区仍是 Java 近似（`PetTouchReaction` 固定 38% 高度线）——若要做「模型自适应命中」，需加 `nativeHitTest` 并从 GL 线程同步取结果（有超时回退），属于中等风险的下一步。
+  - 交付内容：新增纯逻辑 `render/LipSync`（文本 → 音节时间线：中文/假名/谚文一字一音节；英文按元音组；标点停顿 180/110/60ms；音节内梯形包络；张幅按字符码确定性推导；`append` 支持流式顺延）。`TTSEngine.Listener` 改为 `onSpeakingStart(String)` + 新增 `onSpeakingAppend(String)`；`PetService` 40ms tick 写 `overlayView.setMouth`。新增 `LipSyncTest` 8 条。
+  - **顺带修的真实缺陷（都值得记住）**：① 文字模式（关闭语音）下 `Output.speak()`/`onSpeak()` 无条件 `setSpeaking(true)`，而没有任何回调会 `setSpeaking(false)` → 嘴永久停在 0.3；② `tools/RecentFiles.collect` 把 `cap` 当「扫描条数」提前退出，`listFiles()` 顺序任意导致小 cap 时返回的不是最新文件（`InfoToolsTest.collect_sortsNewestFirstAndRespectsCap` 因此偶发失败），改为「先扫够候选（≥SCAN_CAP=500）→ 排序 → 截到 cap」。
+  - 本轮 verify：766 单测 / 69 类、lint 0 error、APK(debug) 9,160,868B。
+
+
