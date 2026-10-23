@@ -410,4 +410,16 @@ Entries discovered by the Agent during task execution should follow this format:
   - **顺带修的真实缺陷（都值得记住）**：① 文字模式（关闭语音）下 `Output.speak()`/`onSpeak()` 无条件 `setSpeaking(true)`，而没有任何回调会 `setSpeaking(false)` → 嘴永久停在 0.3；② `tools/RecentFiles.collect` 把 `cap` 当「扫描条数」提前退出，`listFiles()` 顺序任意导致小 cap 时返回的不是最新文件（`InfoToolsTest.collect_sortsNewestFirstAndRespectsCap` 因此偶发失败），改为「先扫够候选（≥SCAN_CAP=500）→ 排序 → 截到 cap」。
   - 本轮 verify：766 单测 / 69 类、lint 0 error、APK(debug) 9,160,868B。
 
+[Project Knowledge Summary]
+- Date: 2026-10-23
+- Context: Discovered by Agent while performing v1.184.0 触摸分区改为原生 HitArea 优先（参考开源 Live2D 项目）
+- Category: Operations & Deployment
+- Instructions:
+  - v1.184.0 已发布：versionCode 187 / versionName 1.184.0、Release id 421708502、APK app-release.apk 8,638,282B、tag v1.184.0 @ c6e06e7、main @ c6e06e7；CI run 39938545554 success（自动建 tag + Release）。
+  - 交付内容：桌宠触摸分区从「固定 38% 高度线」升级为**原生 HitArea 优先、Java 近似兜底**。新增 JNI `nativeHitTestZone`（0 无 / 1 头 / 2 身，无副作用）：C++ `LAppLive2DManager::HitTestZone` 复用 `LAppModel::HitTest`（不播动作、不换表情）；`LAppView::HitTestZone` 走与 `OnTouchesEnded` **完全相同**的 `_deviceToScreen` + `viewMatrix` 逆变换（`TransformViewX/Y`），保证「点哪判哪」。Java 新增纯逻辑 `render/HitZoneCache`（序号 + 有效期 1500ms，线程安全）：`Live2DGLView.requestHitZone` 在 ACTION_DOWN 时 `queueEvent` 异步投递（**不阻塞 UI 线程**），`takeHitZone` 在抬手判定点击时按同一序号取回；`PetOverlayView.handleModelTap` 原生优先，只有「没算完 / 过期 / 模型无对应 HitArea」时回落 `PetTouchReaction.zoneFor`（`TouchBindings` 与气泡/情绪逻辑不变）。顺带 `Live2DGLView.ready` 改 `volatile`（GL 线程写、UI 线程读）。
+  - **为什么之前原生判定是死路**：`PetOverlayView.onInterceptTouchEvent` 在 DOWN 命中人偶带就返回 true（拖拽/长按必需），子 `Live2DGLView` 只收到 CANCEL，`nativeOnTouchesBegan` 从不触发。不要再试图「让子 View 收 DOWN」来修，会破坏拖拽；正确做法就是本版的按下异步查询 + 抬手取回。
+  - **为什么按序号而不是按坐标/时间匹配**：一次手势一次 `begin()`，抬手用同一序号取；中间有新按下（新序号）时旧序号自然取不到 → 回落。GL 线程繁忙时同样取不到 → 回落，行为确定。原生「0=未命中」与「-1=没有结果」语义分开（0 也回落，但调用方知道查询跑过）。
+  - 新增 `HitZoneCacheTest` 10 条锁契约；本轮 verify：776 单测 / 70 类、lint 0 error、APK(debug) 9,162,867B；增量耗时 compile 10s / test 45s / lint 46s / apk 61s。
+  - 容器重置后工具链已按 v1.182.0 记录重装（软链 JDK17 + `/opt/android-sdk` 含 `ndk;27.3.13750724`、`cmake;3.22.1`）；原生命中改动必须跑 `assembleDebug`（会编 C++），只跑 `compileDebugJavaWithJavac` 发现不了 JNI/CMake 错误。
+
 
