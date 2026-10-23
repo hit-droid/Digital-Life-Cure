@@ -18,6 +18,7 @@
 #include <android/log.h>
 #include "JniBridgeC.hpp"
 #include "LAppDelegate.hpp"
+#include "LAppView.hpp"
 #include "LAppPal.hpp"
 #include "LAppLive2DManager.hpp"
 #include "LAppDefine.hpp"
@@ -304,6 +305,19 @@ extern "C"
     Java_com_digitallife_render_Live2DNative_nativeOnTouchesMoved(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
     {
         LAppDelegate::GetInstance()->OnTouchMoved(pointX, pointY);
+    }
+
+    // 命中区分の問い合わせ（副作用なし）。必ず GL スレッドから呼ぶこと
+    // （viewMatrix / モデル頂点は描画フレームと同一スレッドで扱う）。
+    JNIEXPORT jint JNICALL
+    Java_com_digitallife_render_Live2DNative_nativeHitTestZone(JNIEnv *env, jclass type, jfloat pointX, jfloat pointY)
+    {
+        LAppView* view = LAppDelegate::GetInstance()->GetView();
+        if (view == NULL)
+        {
+            return 0;
+        }
+        return view->HitTestZone(pointX, pointY);
     }
 
     JNIEXPORT void JNICALL

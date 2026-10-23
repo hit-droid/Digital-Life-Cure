@@ -19,6 +19,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.digitallife.R;
+import com.digitallife.render.HitZoneCache;
 import com.digitallife.render.Pose;
 import com.digitallife.render.Live2DGLView;
 import com.digitallife.ui.pet.PetStatusText;
@@ -68,6 +69,9 @@ public class PetOverlayView extends FrameLayout {
 
     /** 可交互人偶区域（模型带）：水平居中 60%、垂直 20%~100%；区域外触摸透传给下层应用 */
     private final android.graphics.Rect modelRect = new android.graphics.Rect();
+
+    /** v1.184.0：本次按下投递的原生命中查询序号；抬手判定点击时取回结果 */
+    private int pendingHitSeq = HitZoneCache.NO_RESULT;
 
     public PetOverlayView(Context context, Listener l) {
         super(context);
@@ -618,10 +622,20 @@ public class PetOverlayView extends FrameLayout {
 
     private void handleModelTap(float x, float y) {
         if (!live2DReady) return;
-        // v1.137.0（Issue #37）：触摸分区。分区来源是 Java 近似（原生 HitArea 在悬浮窗里收不到触摸，
-        // 见 PetTouchReaction 注释），按人偶区域纵向位置切「上 38% 头 / 其余身子」。
-        final String zone = PetTouchReaction.zoneFor(x, y,
-                modelRect.left, modelRect.top, modelRect.right, modelRect.bottom);
+        // v1.184.0：优先用原生命中结果（按下时已投递到 GL 线程，见 onInterceptTouchEvent）。
+        // 未算完 / 过期 / 模型没有对应 HitArea 时，回落到固定比例分区。
+        final int nativeZone = live2DView.takeHitZone(pendingHitSeq);
+        pendingHitSeq = HitZoneCache.NO_RESULT;
+        final String zone;
+        if (nativeZone == Live2DGLView.HIT_HEAD) {
+            zone = PetTouchReaction.ZONE_HEAD;
+        } else if (nativeZone == Live2DGLView.HIT_BODY) {
+            zone = PetTouchReaction.ZONE_BODY;
+        } else {
+            // v1.137.0（Issue #37）：Java 近似——按人偶区域纵向位置切「上 38% 头 / 其余身子」。
+            zone = PetTouchReaction.zoneFor(x, y,
+                    modelRect.left, modelRect.top, modelRect.right, modelRect.bottom);
+        }
         final PetTouchReaction.Reaction reaction = PetTouchReaction.reactionFor(zone);
         // v1.176.0：触摸事件 → 表情/动作 用户绑定（绑定优先、为空回落默认、哨兵 NONE 明确不绑）。
         // 只覆盖视觉；气泡与情绪增量仍由 PetService 按默认反应处理。
@@ -943,6 +957,8 @@ public class PetOverlayView extends FrameLayout {
             if (!modelRect.contains((int) ev.getX(), (int) ev.getY())) {
                 return false;
             }
+            // v1.184.0：拦截前先投递一次原生命中查询（异步、不阻塞），抬手判定时取回。
+            pendingHitSeq = live2DView.requestHitZone(ev.getX(), ev.getY());
         }
         return true;
     }

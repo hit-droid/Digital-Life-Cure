@@ -185,6 +185,15 @@ void LAppView::OnTouchesEnded(float pointX, float pointY)
     }
 }
 
+csmInt32 LAppView::HitTestZone(float pointX, float pointY) const
+{
+    // OnTouchesEnded と同じ変換（_deviceToScreen → _viewMatrix 逆変換）。
+    // ここだけ別経路にすると「点哪打哪」がずれる。
+    const float x = this->TransformViewX(pointX);
+    const float y = this->TransformViewY(pointY);
+    return LAppLive2DManager::GetInstance()->HitTestZone(x, y);
+}
+
 float LAppView::TransformViewX(float deviceX) const
 {
     float screenX = _deviceToScreen->TransformX(deviceX); // 論理座標変換した座標を取得。

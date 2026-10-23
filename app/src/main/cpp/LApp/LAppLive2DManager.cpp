@@ -206,6 +206,29 @@ void LAppLive2DManager::OnDrag(csmFloat32 x, csmFloat32 y) const
     }
 }
 
+csmInt32 LAppLive2DManager::HitTestZone(csmFloat32 x, csmFloat32 y)
+{
+    // 純粋な問い合わせ。OnTap と違い表情・モーションには一切触れない
+    // （呼び出し側はタップ判定前に「頭か体か」だけを知りたい）。
+    for (csmUint32 i = 0; i < _models.GetSize(); i++)
+    {
+        LAppModel* model = _models[i];
+        if (model == NULL || model->GetModel() == NULL || model->GetModelSetting() == NULL)
+        {
+            continue;
+        }
+        if (model->HitTest(HitAreaNameHead, x, y))
+        {
+            return 1;
+        }
+        if (model->HitTest(HitAreaNameBody, x, y))
+        {
+            return 2;
+        }
+    }
+    return 0;
+}
+
 void LAppLive2DManager::OnTap(csmFloat32 x, csmFloat32 y)
 {
     if (DebugLogEnable)

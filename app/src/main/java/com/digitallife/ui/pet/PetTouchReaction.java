@@ -9,19 +9,20 @@ import java.util.Set;
  * 桌宠触摸分区反应（Issue #37，纯逻辑，JVM 可测）。
  *
  * <p>分区取值为 {@code "Head"} / {@code "Body"} / {@code ""}，与 Cubism 的
- * {@code HitAreaNameHead} / {@code HitAreaNameBody} 对齐——将来若把原生
- * {@code LAppModel::HitTest} 的结果直出到 Java，这里不用改就接得上。</p>
+ * {@code HitAreaNameHead} / {@code HitAreaNameBody} 对齐——原生
+ * {@code LAppModel::HitTest} 的结果直出到 Java 后，这里不需要任何转换就接得上。</p>
  *
- * <h3>为什么是 Java 近似，而不是原生 HitArea</h3>
+ * <h3>原生命中优先，Java 近似兜底（v1.184.0）</h3>
  * <p>{@code ui/PetOverlayView.onInterceptTouchEvent} 在 ACTION_DOWN 命中人偶带时就把事件拦截了，
  * 子 View {@code render/Live2DGLView} 只会收到 ACTION_CANCEL，{@code nativeOnTouchesBegan}
- * 从不触发，原生 {@code HitTest} 这条线在悬浮窗里是死的；跨线程去 GL 线程读 viewMatrix
- * 做命中又会引入竞态。因此这里按触摸点在人偶区域内的<b>纵向位置</b>切分：
- * 上 {@link #HEAD_RATIO} 视为头，其余视为身体。</p>
+ * 从不触发。v1.184.0 起改为按下时把坐标异步投递到 GL 线程做一次
+ * {@code nativeHitTestZone}（结果经 {@code render/HitZoneCache} 回传，不阻塞 UI），
+ * 抬手判定点击时优先采用原生 HitArea 结果；只有查询未算完 / 过期 / 模型未定义对应
+ * HitArea 时，才回落到本类的固定比例切分。</p>
  *
- * <p><b>已知误差</b>：不同模型头身比例、缩放不同，这条切分线是固定值，不随模型自适应；
- * 宁可偏「头」也不偏「身」——摸头是桌宠最该有反馈的动作。若日后原生直出命中结果，
- * 替换 {@link #zoneFor} 一个方法即可，{@link #reactionFor} 与接线都不用动。</p>
+ * <p><b>兜底的已知误差</b>：不同模型头身比例、缩放不同，{@link #HEAD_RATIO} 是固定值，
+ * 不随模型自适应；宁可偏「头」也不偏「身」——摸头是桌宠最该有反馈的动作。
+ * 原生结果缺失时才走到这里，所以误差只影响没有 HitArea 的模型。</p>
  */
 public final class PetTouchReaction {
 

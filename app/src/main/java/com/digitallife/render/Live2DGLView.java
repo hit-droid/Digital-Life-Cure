@@ -24,7 +24,8 @@ public class Live2DGLView extends GLSurfaceView {
     private final PhysicalController physics = new PhysicalController();
     private final ContinuousMotionEngine motionEngine = new ContinuousMotionEngine();
     private Listener listener;
-    private boolean ready = false;
+    /** GL 线程写、UI 线程读（v1.184.0 命中查询要先看是否就绪），必须 volatile */
+    private volatile boolean ready = false;
 
     /** 可交互触摸区域（相对本 View 坐标）；区域外触摸不消费、不触发模型交互，用于悬浮窗触摸穿透 */
     private android.graphics.Rect touchRegion;
@@ -95,6 +96,52 @@ public class Live2DGLView extends GLSurfaceView {
     /** 同步查询是否有非待机动作在播放（直接从主线程读 native 原子标志） */
     public boolean isMotionPlaying() {
         return Live2DNative.nativeIsMotionPlaying();
+    }
+
+    // ==================== v1.184.0：原生 HitArea 命中查询 ====================
+
+    /** 命中分区码，与 {@code nativeHitTestZone} 返回值一一对应 */
+    public static final int HIT_NONE = 0;
+    public static final int HIT_HEAD = 1;
+    public static final int HIT_BODY = 2;
+
+    private final HitZoneCache hitZoneCache = new HitZoneCache();
+
+    /**
+     * 发起一次命中查询（非阻塞）：坐标投递到 GL 线程，结果写入缓存。
+     * <p>供悬浮窗在 {@code ACTION_DOWN} 时调用，抬手判定点击时用同一序号
+     * {@link #takeHitZone(int)} 取回。绝不阻塞 UI 线程。</p>
+     *
+     * @return 本次序号；未就绪 / native 不可用时返回 {@link HitZoneCache#NO_RESULT}
+     */
+    public int requestHitZone(float x, float y) {
+        if (!ready || !Live2DNative.isLoaded()) return HitZoneCache.NO_RESULT;
+        final int seq = hitZoneCache.begin();
+        try {
+            queueEvent(() -> {
+                int zone;
+                try {
+                    zone = Live2DNative.nativeHitTestZone(x, y);
+                } catch (Throwable t) {
+                    zone = HIT_NONE;
+                }
+                hitZoneCache.store(seq, zone, android.os.SystemClock.uptimeMillis());
+            });
+        } catch (Throwable t) {
+            return HitZoneCache.NO_RESULT;
+        }
+        return seq;
+    }
+
+    /**
+     * 取回某次查询的命中分区。
+     *
+     * @return {@link #HIT_HEAD} / {@link #HIT_BODY} / {@link #HIT_NONE}；
+     *         没算完 / 已过期 / 序号不符时返回 {@link HitZoneCache#NO_RESULT}（调用方回落）
+     */
+    public int takeHitZone(int seq) {
+        return hitZoneCache.take(seq, android.os.SystemClock.uptimeMillis(),
+                HitZoneCache.DEFAULT_MAX_AGE_MS);
     }
 
     /**

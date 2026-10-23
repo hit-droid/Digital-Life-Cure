@@ -90,6 +90,18 @@ public:
     void OnTouchesEnded(float pointX, float pointY);
 
     /**
+    * @brief 指定座標のヒットエリアを問い合わせる（タップ副作用なし）。
+    *
+    * <p>OnTouchesEnded と同一の viewMatrix 逆変換を通すので、返る区分は
+    * 実際に OnTap が使うものと一致する。モデル未生成時は 0。</p>
+    *
+    * @param[in]  pointX  デバイスX座標
+    * @param[in]  pointY  デバイスY座標
+    * @return 1: 頭 / 2: 体 / 0: どちらでもない
+    */
+    Csm::csmInt32 HitTestZone(float pointX, float pointY) const;
+
+    /**
     * @brief X座標をView座標に変換する。
     *
     * @param[in]       deviceX            デバイスX座標

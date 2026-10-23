@@ -67,6 +67,15 @@ public:
     void OnTap(Csm::csmFloat32 x, Csm::csmFloat32 y);
 
     /**
+    * @brief   指定座標のヒットエリアを問い合わせる（副作用なし）。
+    *
+    * @param[in]   x   画面のX座標
+    * @param[in]   y   画面のY座標
+    * @return      1: 頭 / 2: 体 / 0: どちらでもない
+    */
+    Csm::csmInt32 HitTestZone(Csm::csmFloat32 x, Csm::csmFloat32 y);
+
+    /**
     * @brief   画面を更新するときの処理
     *          モデルの更新処理および描画処理を行う
     */

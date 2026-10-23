@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.184.0 (2026-10-23)
+
+参考开源 Live2D 项目（pixi-live2d-display 的 hit-testing、live2d-widget 的命中反馈）后，
+把桌宠触摸分区从「固定 38% 高度线」升级为**原生 HitArea 优先、Java 近似兜底**。
+
+### 背景
+
+悬浮窗 `PetOverlayView.onInterceptTouchEvent` 在 `ACTION_DOWN` 命中人偶带时就把事件
+拦截了（否则拖拽/长按做不了），子 `Live2DGLView` 只能收到 `ACTION_CANCEL`，原生
+`OnTap` → `LAppModel::HitTest("Head"/"Body")` 这条线在桌宠上从未真正跑过；此前只能用
+`PetTouchReaction` 的固定 38% 高度线近似，不同模型头身比例不同就会摸错地方。
+
+### 原生命中查询（新增 JNI `nativeHitTestZone`）
+
+- C++：`LAppLive2DManager::HitTestZone` 复用 `LAppModel::HitTest` 做**无副作用**查询
+  （不播动作、不换表情）；`LAppView::HitTestZone` 走与 `OnTouchesEnded` **完全相同**的
+  `_deviceToScreen` + `viewMatrix` 逆变换，保证「点哪判哪」；`nativeHitTestZone` 固定从
+  GL 线程调用。
+- Java：新增纯逻辑 `render/HitZoneCache`（序号 + 有效期，线程安全、JVM 可测）。
+  `Live2DGLView.requestHitZone` 在按下时异步投递查询（**不阻塞 UI 线程**），
+  `takeHitZone` 在抬手判定点击时按同一序号取回。
+- `PetOverlayView`：DOWN 时发起查询；`handleModelTap` 优先采用原生结果，只有
+  「没算完 / 已过期 / 模型没有对应 HitArea」时才回落到 `PetTouchReaction.zoneFor`。
+  用户绑定（`TouchBindings`）与气泡/情绪逻辑完全不变。
+- 顺带把 `Live2DGLView.ready` 改为 `volatile`：GL 线程写、UI 线程读，此前只是「碰巧能读到」。
+
+### 校验
+
+`tools/verify.sh` 全绿。新增 `HitZoneCacheTest`（10 条）锁住：未算完不返回、序号不符返回
+`NO_RESULT`、过期与时钟回拨返回 `NO_RESULT`、迟到旧结果不覆盖新结果、原生「未命中 0」
+与「没有结果 -1」语义区分。
+
 ## v1.183.0 (2026-10-18)
 
 参考开源 Live2D 项目（pixi-live2d-display / live2d-widget / @chnak/l2d-widget）后补的一项真实

@@ -119,6 +119,11 @@ public class Live2DNative {
     public static native void nativeOnTouchesBegan(float x, float y);
     public static native void nativeOnTouchesEnded(float x, float y);
     public static native void nativeOnTouchesMoved(float x, float y);
+    /**
+     * 命中区分查询（0 无 / 1 头 / 2 身），无副作用。
+     * <p>必须从 GL 线程调用（内部读 viewMatrix 与模型顶点）。</p>
+     */
+    public static native int nativeHitTestZone(float x, float y);
 
     // Model control
     public static native void nativeSetExpression(String expressionId);
