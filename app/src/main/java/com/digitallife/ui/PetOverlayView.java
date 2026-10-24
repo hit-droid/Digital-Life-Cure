@@ -359,10 +359,6 @@ public class PetOverlayView extends FrameLayout {
                 LinearLayout card = new LinearLayout(getContext());
                 card.setOrientation(LinearLayout.VERTICAL);
                 card.setBackground(getMenuBackground());
-                FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                cp.gravity = Gravity.CENTER;
-                card.setLayoutParams(cp);
 
                 for (int i = 0; i < items.length; i++) {
                     final int index = i;
@@ -373,6 +369,10 @@ public class PetOverlayView extends FrameLayout {
                     row.setGravity(Gravity.CENTER);
                     row.setPadding(dp(16), dp(10), dp(16), dp(10));
                     row.setMinWidth(dp(104));
+                    // v1.186.0：模型目录名可能很长，单行截断，别把菜单撑出屏幕
+                    row.setSingleLine(true);
+                    row.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+                    row.setMaxWidth(dp(240));
                     row.setClickable(true);
                     row.setOnClickListener(new View.OnClickListener() {
                         @Override
@@ -388,7 +388,18 @@ public class PetOverlayView extends FrameLayout {
                                 ViewGroup.LayoutParams.MATCH_PARENT, 1));
                     }
                 }
-                layer.addView(card);
+
+                // v1.186.0：模型列表可能很长，超过 8 项固定高度可滚动，否则撑破悬浮窗
+                FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                sp.gravity = Gravity.CENTER;
+                if (items.length > 8) sp.height = dp(360);
+                android.widget.ScrollView scroller = new android.widget.ScrollView(getContext());
+                scroller.setVerticalScrollBarEnabled(false);
+                scroller.addView(card, new android.widget.ScrollView.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                scroller.setLayoutParams(sp);
+                layer.addView(scroller);
                 addView(layer, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 menuLayer = layer;

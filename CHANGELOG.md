@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.186.0 (2026-10-24)
+
+长按菜单补上两项桌宠最常用的操作：**换个模型**、**拍张照**。此前想换模型必须进
+「模型管理」页翻卡片；想保存桌宠的样子则完全没有入口。
+
+### 快捷菜单换模型
+
+- `PetQuickMenu` 新增 `ITEM_MODEL` 与「换个模型」项；新增纯逻辑 `modelMenu(String[])`：
+  首项固定「返回」，其后按 native 模型索引顺序排列（模型目录名过长时单行中间省略）。
+- `PetService.showModelChooser()` 直接读 `Live2DNative.nativeGetModelCount/DirName`
+  （与「模型管理」页同源），当前默认模型追加「（当前）」标记；点选后走既有
+  `switchToModel(index)`（GL 线程 ChangeScene + 持久化默认模型 + 更新 L1 能力感知），
+  索引直接对应 native 下标，不做名字匹配。
+- 「返回」重新弹主菜单；选到当前模型只提示「已经在用 X 啦」，不重复切换。
+- `PetOverlayView.showQuickMenu` 支持滚动：超过 8 项时菜单高度固定为 360dp，
+  多余的模型可滑动查看，避免菜单撑破悬浮窗。
+
+### 桌宠截图
+
+- `Live2DGLView` 新增 `requestSnapshot(SnapshotCallback)`：下一帧 `onDrawFrame`
+  绘制完成后、缓冲交换前用 `glReadPixels` 读回当前帧，做上下翻转与 RGBA→ARGB 转换，
+  得到带透明通道的 `Bitmap`（模型外的空白保持透明，可直接当贴纸）；
+  回调 post 回主线程；未就绪时回调 null，不阻塞 UI。
+- `PetService.takePetSnapshot()`：菜单点「拍张照」→ 气泡「咔嚓~」→ 后台线程写入相册。
+  API 29+ 走 `MediaStore`（`Pictures/DigitalLife`，IS_PENDING 两段式提交）；
+  API 21~28 写应用私有 `Pictures/DigitalLife` 并触发 `MediaScannerConnection` 扫描，
+  全程不需要存储权限。写入失败/未画好都回落到气泡提示。
+- `take_screenshot_hint` 工具文案同步：普通 App 仍无法截其它应用，但桌宠自身
+  可以长按 ›「拍张照」保存 PNG。
+
+### 校验
+
+`PetQuickMenuTest` 更新主菜单 7 项与索引，并新增 2 条模型二级菜单用例
+（「返回」置顶、null 名称不崩）。`tools/verify.sh` 全绿。
+
 ## v1.185.0 (2026-10-24)
 
 桌宠终于会**看着你的手指**了。此前视线只有随机 saccade（每 1.5~5 秒瞟一眼），

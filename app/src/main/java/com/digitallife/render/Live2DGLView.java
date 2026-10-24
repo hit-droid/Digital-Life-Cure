@@ -124,6 +124,61 @@ public class Live2DGLView extends GLSurfaceView {
     public static final int HIT_HEAD = 1;
     public static final int HIT_BODY = 2;
 
+    // ==================== v1.186.0：桌宠截图 ====================
+
+    /** 截图结果回调；{@code bitmap == null} 表示当前无法截图（未就绪 / 尺寸为 0） */
+    public interface SnapshotCallback {
+        void onSnapshot(android.graphics.Bitmap bitmap);
+    }
+
+    /** GL 线程读取、UI 线程写入，必须 volatile */
+    private volatile SnapshotCallback pendingSnapshot;
+
+    /**
+     * 请求把当前帧读回成一张带透明通道的 {@link android.graphics.Bitmap}。
+     *
+     * <p>实际 {@code glReadPixels} 发生在下一帧 {@code onDrawFrame} 内（绘制完成、交换缓冲之前），
+     * 这样拿到的才是刚画好的内容；回调会被 post 回主线程。</p>
+     */
+    public void requestSnapshot(SnapshotCallback cb) {
+        if (cb == null) return;
+        if (!ready) {
+            post(() -> cb.onSnapshot(null));
+            return;
+        }
+        pendingSnapshot = cb;
+        requestRender();
+    }
+
+    /** GL 线程：把当前帧读成 ARGB_8888 位图（已做上下翻转与 RGBA→ARGB 转换） */
+    private android.graphics.Bitmap readPixels(GL10 gl) {
+        final int w = getWidth();
+        final int h = getHeight();
+        if (w <= 0 || h <= 0) return null;
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(w * h * 4);
+        buf.order(java.nio.ByteOrder.nativeOrder());
+        gl.glReadPixels(0, 0, w, h, GL10.GL_RGBA, GL10.GL_UNSIGNED_BYTE, buf);
+        buf.rewind();
+        int[] rgba = new int[w * h];
+        buf.asIntBuffer().get(rgba);
+        int[] argb = new int[w * h];
+        for (int y = 0; y < h; y++) {
+            int src = (h - 1 - y) * w;
+            int dst = y * w;
+            for (int x = 0; x < w; x++) {
+                int p = rgba[src + x];
+                // 小端下内存里的 [R,G,B,A] 读成 int 是 A<<24|B<<16|G<<8|R
+                int r = p & 0xFF;
+                int g = (p >>> 8) & 0xFF;
+                int b = (p >>> 16) & 0xFF;
+                int a = (p >>> 24) & 0xFF;
+                argb[dst + x] = (a << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+        return android.graphics.Bitmap.createBitmap(argb, w, h,
+                android.graphics.Bitmap.Config.ARGB_8888);
+    }
+
     private final HitZoneCache hitZoneCache = new HitZoneCache();
 
     /**
@@ -276,6 +331,22 @@ public class Live2DGLView extends GLSurfaceView {
             Live2DNative.nativeSetParameterValues(PhysicalController.DIRECT_PARAM_IDS, direct);
 
             Live2DNative.nativeOnDrawFrame();
+
+            // v1.186.0：截图必须在绘制后、缓冲交换前读回，否则拿到的是上一帧/未定义内容
+            SnapshotCallback snapshot = pendingSnapshot;
+            if (snapshot != null) {
+                pendingSnapshot = null;
+                android.graphics.Bitmap bmp = null;
+                try {
+                    bmp = readPixels(gl);
+                } catch (Throwable t) {
+                    Log.e(TAG, "snapshot failed", t);
+                }
+                final android.graphics.Bitmap result = bmp;
+                final SnapshotCallback target = snapshot;
+                post(() -> target.onSnapshot(result));
+            }
+
             if (!ready) {
                 ready = true;
                 if (listener != null) {

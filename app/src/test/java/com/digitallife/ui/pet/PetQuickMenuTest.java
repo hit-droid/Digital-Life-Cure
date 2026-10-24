@@ -55,8 +55,10 @@ public class PetQuickMenuTest {
     @Test
     public void items_unlockedOffersLock() {
         String[] items = PetQuickMenu.items(false);
-        assertEquals(5, items.length);
+        assertEquals(7, items.length);
         assertEquals("换表情", items[PetQuickMenu.ITEM_EXPRESSION]);
+        assertEquals("换个模型", items[PetQuickMenu.ITEM_MODEL]);
+        assertEquals("拍张照", items[PetQuickMenu.ITEM_SNAPSHOT]);
         assertEquals("一键贴边", items[PetQuickMenu.ITEM_DOCK_EDGE]);
         assertEquals("回到中间", items[PetQuickMenu.ITEM_CENTER]);
         assertEquals("锁定位置", items[PetQuickMenu.ITEM_LOCK]);
@@ -67,8 +69,29 @@ public class PetQuickMenuTest {
     public void items_lockedOffersUnlock() {
         // 已经锁着时菜单里必须是「解除锁定」，否则用户会以为点了没反应
         String[] items = PetQuickMenu.items(true);
-        assertEquals(5, items.length);
+        assertEquals(7, items.length);
         assertEquals("解除锁定", items[PetQuickMenu.ITEM_LOCK]);
+    }
+
+    @Test
+    public void modelMenu_returnIsFirstAndNamesFollowInOrder() {
+        String[] items = PetQuickMenu.modelMenu(new String[]{"hiyori", "mao"});
+        assertEquals(3, items.length);
+        assertEquals("返回", items[0]);
+        assertEquals("hiyori", items[1]);
+        assertEquals("mao", items[2]);
+    }
+
+    @Test
+    public void modelMenu_nullNamesStillHasReturn() {
+        String[] empty = PetQuickMenu.modelMenu(null);
+        assertEquals(1, empty.length);
+        assertEquals("返回", empty[0]);
+
+        String[] withNull = PetQuickMenu.modelMenu(new String[]{null, "mao"});
+        assertEquals(3, withNull.length);
+        assertEquals("", withNull[1]);
+        assertEquals("mao", withNull[2]);
     }
 
     @Test

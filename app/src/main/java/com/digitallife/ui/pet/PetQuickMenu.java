@@ -13,10 +13,14 @@ public final class PetQuickMenu {
 
     /** 菜单项索引：{@code PetService} 按此 switch，不靠文案匹配，改文案不会误伤分支 */
     public static final int ITEM_EXPRESSION = 0;
-    public static final int ITEM_DOCK_EDGE = 1;
-    public static final int ITEM_CENTER = 2;
-    public static final int ITEM_LOCK = 3;
-    public static final int ITEM_SETTINGS = 4;
+    /** v1.186.0：换模型（打开模型列表二级菜单） */
+    public static final int ITEM_MODEL = 1;
+    /** v1.186.0：给桌宠拍照并存相册 */
+    public static final int ITEM_SNAPSHOT = 2;
+    public static final int ITEM_DOCK_EDGE = 3;
+    public static final int ITEM_CENTER = 4;
+    public static final int ITEM_LOCK = 5;
+    public static final int ITEM_SETTINGS = 6;
 
     /** 表情循环顺序，编号与 {@code PetOverlayView#mapExpression} 的 F0x 一致 */
     public static final String[] EXPRESSION_CYCLE = {"F01", "F02", "F03", "F04", "F05", "F06"};
@@ -29,17 +33,35 @@ public final class PetQuickMenu {
     /**
      * 长按菜单的文案列表。
      *
-     * <p>锁与不锁只影响第 4 项的措辞：锁着时那一项是「解除锁定」，而不是再给一个「锁定位置」
+     * <p>锁与不锁只影响锁定那一项的措辞：锁着时是「解除锁定」，而不是再给一个「锁定位置」
      * 让用户以为没点上。</p>
      */
     public static String[] items(boolean locked) {
         return new String[]{
                 "换表情",
+                "换个模型",
+                "拍张照",
                 "一键贴边",
                 "回到中间",
                 locked ? "解除锁定" : "锁定位置",
                 "打开设置"
         };
+    }
+
+    /**
+     * v1.186.0：模型二级菜单的条目——首项固定「返回」，其后是各模型目录名。
+     *
+     * <p>把「返回」放第一项而不是末尾：模型多到要滚动时，末尾项会被滚出可视区，
+     * 用户想退回主菜单却找不到入口。</p>
+     */
+    public static String[] modelMenu(String[] modelNames) {
+        int n = modelNames == null ? 0 : modelNames.length;
+        String[] items = new String[n + 1];
+        items[0] = "返回";
+        for (int i = 0; i < n; i++) {
+            items[i + 1] = modelNames[i] == null ? "" : modelNames[i];
+        }
+        return items;
     }
 
     /** 循环里的下一个表情；当前值未知（null / 非 F0x）时从头开始，不会返回空 */

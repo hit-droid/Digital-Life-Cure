@@ -122,9 +122,10 @@ public class BuiltinTools {
                 });
 
         registerIfAbsent(tools, "take_screenshot_hint",
-                "截图提示（需要系统截图权限，普通 App 无法直接执行）",
+                "截图提示（系统级截图需系统权限；桌宠自身截图走长按菜单）",
                 new String[]{},
-                args -> "Android 普通 App 无法直接截图，请使用系统快捷键（电源+音量下）");
+                args -> "普通 App 无法截取其它应用，系统截图请用「电源+音量下」；"
+                        + "想保存桌宠的样子，可长按桌宠 ›「拍张照」，PNG 会存进相册");
 
         // ===== 实用类（4 个） =====
         registerIfAbsent(tools, "web_search",

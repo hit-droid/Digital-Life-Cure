@@ -5,16 +5,22 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.hardware.display.DisplayManager;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
@@ -49,6 +55,13 @@ import com.digitallife.render.ContinuousMotionEngine;
 import com.digitallife.render.LipSync;
 import com.digitallife.speech.STTEngine;
 import com.digitallife.speech.TTSEngine;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * PetService：桌面伴侣前台服务。
@@ -610,6 +623,14 @@ public class PetService extends Service implements AICore.Output,
                     overlayView.showBubble("表情：" + PetQuickMenu.expressionLabel(currentExpression), 1.6f);
                 }
                 break;
+            case PetQuickMenu.ITEM_MODEL:
+                // v1.186.0：快捷菜单直接换模型，不用再进设置页翻模型列表
+                showModelChooser();
+                break;
+            case PetQuickMenu.ITEM_SNAPSHOT:
+                // v1.186.0：给桌宠拍张照（只截模型窗口，带透明通道）
+                takePetSnapshot();
+                break;
             case PetQuickMenu.ITEM_DOCK_EDGE:
                 // 用户明确点了贴边，就把开关打开并立刻吸附（几何复用 #26 的 OverlayDock）
                 if (settings != null) settings.setEdgeDockEnabled(true);
@@ -630,6 +651,119 @@ public class PetService extends Service implements AICore.Output,
                 openSettings();
                 break;
         }
+    }
+
+    /**
+     * v1.186.0：给桌宠拍张照。
+     *
+     * <p>普通 App 无法截别的应用，但可以截自己的悬浮窗——{@link Live2DGLView} 在 GL 线程
+     * 用 {@code glReadPixels} 读回当前帧（透明背景一并保留），再交后台线程写入相册。</p>
+     */
+    private void takePetSnapshot() {
+        if (overlayView == null) return;
+        Live2DGLView gl = overlayView.getLive2DView();
+        if (gl == null) return;
+        overlayView.showBubble("咔嚓~", 1.2f);
+        gl.requestSnapshot(bmp -> {
+            if (bmp == null) {
+                if (overlayView != null) overlayView.showBubble("还没画好，稍后再试", 1.8f);
+                return;
+            }
+            // PNG 压缩与相册写入都不该卡主线程
+            new Thread(() -> savePetSnapshot(bmp), "pet-snapshot").start();
+        });
+    }
+
+    /** 写入系统相册；API 29+ 走 MediaStore，旧版本写应用私有 Pictures 再触发媒体扫描 */
+    private void savePetSnapshot(Bitmap bmp) {
+        String name = "pet_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+        boolean ok = false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues cv = new ContentValues();
+                cv.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+                cv.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                cv.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/DigitalLife");
+                cv.put(MediaStore.Images.Media.IS_PENDING, 1);
+                Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                if (uri == null) throw new java.io.IOException("MediaStore insert failed");
+                try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                    if (os == null || !bmp.compress(Bitmap.CompressFormat.PNG, 100, os)) {
+                        throw new java.io.IOException("compress failed");
+                    }
+                }
+                cv.clear();
+                cv.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(uri, cv, null, null);
+            } else {
+                File dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "DigitalLife");
+                if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("mkdirs failed");
+                File f = new File(dir, name);
+                try (FileOutputStream fos = new FileOutputStream(f)) {
+                    if (!bmp.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                        throw new java.io.IOException("compress failed");
+                    }
+                }
+                MediaScannerConnection.scanFile(this,
+                        new String[]{f.getAbsolutePath()}, new String[]{"image/png"}, null);
+            }
+            ok = true;
+        } catch (Throwable t) {
+            Log.e(TAG, "savePetSnapshot failed", t);
+        } finally {
+            bmp.recycle();
+        }
+        final boolean saved = ok;
+        if (overlayView != null) {
+            overlayView.showBubble(saved ? "拍好啦，已存到相册" : "保存失败，请稍后再试", 2f);
+        }
+    }
+
+    /**
+     * v1.186.0：快捷菜单的模型二级菜单。
+     *
+     * <p>直接读 native 模型列表（与 {@code CareModelsActivity} 同源），首项「返回」回到主菜单；
+     * 其余项按 native 索引顺序排列，回调索引减一就是 {@link #switchToModel(int)} 的下标，
+     * 不做名字匹配，避免目录名重复/改名时切错。</p>
+     */
+    private void showModelChooser() {
+        if (overlayView == null) return;
+        final int count;
+        try {
+            count = Live2DNative.nativeGetModelCount();
+        } catch (Throwable t) {
+            Log.e(TAG, "showModelChooser count error", t);
+            return;
+        }
+        if (count <= 0) {
+            overlayView.showBubble("还没有可用的模型", 1.8f);
+            return;
+        }
+        final String current = settings != null ? settings.getDefaultModelDir() : null;
+        String[] labels = new String[count];
+        for (int i = 0; i < count; i++) {
+            String dir = Live2DNative.nativeGetModelDirName(i);
+            if (dir == null || dir.isEmpty()) dir = "模型 " + (i + 1);
+            labels[i] = dir.equals(current) ? dir + "（当前）" : dir;
+        }
+        overlayView.showQuickMenu(PetQuickMenu.modelMenu(labels), new PetOverlayView.MenuCallback() {
+            @Override
+            public void onItem(int index) {
+                if (index <= 0) {
+                    // 「返回」：重新弹主菜单
+                    onLongPress();
+                    return;
+                }
+                int modelIndex = index - 1;
+                boolean same = modelIndex < labels.length && labels[modelIndex].endsWith("（当前）");
+                if (!same) switchToModel(modelIndex);
+                if (overlayView != null) {
+                    String name = modelIndex < labels.length
+                            ? labels[modelIndex].replace("（当前）", "") : "";
+                    overlayView.showBubble(same ? "已经在用 " + name + " 啦" : "换成 " + name + " 啦", 1.8f);
+                }
+            }
+        });
     }
 
     /** 「回到中间」：把窗口挪回屏幕正中并持久化 */

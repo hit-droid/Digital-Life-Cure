@@ -438,5 +438,22 @@ Entries discovered by the Agent during task execution should follow this format:
   - 本轮 verify：786 单测 / 71 类、lint 0 error、APK(debug) 9,163,851B；增量耗时 compile 10s / test 45s / lint 45s / apk 58s。
   - 用户确认「四项都要」，本版是第一项；剩余：② 快捷菜单换模型、③ 桌宠截图分享、④ 对话真表格。
 
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.186.0 快捷菜单换模型 + 桌宠截图
+- Category: Rendering & Interaction
+- Instructions:
+  - v1.185.0 已发布：versionCode 188 / versionName 1.185.0、Release id 422661795、APK app-release.apk 8,639,100B、tag v1.185.0 @ 9246bf9；CI run 40085713985 success。
+  - v1.186.0 交付：长按菜单 5 项 → 7 项（换表情 / 换个模型 / 拍张照 / 一键贴边 / 回到中间 / 锁定 / 设置）。
+  - **换模型**：`PetQuickMenu.modelMenu(String[])` 是纯逻辑（首项「返回」置顶，模型多时不会滚到看不见返回入口）；`PetService.showModelChooser()` 直接读 `Live2DNative.nativeGetModelCount()/nativeGetModelDirName(i)`，回调 `index-1` 就是 native 下标，直接 `switchToModel(index)`；**不要按名字匹配**（目录名重复/改名会切错）。当前默认模型用 `settings.getDefaultModelDir()` 判断并标「（当前）」，选中当前只提示不重切。
+  - **菜单滚动**：`PetOverlayView.showQuickMenu` 现在把卡片包进 `ScrollView`；`items.length > 8` 时高度固定 360dp（主菜单 7 项仍按内容自适应）。`ScrollView` 会自己消费触摸，点卡片空白不会误触遮罩关闭；行文本单行 + 中间省略 + `maxWidth 240dp`，长目录名不会撑破悬浮窗。
+  - **截图**：`Live2DGLView.requestSnapshot(cb)` 只设 `volatile` 标志，真正 `glReadPixels` 在下一帧 `onDrawFrame` 里 `nativeOnDrawFrame()` 之后、缓冲交换之前执行（**必须在这个时机**，否则读到上一帧/未定义内容）；读回后要做 ① 上下翻转、② RGBA→ARGB：小端内存 `[R,G,B,A]` 读成 int 是 `A<<24|B<<16|G<<8|R`，不要直接塞给 `Bitmap.createBitmap`；结果 `post` 回主线程。
+  - **存相册**：API 29+ `MediaStore` + `RELATIVE_PATH=Pictures/DigitalLife` + `IS_PENDING` 两段式（先 1 插入写流，再 0 提交）；API 21~28 写 `getExternalFilesDir(Pictures)/DigitalLife` 再 `MediaScannerConnection.scanFile`；两条路都**不需要存储权限**。压缩/写盘放 `new Thread`，完成后用气泡反馈；`Bitmap` finally 里 recycle。
+  - `take_screenshot_hint` 文案改为提示「长按桌宠 › 拍张照」；普通 App 仍无法截其它应用，别承诺系统级截图。
+  - `PetQuickMenuTest` 更新为 7 项 + 索引，新增 `modelMenu` 两条（返回置顶、null 名称不崩）。
+  - 本轮 verify：788 单测 / 71 类、lint 0 error、APK(debug) 9,168,141B；增量耗时 compile 10s / test 45s / lint 35s / apk 15s。
+  - 剩余两项：④ 对话真表格（`MarkdownRenderer` 仍是等宽文本对齐，风险和工程量最大）。
+
+
 
 
