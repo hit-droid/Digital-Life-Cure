@@ -422,4 +422,21 @@ Entries discovered by the Agent during task execution should follow this format:
   - 新增 `HitZoneCacheTest` 10 条锁契约；本轮 verify：776 单测 / 70 类、lint 0 error、APK(debug) 9,162,867B；增量耗时 compile 10s / test 45s / lint 46s / apk 61s。
   - 容器重置后工具链已按 v1.182.0 记录重装（软链 JDK17 + `/opt/android-sdk` 含 `ndk;27.3.13750724`、`cmake;3.22.1`）；原生命中改动必须跑 `assembleDebug`（会编 C++），只跑 `compileDebugJavaWithJavac` 发现不了 JNI/CMake 错误。
 
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.185.0 触摸眼神跟手
+- Category: Rendering & Interaction
+- Instructions:
+  - v1.185.0 交付：桌宠触摸时**视线跟手 + 头部小幅跟随**。此前 `ContinuousMotionEngine.updateGaze` 只有随机 saccade（1.5~5s 一次），手指位置完全不影响视线。
+  - 设计：`ContinuousMotionEngine.setTouchGaze(nx, ny, active)`（任意线程、volatile）+ `updateTouchGaze`：眼睛用 `setDirectValue` 直通、缓动 `dt*14`（时间常数 ~70ms，快过 saccade 的 `dt*6` ≈170ms）才能真正「黏」住手指；头部 `ParamAngleX = nx*7°`、`ParamAngleY = ny*5°` 走 `addAdditiveTarget`，复用弹簧回弹；跟手期间 `nextSaccadeTime = max(nextSaccadeTime, clock+0.8)` 压住随机瞟。
+  - **必须记住的坑：`PhysicalController.additive` 不会自动归零**。松手那一帧必须显式 `addAdditiveTarget("ParamAngleX/Y", 0f)`，否则模型在 `modelHasMotions=true`（L1 早退、没人重写 additive）时会**永久歪头**。同理视线直通在 `modelHasMotions` 下松手要设 `NaN`（native 跳过）交还模型自带动作。
+  - 触摸跟手在 `modelHasMotions` / `actionPlaying` 两种「L1 让位」分支里仍然生效——用户主动交互优先级高于待机动画；L1 路径则用 `touching ? updateTouchGaze : updateGaze` 二选一。
+  - 归一化：`normalizeGazeX(x,w) = clamp(x/w*2-1)`；`normalizeGazeY(y,h) = clamp(1 - y/h*2)`（屏幕 y 轴向下要翻转）；宽高非法/NaN 一律回 0（正前方）。纯静态、JVM 可测。
+  - 接线：`Live2DGLView.setTouchGaze(x,y,active)` 按 View 宽高归一化；它自己的 `onTouchEvent` 也直接驱动（模型预览页等未被悬浮窗拦截的场景同享）。`PetOverlayView` 因为 `onInterceptTouchEvent` 吞了 DOWN，必须在**自己的** `onTouchEvent` 里分发：DOWN/MOVE → `followTouchGaze(event)`；UP/CANCEL、菜单/详情打开、气泡/胶囊命中、越界按下 → `releaseTouchGaze()`（手势被打断也要回落）。
+  - 新增 `ContinuousMotionEngineTouchGazeTest` 10 条：归一化中心/边界/翻转/非法宽度、一帧锁定、头部偏移有界、NaN 夹取、松手 additive 收敛回 0 + 视线交还模型、刚松手不立刻乱瞟、`reset` 清空。
+  - **单测物理积分别用 dt=0.1**：k=150、d=15 时显式欧拉在 dt=0.1 会发散（数值飙到 1e5）。测试里按真实帧 `dt=0.016` 迭代。
+  - 本轮 verify：786 单测 / 71 类、lint 0 error、APK(debug) 9,163,851B；增量耗时 compile 10s / test 45s / lint 45s / apk 58s。
+  - 用户确认「四项都要」，本版是第一项；剩余：② 快捷菜单换模型、③ 桌宠截图分享、④ 对话真表格。
+
+
 

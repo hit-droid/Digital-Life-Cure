@@ -892,31 +892,43 @@ public class PetOverlayView extends FrameLayout {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         // v1.135.0：菜单期间不参与手势（拖拽 / 长按），全交给菜单层，避免边点菜单边拖窗口
-        if (isQuickMenuShowing()) return false;
+        if (isQuickMenuShowing()) {
+            releaseTouchGaze();
+            return false;
+        }
         // v1.136.0：详情卡片开着时同理，遮罩层自己处理「点空白收起」
-        if (isStatusDetailShowing()) return false;
+        if (isStatusDetailShowing()) {
+            releaseTouchGaze();
+            return false;
+        }
         // 点击气泡区域：直接关闭气泡，不触发人偶交互
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN && isTouchInBubble(event.getRawX(), event.getRawY())) {
+            releaseTouchGaze();
             clearBubble();
             return true;
         }
         // 点状态胶囊：透传给胶囊自身处理（点开详情），不走人偶手势
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
                 && isTouchInStatus(event.getX(), event.getY())) {
+            releaseTouchGaze();
             return false;
         }
         // 人偶区域外的事件（子 View 未消费回溯到此处）不处理，透传给下层窗口
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
                 && !modelRect.contains((int) event.getX(), (int) event.getY())) {
+            releaseTouchGaze();
             return false;
         }
         gestureDetector.onTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                // v1.185.0：按下即让视线跟手指；拖动窗口时人偶也会「盯着」被拖的方向
+                followTouchGaze(event);
                 lastTouchX = event.getRawX();
                 lastTouchY = event.getRawY();
                 return true;
             case MotionEvent.ACTION_MOVE:
+                followTouchGaze(event);
                 if (dragging) {
                     float dx = event.getRawX() - lastTouchX;
                     float dy = event.getRawY() - lastTouchY;
@@ -927,11 +939,24 @@ public class PetOverlayView extends FrameLayout {
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                releaseTouchGaze();
                 dragging = false;
                 if (listener != null) listener.onDrag(0, 0);
                 return true;
         }
         return true;
+    }
+
+    /** v1.185.0：把手指位置（本 View 坐标）转给渲染层做视线跟随 */
+    private void followTouchGaze(MotionEvent event) {
+        if (!live2DReady) return;
+        live2DView.setTouchGaze(event.getX(), event.getY(), true);
+    }
+
+    /** v1.185.0：松手 / 手势被打断，视线平滑回落到随机 saccade */
+    private void releaseTouchGaze() {
+        if (!live2DReady) return;
+        live2DView.setTouchGaze(0f, 0f, false);
     }
 
     @Override

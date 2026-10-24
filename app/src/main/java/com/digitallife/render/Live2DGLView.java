@@ -93,6 +93,25 @@ public class Live2DGLView extends GLSurfaceView {
         queueEvent(() -> Live2DNative.nativeSetParameterValue(paramId, value));
     }
 
+    // ==================== v1.185.0：触摸眼神跟手 ====================
+
+    /**
+     * 触摸期间让视线/头部跟手指（任意线程）。
+     * <p>悬浮窗会在 {@code ACTION_DOWN/MOVE/UP} 调用本方法；坐标用本 View 坐标系。</p>
+     *
+     * @param active false 表示松手，视线平滑回落到随机 saccade
+     */
+    public void setTouchGaze(float x, float y, boolean active) {
+        if (!active) {
+            motionEngine.setTouchGaze(0f, 0f, false);
+            return;
+        }
+        motionEngine.setTouchGaze(
+                ContinuousMotionEngine.normalizeGazeX(x, getWidth()),
+                ContinuousMotionEngine.normalizeGazeY(y, getHeight()),
+                true);
+    }
+
     /** 同步查询是否有非待机动作在播放（直接从主线程读 native 原子标志） */
     public boolean isMotionPlaying() {
         return Live2DNative.nativeIsMotionPlaying();
@@ -179,14 +198,28 @@ public class Live2DGLView extends GLSurfaceView {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (listener == null) return false;
-
         final float x = event.getX();
         final float y = event.getY();
+
+        // v1.185.0：预览页等直接收触摸的场景，同样让视线跟手。
+        // 悬浮窗会拦截 DOWN 自己分发（见 PetOverlayView），不会在这里重复驱动。
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_MOVE:
+                setTouchGaze(x, y, true);
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                setTouchGaze(0f, 0f, false);
+                break;
+        }
+
+        if (listener == null) return false;
 
         // 触摸穿透：区域外（模型带外）不消费、不触发 native 触摸与点击回调
         if (touchRegion != null && event.getActionMasked() == MotionEvent.ACTION_DOWN
                 && !touchRegion.contains((int) x, (int) y)) {
+            setTouchGaze(0f, 0f, false);
             return false;
         }
 

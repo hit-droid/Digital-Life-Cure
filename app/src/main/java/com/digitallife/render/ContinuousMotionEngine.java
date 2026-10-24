@@ -59,6 +59,13 @@ public class ContinuousMotionEngine {
      */
     private volatile boolean modelHasMotions = false;
 
+    /** v1.185.0：触摸跟手——手指在 View 内的归一化坐标（[-1,1]，右/上为正） */
+    private volatile float touchGazeX = 0f;
+    private volatile float touchGazeY = 0f;
+    private volatile boolean touchGazeActive = false;
+    /** GL 线程：上一帧是否处于跟手状态，用于识别「松手」那一刻做收尾 */
+    private boolean touchGazeWasActive = false;
+
     /** 由 AICore 行为包/状态机更新（任意线程） */
     public void setStyle(float energy, float alertness, float speed, float amplitude) {
         this.energy = clamp01(energy);
@@ -76,6 +83,32 @@ public class ContinuousMotionEngine {
         this.actionPlaying = playing;
     }
 
+    /**
+     * v1.185.0：手指触摸期间让视线/头部跟手（任意线程）。
+     *
+     * @param nx     手指在 View 内的归一化 x，-1 最左、+1 最右，调用方可用
+     *               {@link #normalizeGazeX(float, float)} 换算
+     * @param ny     手指归一化 y，-1 最下、+1 最上
+     * @param active false 表示松手，视线平滑回落到 saccade
+     */
+    public void setTouchGaze(float nx, float ny, boolean active) {
+        touchGazeX = clamp(nx, -1f, 1f);
+        touchGazeY = clamp(ny, -1f, 1f);
+        touchGazeActive = active;
+    }
+
+    /** View 坐标 → 视线归一化 x（右为正）；宽度非法时回正前方 */
+    public static float normalizeGazeX(float x, float width) {
+        if (width <= 0f || Float.isNaN(x)) return 0f;
+        return clamp(x / width * 2f - 1f, -1f, 1f);
+    }
+
+    /** View 坐标 → 视线归一化 y（上为正，屏幕 y 轴向下需翻转）；高度非法时回正前方 */
+    public static float normalizeGazeY(float y, float height) {
+        if (height <= 0f || Float.isNaN(y)) return 0f;
+        return clamp(1f - y / height * 2f, -1f, 1f);
+    }
+
     /** 由模型能力感知写入：true=模型自带动作动画，L1 角度/视线/眨眼让位 */
     public void setModelHasMotions(boolean hasMotions) {
         this.modelHasMotions = hasMotions;
@@ -88,23 +121,43 @@ public class ContinuousMotionEngine {
         clock += dt;
         if (dt <= 0f) return;
 
+        final boolean touching = touchGazeActive;
+        if (touchGazeWasActive && !touching) {
+            // 松手：清掉跟手期写下的头部叠加（additive 不会自动归零），
+            // 视线交还 L1 的 saccade / 模型自带动作。L1 路径下一帧会自行重写，不会留坑。
+            physics.addAdditiveTarget("ParamAngleX", 0f);
+            physics.addAdditiveTarget("ParamAngleY", 0f);
+            physics.setDirectValue("ParamEyeBallX", Float.NaN);
+            physics.setDirectValue("ParamEyeBallY", Float.NaN);
+            // 收起视线后别立刻随机乱瞟，给一个短暂的「回正」缓冲
+            nextSaccadeTime = clock + 1f + rnd.nextFloat() * 1.5f;
+        }
+        touchGazeWasActive = touching;
+
         if (modelHasMotions) {
             // 模型自带动作动画 + Cubism 自动眨眼/呼吸：L1 全让位。
             // L2 生理状态机的主动姿态走 physics.setTarget，不依赖本引擎，不受影响。
+            // 触摸跟手是用户主动交互，优先级高于待机动画，这里仍然生效。
+            if (touching) updateTouchGaze(physics, dt);
             return;
         }
 
         float amp = amplitude * (0.35f + energy * 0.65f);
 
         if (actionPlaying) {
-            // 动作播放中：角度/视线/眨眼让位，仅保留呼吸背景
+            // 动作播放中：角度/视线/眨眼让位，仅保留呼吸背景（跟手例外，见上）
             updateBreath(physics, dt);
+            if (touching) updateTouchGaze(physics, dt);
             return;
         }
 
         updateBodyAndHead(physics, dt, amp);
         updateBreath(physics, dt);
-        updateGaze(physics, dt, amp);
+        if (touching) {
+            updateTouchGaze(physics, dt);
+        } else {
+            updateGaze(physics, dt, amp);
+        }
         updateBlink(physics, dt);
     }
 
@@ -163,6 +216,30 @@ public class ContinuousMotionEngine {
         physics.setDirectValue("ParamEyeBallY", currentEyeY);
     }
 
+    /**
+     * v1.185.0：触摸跟手——视线直接锁定手指方向，头部随手指小幅偏转。
+     *
+     * <p>eye 走直通（要跟手就不能被弹簧拖慢），头部走 additive（复用弹簧的回弹手感，
+     * 松手后自然回正）。跟手期间压住 saccade 计时，避免眼睛在手指附近乱跳。</p>
+     */
+    private void updateTouchGaze(PhysicalController physics, float dt) {
+        float tx = touchGazeX;
+        float ty = touchGazeY;
+        // 比 saccade 更快（时间常数 ~70ms），手指划动时视线才「黏」得住
+        float ease = Math.min(1f, dt * 14f);
+        currentEyeX += (tx - currentEyeX) * ease;
+        currentEyeY += (ty - currentEyeY) * ease;
+        physics.setDirectValue("ParamEyeBallX", currentEyeX);
+        physics.setDirectValue("ParamEyeBallY", currentEyeY);
+
+        // 头部跟随：屏幕边缘 ±7° / ±5°，正中间几乎不动
+        physics.addAdditiveTarget("ParamAngleX", tx * 7f);
+        physics.addAdditiveTarget("ParamAngleY", ty * 5f);
+
+        // 指尖还在时保持注视，别被随机 saccade 抢走
+        nextSaccadeTime = Math.max(nextSaccadeTime, clock + 0.8f);
+    }
+
     /** 随机眨眼：警觉时更频繁 */
     private void updateBlink(PhysicalController physics, float dt) {
         float blinkInterval = 2.5f - alertness * 1.2f;
@@ -206,9 +283,18 @@ public class ContinuousMotionEngine {
         blinkTimer = 3f;
         blinking = false;
         blinkPhase = 0f;
+        touchGazeX = 0f;
+        touchGazeY = 0f;
+        touchGazeActive = false;
+        touchGazeWasActive = false;
     }
 
     private static float clamp01(float v) {
         return v < 0f ? 0f : (v > 1f ? 1f : v);
+    }
+
+    private static float clamp(float v, float min, float max) {
+        if (Float.isNaN(v)) return 0f;
+        return v < min ? min : (v > max ? max : v);
     }
 }

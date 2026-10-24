@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.185.0 (2026-10-24)
+
+桌宠终于会**看着你的手指**了。此前视线只有随机 saccade（每 1.5~5 秒瞟一眼），
+不管手指按在左还是右，眼睛都自顾自地乱看；头部也只由 AI 行为参数驱动。
+
+### 触摸眼神跟手
+
+- `render/ContinuousMotionEngine` 新增触摸跟手通道：
+  - `setTouchGaze(nx, ny, active)`：任意线程写入手指归一化坐标（[-1,1]，右/上为正），
+    跟手期间 `ParamEyeBallX/Y` 用更快的缓动（时间常数 ~70ms）直接锁定手指，
+    比 saccade 的 ~170ms 明显「黏」得住；
+  - 头部同步小幅跟随：`ParamAngleX` 最多 ±7°、`ParamAngleY` 最多 ±5°，屏幕中心几乎不动，
+    避免大幅甩头；头部仍走 `additive`，复用 `PhysicalController` 的弹簧回弹手感；
+  - 跟手期间持续后推 saccade 计时，松手后约 1 秒内不会立刻随机乱瞟；
+  - **松手收尾**：`additive` 不会自动归零，因此松手那一帧显式清零头部叠加，
+    并把视线直通值设为 `NaN`，交还 L1 saccade / 模型自带动作（否则模型会永久歪头）。
+  - `normalizeGazeX/Y` 为纯静态函数：屏幕 y 轴向下，归一化时已翻转；越界/NaN 一律夹回正前方。
+- `render/Live2DGLView` 新增 `setTouchGaze(x, y, active)`（自动按 View 宽高归一化）；
+  并在自身 `onTouchEvent` 里 DOWN/MOVE/UP 直接驱动——模型预览页等未拦截触摸的场景同样生效。
+- `ui/PetOverlayView`：悬浮窗拦截触摸后由它分发——DOWN/MOVE 调 `followTouchGaze`，
+  UP/CANCEL、打开菜单/详情、点到气泡/状态胶囊、越界按下等分支一律 `releaseTouchGaze`，
+  保证手势被打断时视线也能平滑回落。
+
+### 校验
+
+新增 `ContinuousMotionEngineTouchGazeTest`（10 条）：归一化中心/边界/翻转/非法宽度、
+跟手一帧到位、头部偏移有界、NaN 夹取、松手后头部叠加收敛回 0 且视线交还模型、
+刚松手不立刻乱瞟、`reset()` 清空跟手状态。
+
 ## v1.184.0 (2026-10-23)
 
 参考开源 Live2D 项目（pixi-live2d-display 的 hit-testing、live2d-widget 的命中反馈）后，
