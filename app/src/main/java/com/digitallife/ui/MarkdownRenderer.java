@@ -1,9 +1,20 @@
 package com.digitallife.ui;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.text.Layout;
+import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.text.style.BackgroundColorSpan;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.ImageSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.text.style.TypefaceSpan;
@@ -82,6 +93,40 @@ public final class MarkdownRenderer {
         return out;
     }
 
+    /**
+     * v1.187.0：把表格画成真正的网格位图。
+     *
+     * <p>{@link #render} 里的表格是等宽字符对齐的纯文本，列被压缩、内容被截断，
+     * 读起来仍然像代码。这里保留文本渲染作为兜底，新增一条「表格 → 位图」的出口：
+     * 单元格按可用宽度自动换行、表头加粗、有网格线。</p>
+     *
+     * <p>位图用 {@link ImageSpan} 铺在表格原文上——被替换的文字仍然留在
+     * {@code CharSequence} 里，所以复制、搜索、折叠提示都能照常工作，
+     * 只是屏幕上显示的是图片。</p>
+     *
+     * @param maxWidthPx  表格可用宽度（px），超出会等比压缩列宽
+     * @param textSizePx  气泡字号（px），用来决定表格内文字大小
+     */
+    public CharSequence renderRich(String raw, int maxWidthPx, float textSizePx) {
+        if (raw == null) return "";
+        String text = raw.replace("\r\n", "\n");
+        SpannableStringBuilder out = new SpannableStringBuilder();
+        BitmapBudget budget = new BitmapBudget();
+        // 本次渲染可用额度 = 全页剩余额度（单条消息再额外限 4 张表）
+        budget.remainingPixels = (int) java.lang.Math.min(1_500_000L,
+                java.lang.Math.max(0L, MAX_TABLE_BITMAP_PIXELS - tableBitmapPixelsUsed));
+        int pos = 0;
+        Matcher m = CODE_BLOCK.matcher(text);
+        while (m.find()) {
+            appendInline(out, text.substring(pos, m.start()), maxWidthPx, textSizePx, budget);
+            appendCodeBlock(out, m.group(1));
+            pos = m.end();
+        }
+        appendInline(out, text.substring(pos), maxWidthPx, textSizePx, budget);
+        return out;
+    }
+
+
     private void appendCodeBlock(SpannableStringBuilder out, String code) {
         if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
             out.append('\n');
@@ -146,6 +191,16 @@ public final class MarkdownRenderer {
      * 其余文本仍走原有的逐行逻辑，非表格内容行为完全不变。
      */
     private void appendInline(SpannableStringBuilder out, String text) {
+        appendInline(out, text, 0, 0f, null);
+    }
+
+    /**
+     * @param maxTableWidthPx   >0 时表格走位图渲染；否则走等宽纯文本
+     * @param tableTextSizePx   位图表格的字号（px）
+     * @param budget           单条消息的位图预算，为 null 时不做位图
+     */
+    private void appendInline(SpannableStringBuilder out, String text,
+                              int maxTableWidthPx, float tableTextSizePx, BitmapBudget budget) {
         if (text == null || text.isEmpty()) return;
         String[] lines = text.split("\n", -1);
         int i = 0;
@@ -162,13 +217,19 @@ public final class MarkdownRenderer {
             if (!first) out.append('\n');
             first = false;
             if (isTable) {
-                appendTable(out, lines, i, end);
+                if (maxTableWidthPx > 0 && tableTextSizePx > 0f && budget != null
+                        && budget.canRenderTable()) {
+                    appendTableBitmap(out, lines, i, end, maxTableWidthPx, tableTextSizePx, budget);
+                } else {
+                    appendTable(out, lines, i, end);
+                }
             } else {
                 appendLine(out, lines[i]);
             }
             i = end;
         }
     }
+
 
     /** v1.46.0：表格首行判定——本行是表格行，且下一行是 |---| 分隔行 */
     private static boolean isTableStart(String[] lines, int i) {
@@ -253,12 +314,24 @@ public final class MarkdownRenderer {
 
     /** v1.46.0：把表格块渲染成等宽对齐文本，表头加粗 */
     private void appendTable(SpannableStringBuilder out, String[] lines, int from, int to) {
+        java.util.List<String[]> rows = parseTableRows(lines, from, to);
+        if (rows.isEmpty()) return;
+        appendTableRows(out, rows);
+    }
+
+    /** 表格块 → 结构化行数据（已剥掉行内标记、跳过分隔行） */
+    private static java.util.List<String[]> parseTableRows(String[] lines, int from, int to) {
         java.util.List<String[]> rows = new java.util.ArrayList<>();
         for (int r = from; r < to; r++) {
             if (isSeparatorRow(lines[r])) continue;   // 分隔行不展示，靠对齐自然成表
             // v1.125.0：先剥掉行内标记再算列宽，否则 ** 之类标记会白占宽度、把对齐撑歪
             rows.add(stripInlineCells(splitRow(lines[r])));
         }
+        return rows;
+    }
+
+    /** 等宽纯文本表格（位图预算不足或宽度不够时的兜底） */
+    private void appendTableRows(SpannableStringBuilder out, java.util.List<String[]> rows) {
         if (rows.isEmpty()) return;
         int cols = 0;
         for (String[] c : rows) cols = java.lang.Math.max(cols, c.length);
@@ -298,6 +371,213 @@ public final class MarkdownRenderer {
         out.setSpan(new StyleSpan(Typeface.BOLD), start, java.lang.Math.min(headEnd, end),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
+
+    // ==================== v1.187.0：真表格（位图） ====================
+
+    /**
+     * 单条消息的位图预算。
+     *
+     * <p>一条回复里可能有十几张表，每张都画一张 ARGB_8888 位图的话，历史消息一多
+     * 就会占掉几十 MB。超过预算的表格退回等宽文本，宁可难看一点也不能 OOM。</p>
+     */
+    private static final class BitmapBudget {
+        /** 本次渲染剩余可用像素（宽 × 高） */
+        int remainingPixels;
+        /** 单条消息最多画几张表 */
+        int remainingTables = 4;
+
+        boolean canRenderTable() {
+            return remainingTables > 0 && remainingPixels > 0;
+        }
+    }
+
+    /**
+     * 整个页面所有消息的表格位图总预算（像素数，约 24 MB）。
+     * <p>历史里有几十条带表格的消息时，逐条画位图会吃掉上百 MB；超出预算的
+     * 表格自动退回等宽文本。</p>
+     */
+    private static final long MAX_TABLE_BITMAP_PIXELS = 6_000_000L;
+    /** 本渲染器已经画掉的表格位图像素 */
+    private long tableBitmapPixelsUsed;
+
+    /**
+     * 把表格画成一张位图，再用 {@link ImageSpan} 替换掉表格原文。
+     *
+     * <p>被替换的文字仍然留在 CharSequence 里（复制 / 搜索能取到），但屏幕上
+     * 不绘制文字，只绘制位图。不能把换行符一起包进 span：ReplacementSpan 跨段
+     * 会被 StaticLayout 拆成多段重复绘制，所以行与行之间用「；」连接。</p>
+     */
+    private void appendTableBitmap(SpannableStringBuilder out, String[] lines, int from, int to,
+                                   int maxWidthPx, float textSizePx, BitmapBudget budget) {
+        java.util.List<String[]> rows = parseTableRows(lines, from, to);
+        if (rows.isEmpty()) return;
+        Bitmap bitmap = drawTableBitmap(rows, maxWidthPx, textSizePx);
+        if (bitmap == null) {
+            appendTableRows(out, rows);
+            return;
+        }
+        String plain = plainTableText(rows);
+        if (plain.isEmpty() || plain.indexOf('\n') >= 0) {
+            bitmap.recycle();
+            appendTableRows(out, rows);
+            return;
+        }
+        budget.remainingTables--;
+        int pixels = bitmap.getWidth() * bitmap.getHeight();
+        budget.remainingPixels -= pixels;
+        tableBitmapPixelsUsed += pixels;
+        SpannableString spanText = new SpannableString(plain);
+        spanText.setSpan(new ImageSpan(bitmap), 0, spanText.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.append(spanText);
+    }
+
+    /** 表格位图对应的纯文本：单元格用 | 分隔，行与行用「；」（见上面的换行说明） */
+    private static String plainTableText(java.util.List<String[]> rows) {
+        StringBuilder sb = new StringBuilder();
+        for (int r = 0; r < rows.size(); r++) {
+            String[] cells = rows.get(r);
+            if (r > 0) sb.append('；');
+            for (int i = 0; i < cells.length; i++) {
+                if (i > 0) sb.append(" | ");
+                sb.append(cells[i] == null ? "" : cells[i]);
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    private static String cellAt(String[] row, int col) {
+        if (row == null || col < 0 || col >= row.length) return "";
+        return row[col] == null ? "" : row[col];
+    }
+
+    private static float luminance(int color) {
+        return (0.299f * Color.red(color) + 0.587f * Color.green(color)
+                + 0.114f * Color.blue(color)) / 255f;
+    }
+
+    private static StaticLayout makeCellLayout(String text, TextPaint paint, int width) {
+        String t = text == null || text.isEmpty() ? " " : text;
+        // 旧构造器（API 1+）没有 Builder 的 API 23 限制，minSdk 21 也能用
+        return new StaticLayout(t, paint, java.lang.Math.max(1, width),
+                Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false);
+    }
+
+    /**
+     * 画表格位图；宽度塞不下（列数太多，连最小列宽都不够）时返回 null。
+     * <p>包内可见仅供单测间接验证（通过 renderRich 的 span）。</p>
+     */
+    private Bitmap drawTableBitmap(java.util.List<String[]> rows, int maxWidthPx, float textSizePx) {
+        if (rows.isEmpty() || maxWidthPx <= 0 || textSizePx <= 0f) return null;
+        int cols = 0;
+        for (String[] r : rows) cols = java.lang.Math.max(cols, r.length);
+        if (cols == 0) return null;
+
+        float density = android.content.res.Resources.getSystem().getDisplayMetrics().density;
+        if (density <= 0f) density = 1f;
+        int padH = java.lang.Math.max(4, java.lang.Math.round(6 * density));
+        int padV = java.lang.Math.max(3, java.lang.Math.round(5 * density));
+        int corner = java.lang.Math.round(8 * density);
+        // 最小列宽：留出两个字的位置，否则中文表头会被拆成一字一行
+        int minCol = java.lang.Math.max(padH * 2 + java.lang.Math.round(textSizePx * 2f),
+                java.lang.Math.round(36 * density));
+
+        TextPaint body = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
+        body.setTextSize(textSizePx);
+        body.setColor(baseTextColor);
+        TextPaint head = new TextPaint(body);
+        head.setFakeBoldText(true);
+
+        // 1) 每列按内容算自然宽度
+        int[] widths = new int[cols];
+        for (int c = 0; c < cols; c++) {
+            int w = minCol;
+            for (int r = 0; r < rows.size(); r++) {
+                Paint p = r == 0 ? head : body;
+                float textW = p.measureText(cellAt(rows.get(r), c));
+                w = java.lang.Math.max(w, (int) java.lang.Math.ceil(textW) + padH * 2);
+            }
+            widths[c] = w;
+        }
+        // 2) 超出可用宽度：从最宽的列开始削。
+        //    等比压缩会把本来就只有两三个字的窄列压成「一字一行」，
+        //    优先削宽列既能保住窄列，又让宽列靠换行消化内容。
+        int total = 0;
+        for (int w : widths) total += w;
+        if ((long) minCol * cols > maxWidthPx) return null;
+        while (total > maxWidthPx) {
+            int idx = -1;
+            int max = -1;
+            for (int c = 0; c < cols; c++) {
+                if (widths[c] > minCol && widths[c] > max) {
+                    max = widths[c];
+                    idx = c;
+                }
+            }
+            if (idx < 0) return null;   // 全都到下限了还放不下
+            widths[idx]--;
+            total--;
+        }
+        int tableW = 0;
+        for (int w : widths) tableW += w;
+
+        // 3) 量每一行的高度（单元格内自动换行）
+        int rowCount = rows.size();
+        int[] rowH = new int[rowCount];
+        StaticLayout[][] cells = new StaticLayout[rowCount][cols];
+        for (int r = 0; r < rowCount; r++) {
+            TextPaint p = r == 0 ? head : body;
+            for (int c = 0; c < cols; c++) {
+                StaticLayout sl = makeCellLayout(cellAt(rows.get(r), c), p, widths[c] - padH * 2);
+                cells[r][c] = sl;
+                rowH[r] = java.lang.Math.max(rowH[r], sl.getHeight() + padV * 2);
+            }
+        }
+        int tableH = 0;
+        for (int h : rowH) tableH += h;
+        if (tableW <= 0 || tableH <= 0) return null;
+        // 单表最多 4 MB（ARGB_8888）
+        if ((long) tableW * tableH * 4 > 4L * 1024 * 1024) return null;
+
+        Bitmap bitmap = Bitmap.createBitmap(tableW, tableH, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+
+        // 底：圆角面板
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(codeBgColor);
+        RectF bounds = new RectF(0, 0, tableW, tableH);
+        canvas.drawRoundRect(bounds, corner, corner, bg);
+        // 表头底色：按文字明暗取一层半透明覆盖（深色气泡提亮，浅色气泡压暗）
+        canvas.save();
+        Path clip = new Path();
+        clip.addRoundRect(bounds, corner, corner, Path.Direction.CW);
+        canvas.clipPath(clip);
+        Paint headBg = new Paint();
+        headBg.setColor(luminance(baseTextColor) > 0.5f ? 0x1FFFFFFF : 0x0F000000);
+        canvas.drawRect(0, 0, tableW, rowH[0], headBg);
+        canvas.restore();
+
+        // 网格线
+        Paint line = new Paint();
+        line.setColor(dividerColor);
+        line.setStrokeWidth(java.lang.Math.max(1f, density * 0.75f));
+        int y = 0;
+        for (int r = 0; r < rowCount; r++) {
+            if (r > 0) canvas.drawLine(0, y, tableW, y, line);
+            int x = 0;
+            for (int c = 0; c < cols; c++) {
+                if (c > 0) canvas.drawLine(x, y, x, y + rowH[r], line);
+                canvas.save();
+                canvas.translate(x + padH, y + padV);
+                cells[r][c].draw(canvas);
+                canvas.restore();
+                x += widths[c];
+            }
+            y += rowH[r];
+        }
+        return bitmap;
+    }
+
 
     private static String[] splitRow(String line) {
         String t = line.trim();

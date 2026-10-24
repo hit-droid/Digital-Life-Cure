@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.text.Spannable;
+import android.text.style.ImageSpan;
 import android.text.style.URLSpan;
 
 import org.junit.Test;
@@ -276,5 +277,74 @@ public class MarkdownRendererTest {
         String out = renderer().render("上方\n---\n下方").toString();
         assertFalse("水平线不应原样显示 ---：" + out, out.contains("---"));
         assertTrue("水平线应渲染成横线字符：" + out, out.contains("\u2500"));
+    }
+
+    // ==================== v1.187.0：真表格（位图 + ImageSpan） ====================
+
+    private static ImageSpan[] images(Spannable ss) {
+        return ss.getSpans(0, ss.length(), ImageSpan.class);
+    }
+
+    @Test
+    public void renderRich_tableBecomesImageSpan() {
+        String md = "| 名称 | 说明 |\n|---|---|\n| 小汐 | 数字生命助手 |\n";
+        Spannable ss = (Spannable) renderer().renderRich(md, 600, 42f);
+        ImageSpan[] spans = images(ss);
+        assertEquals("表格应渲染成一张位图：" + spans.length, 1, spans.length);
+    }
+
+    @Test
+    public void renderRich_tableTextStaysSearchable() {
+        // 位图只是显示层，被替换的文字仍在 CharSequence 里：复制 / 搜索都靠它
+        String md = "| 名称 | 说明 |\n|---|---|\n| 小汐 | 数字生命助手 |\n";
+        String out = renderer().renderRich(md, 600, 42f).toString();
+        assertTrue("表头文字应保留：" + out, out.contains("名称"));
+        assertTrue("单元格文字应保留：" + out, out.contains("小汐"));
+        assertFalse("行内标记仍应剥掉：" + out, out.contains("**"));
+    }
+
+    /** ReplacementSpan 跨换行会被 StaticLayout 拆成多段重复绘制，所以 span 内不能有换行 */
+    @Test
+    public void renderRich_tableSpanDoesNotContainNewline() {
+        String md = "| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n";
+        Spannable ss = (Spannable) renderer().renderRich(md, 600, 42f);
+        ImageSpan[] spans = images(ss);
+        assertEquals(1, spans.length);
+        String spanned = ss.subSequence(ss.getSpanStart(spans[0]), ss.getSpanEnd(spans[0])).toString();
+        assertFalse("span 内不应有换行：" + spanned, spanned.contains("\n"));
+    }
+
+    @Test
+    public void renderRich_tableBitmapFitsAvailableWidth() {
+        String md = "| 名称 | 说明 |\n|---|---|\n| 小汐 | 数字生命助手 |\n";
+        Spannable ss = (Spannable) renderer().renderRich(md, 420, 42f);
+        ImageSpan[] spans = images(ss);
+        assertEquals(1, spans.length);
+        int w = spans[0].getDrawable().getBounds().width();
+        assertTrue("位图宽度应在可用宽度内，实际 " + w, w > 0 && w <= 420);
+    }
+
+    @Test
+    public void renderRich_narrowWidthFallsBackToTextTable() {
+        // 连最小列宽都塞不下时不能画出超宽位图，退回等宽文本
+        String md = "| a | b | c |\n|---|---|---|\n| 1 | 2 | 3 |\n";
+        Spannable ss = (Spannable) renderer().renderRich(md, 40, 42f);
+        assertEquals("放不下时不应产生位图", 0, images(ss).length);
+        assertTrue("仍应保留单元格文字：" + ss, ss.toString().contains("a"));
+    }
+
+    @Test
+    public void renderRich_plainTextHasNoImageSpan() {
+        Spannable ss = (Spannable) renderer().renderRich("普通文本\n\n- 列表项\n", 600, 42f);
+        assertEquals("非表格内容不应产生位图", 0, images(ss).length);
+        assertTrue(ss.toString().contains("普通文本"));
+    }
+
+    @Test
+    public void renderRich_textAroundTableIsKept() {
+        String md = "前文\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n后文";
+        String out = renderer().renderRich(md, 600, 42f).toString();
+        assertTrue("表格前的文字应保留：" + out, out.contains("前文"));
+        assertTrue("表格后的文字应保留：" + out, out.contains("后文"));
     }
 }

@@ -1338,6 +1338,9 @@ public class ChatActivity extends Activity {
                                         null, null, System.currentTimeMillis());
                                 msgIds.put(curAssistantBubble, mid);
                                 rememberAssistant(curAssistantText);
+                                // v1.187.0：消息定型后再画表格位图（流式期间保持纯文本）
+                                curAssistantBubble.setText(renderAiMessage(curAssistantText));
+                                registerFullText(curAssistantBubble, curAssistantText);
                                 applyCollapse(curAssistantBubble);
                                 curAssistantBubble = null;
                                 curAssistantText = "";
@@ -1488,6 +1491,9 @@ public class ChatActivity extends Activity {
                         long mid = chatStore.addMessage(sessionKey, "assistant", curAssistantText,
                                 null, null, System.currentTimeMillis());
                         msgIds.put(curAssistantBubble, mid);
+                        // v1.187.0：消息定型后再画表格位图（流式期间保持纯文本）
+                        curAssistantBubble.setText(renderAiMessage(curAssistantText));
+                        registerFullText(curAssistantBubble, curAssistantText);
                         // v1.28.0：完成后对长消息应用折叠
                         applyCollapse(curAssistantBubble);
                         curAssistantBubble = null;
@@ -1645,8 +1651,41 @@ public class ChatActivity extends Activity {
         return b;
     }
 
-    // ==================== v1.28.0：长消息展开/收起 ====================
+    /**
+     * v1.187.0：气泡内容可用宽度（px）——扣掉左右内边距，表格位图按它限宽。
+     */
+    private int bubbleContentWidthPx() {
+        int w = maxBubbleWidth - dp(ChatLayoutOps.BUBBLE_PADDING_H_DP) * 2;
+        return w > 0 ? w : maxBubbleWidth;
+    }
 
+    /**
+     * v1.187.0：AI 消息渲染入口。表格画成真网格（位图），其余与
+     * {@link MarkdownRenderer#render} 完全一致。
+     * <p>流式回复仍走纯文本渲染（见 onDelta），只在消息定型时调这里，
+     * 避免每个 token 都重画一张表格位图。</p>
+     */
+    private CharSequence renderAiMessage(String raw) {
+        if (mdRenderer == null) return raw == null ? "" : raw;
+        float textSizePx = android.util.TypedValue.applyDimension(
+                android.util.TypedValue.COMPLEX_UNIT_SP, 15f,
+                getResources().getDisplayMetrics());
+        return mdRenderer.renderRich(raw, bubbleContentWidthPx(), textSizePx);
+    }
+
+    /**
+     * v1.187.0：给气泡登记一份「纯文本全文」。
+     * <p>气泡显示的是带表格位图的富文本，{@code getText()} 里的表格被压成
+     * 「单元格 | 单元格；」这样的单段文字，直接拿去复制会丢掉换行。这里另存一份
+     * {@link MarkdownRenderer#render} 的结果——表格仍是等宽文本、行间有换行——
+     * 长按「复制 / 引用」优先取它。</p>
+     */
+    private void registerFullText(TextView bubble, String raw) {
+        if (bubble == null || raw == null) return;
+        fullTexts.put(bubble, mdRenderer != null ? mdRenderer.render(raw) : raw);
+    }
+
+    // ==================== v1.28.0：长消息展开/收起 ====================
     /** 折叠阈值：AI 回复超过此行数时默认收起，点击展开 */
     private static final int COLLAPSE_MAX_LINES = 10;
     /** v1.35.0：工具结果超过此长度默认折叠；折叠时摘要长度 */
@@ -1671,7 +1710,8 @@ public class ChatActivity extends Activity {
                 // 保存完整文本
                 CharSequence full = bubble.getText();
                 // v1.142.0（#59）：记录全文，折叠态长按取用时优先用完整文本而非截断内容
-                fullTexts.put(bubble, full);
+                // v1.187.0：已登记过纯文本全文的（AI 气泡）不要用带位图 span 的富文本覆盖
+                if (!fullTexts.containsKey(bubble)) fullTexts.put(bubble, full);
                 // 收起态
                 bubble.setMaxLines(COLLAPSE_MAX_LINES);
                 bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -2195,7 +2235,8 @@ public class ChatActivity extends Activity {
         TextView b = newTextViewBubble();
         // v1.147.0（#83）：登记原始 Markdown 原文，供「复制为 Markdown」使用
         rawMarkdown.put(b, text == null ? "" : text);
-        b.setText(mdRenderer != null ? mdRenderer.render(text) : text);
+        registerFullText(b, text);
+        b.setText(renderAiMessage(text));
         // v1.130.0：气泡 + 时间戳一起挂载（布局参数由 wrapBubble 统一设置）
         // 刚插过同时间的分割线时不再重复画气泡时间戳
         listContainer.addView(wrapBubble(b, ts, false, !dividerShown));

@@ -457,3 +457,21 @@ Entries discovered by the Agent during task execution should follow this format:
 
 
 
+
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.187.0 对话真表格
+- Category: Chat Rendering
+- Instructions:
+  - v1.186.0 已发布：CI run 40086341090 success、Release v1.186.0 资产 app-release.apk 8,642,151B。
+  - v1.187.0 交付：聊天气泡里的 Markdown 表格从等宽字符对齐 → **真网格位图**。`render()` 保持原样（纯文本兜底 + 既有单测契约），新增 `MarkdownRenderer.renderRich(raw, maxWidthPx, textSizePx)`。
+  - **为什么用位图 + ImageSpan 而不是把气泡改成 ViewGroup**：ChatActivity 的 `aiBubbles`/`fullTexts`/`rawMarkdown`/`msgIds` 全部以 `TextView` 为键，`applyCollapse`/搜索高亮/长按菜单都依赖 `getText()/setText()`。位图方案只需替换「表格那一段文字」的绘制，`CharSequence` 里文字仍在 → 搜索/复制/折叠零改动。
+  - **关键约束：ImageSpan 不能跨换行**。ReplacementSpan 跨段落会被 StaticLayout 拆成多段重复绘制；所以表格的纯文本用「单元格 | 单元格；」连接（行间用中文分号），绝不带 `\n`。
+  - 绘制：`StaticLayout`（旧构造器，minSdk 21 可用）逐格自动换行；`ImageSpan.getSize` 会把 `fm.ascent` 设为 `-bitmap.height`，所以行高天然等于位图高，无需额外空行补偿。
+  - 列宽：自然宽度 = max(measureText(cell)) + 2*padH；超宽时**从最宽列逐像素削**（等比压缩会把两字窄列压成「一字一行」）；最小列宽 = 2 个字 + 内边距；连下限都塞不下 → 返回 null 退回等宽文本。
+  - 预算：单条消息最多 4 张表、单次最多 1.5M 像素；整页累计 6M 像素（≈24MB，`tableBitmapPixelsUsed` 在 renderer 实例上累计）后所有表格退回文本，防长历史 OOM。
+  - **流式期间不要画位图**：`onDelta` 每 token 重渲染一次，位图会高频分配；流式保持 `render()`，在 `onDone`（chat 与 care 两个监听器）定型时再 `setText(renderAiMessage(...))`。
+  - `registerFullText`：另存 `render(raw)` 的纯文本全文到 `fullTexts`，长按复制/引用/朗读优先取它（富文本 `getText()` 里表格被压成单段、丢换行）；`applyCollapse` 改为 `if (!fullTexts.containsKey(bubble))` 才写，避免把纯文本全文覆盖成带位图的富文本。
+  - 验证：Robolectric `@GraphicsMode(NATIVE)` 可把 TextView + renderRich 真渲染成 PNG 自查（临时测试跑完即删，别入库）；`MarkdownRendererTest` 新增 7 条（ImageSpan 存在、文字可搜、span 无换行、宽度受限、窄宽回退、纯文本无 span、表前后文字保留）。
+  - 本轮 verify：795 单测 / 71 类、lint 0 error、APK 通过。
+  - 用户「四项都要」的四项至此全部完成：① 触摸眼神跟手（v1.185.0）② 快捷菜单换模型（v1.186.0）③ 桌宠拍张照（v1.186.0）④ 对话真表格（v1.187.0）。
