@@ -492,3 +492,17 @@ Entries discovered by the Agent during task execution should follow this format:
   - `CodeHighlighterTest` 20 条（含词法边界：URL 里的 `//`、`classy`≠`class`、SQL 大小写、Python 三引号、token 有序不重叠）；`MarkdownRendererTest` +4 条（render/renderRich 都着色、正文与复制提示保留、前景色 span 不重叠）。
   - 本轮 verify：819 单测 / 72 类、lint 0 error、APK(debug) 9,356,770B。
   - 环境坑：容器重置后 `/opt/android-sdk` 为空，需重装 cmdline-tools + platforms;android-34 + build-tools;34.0.0 + ndk;27.3.13750724 + cmake;3.22.1；lint 在**独立 JVM** 里下载 lint-gradle，`JAVA_OPTS` 传不进去，要改用 `JAVA_TOOL_OPTIONS` 设代理，否则报 `Connect to dl.google.com:443 timed out`。
+
+
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.189.0 桌宠桌面占位放宽
+- Category: Pet Overlay / Settings
+- Instructions:
+  - 用户长期抱怨「桌宠在桌面上的范围太窄」：根因是悬浮窗尺寸硬编码为屏幕 **宽 35% × 高 57%**，且 `PetService.ensureRunning` 与 `resizeOverlayForDisplay` 各写一份；`PetOverlayView.onSizeChanged` 又单独把触摸带写成 `0.2f~0.8f`。三套魔数彼此不一致，模型按窗口宽度铺满 → 实际只占屏幕约 1/3 宽。
+  - v1.189.0 修法：新增纯逻辑 `util/OverlayGeometry` 统一 `WIDTH_RATIO=0.48f`、`HEIGHT_RATIO=0.62f`、`SCALE_MIN=70/SCALE_MAX=130`、触摸带 `TOUCH_LEFT=0.10f/TOUCH_RIGHT=0.90f/TOUCH_TOP=0.10f`。`PetService` 两处与 `PetOverlayView` 一律改为调用它，禁止再写字面量比例。
+  - 设置页「功能设置」新增「桌宠大小」SeekBar（70%~130%，`Settings.scale` 早就存在但此前没有 UI 入口）：拖动即写 prefs，并用 `PetService.applyOverlayScale()` 热生效（内部复用 `resizeOverlayForDisplay` 的等比位置迁移 + 屏内夹取），无需重启服务。
+  - 触摸带从 60% 宽扩到 80% 宽；带外事件仍经 `onInterceptTouchEvent` 返回 false 透传给下层桌面，所以窗口变大不会挡住桌面图标区。
+  - 原生 HitArea、`PetTouchReaction.zoneFor` 回退、拖拽/贴边停靠（`OverlayDock`）逻辑均未改动。
+  - `OverlayGeometryTest` 7 条锁几何（默认宽度 >=40% 屏宽、比例算式、缩放夹取、极小屏不塌缩、触摸带不越界且 >=80% 宽、坐标有序）。
+  - 环境坑复述：lint 任务的 lint-gradle 在独立 JVM 下载，`JAVA_OPTS` 无效，要 `JAVA_TOOL_OPTIONS` 设代理，否则 `Connect to dl.google.com:443 timed out`。

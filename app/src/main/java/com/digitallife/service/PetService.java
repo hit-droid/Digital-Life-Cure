@@ -42,6 +42,7 @@ import com.digitallife.model.ModelInspector;
 import com.digitallife.model.ModelManager;
 import com.digitallife.util.CrashHandler;
 import com.digitallife.util.MemoryStore;
+import com.digitallife.util.OverlayGeometry;
 import com.digitallife.util.Settings;
 import com.digitallife.util.ThoughtStore;
 import com.digitallife.ui.PetOverlayView;
@@ -217,9 +218,9 @@ public class PetService extends Service implements AICore.Output,
         Display display = windowManager.getDefaultDisplay();
         Point size = new Point();
         display.getRealSize(size);
-        float scale = settings.getScale() / 100f;
-        int overlayW = (int) (size.x * 0.35f * scale);
-        int overlayH = (int) (size.y * 0.57f * scale);
+        // v1.189.0：窗口尺寸统一走 OverlayGeometry（原 0.35/0.57 的窄条 + 两处重复魔数）
+        int overlayW = OverlayGeometry.windowWidth(size.x, settings.getScale());
+        int overlayH = OverlayGeometry.windowHeight(size.y, settings.getScale());
 
         overlayView = new PetOverlayView(this, this);
         positionLocked = settings.isPetLocked();
@@ -885,9 +886,8 @@ public class PetService extends Service implements AICore.Output,
         try {
             Point size = new Point();
             windowManager.getDefaultDisplay().getRealSize(size);
-            float scale = settings.getScale() / 100f;
-            int overlayW = (int) (size.x * 0.35f * scale);
-            int overlayH = (int) (size.y * 0.57f * scale);
+            int overlayW = OverlayGeometry.windowWidth(size.x, settings.getScale());
+            int overlayH = OverlayGeometry.windowHeight(size.y, settings.getScale());
             int oldW = overlayParams.width;
             int oldH = overlayParams.height;
             if (oldW > 0 && oldH > 0 && (oldW != overlayW || oldH != overlayH)) {
@@ -901,6 +901,14 @@ public class PetService extends Service implements AICore.Output,
             windowManager.updateViewLayout(overlayView, overlayParams);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * v1.189.0：设置页调整「桌宠大小」后立即生效。
+     * 复用旋转重建的几何逻辑（含位置等比迁移与屏内夹取），不需要重启服务。
+     */
+    public void applyOverlayScale() {
+        resizeOverlayForDisplay();
     }
 
     // ================= 模型统一管理 =================

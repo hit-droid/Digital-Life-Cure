@@ -18,6 +18,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -42,6 +43,7 @@ import com.digitallife.storage.PendingRestore;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.CrashHandler;
+import com.digitallife.util.OverlayGeometry;
 import com.digitallife.util.PassphraseCrypto;
 import com.digitallife.util.Settings;
 
@@ -176,6 +178,41 @@ public class SettingsTabView extends LinearLayout {
         swProactive = UiKit.switchRow(activity, cSwitch, "自主行为（会主动找你说话）", settings.isProactiveEnabled());
         swEdgeDock = UiKit.switchRow(activity, cSwitch, "贴边停靠（松手吸附到屏幕边缘）", settings.isEdgeDockEnabled());
         swAutoStart = UiKit.switchRow(activity, cSwitch, "开机自动启动（重启后桌宠自己回来）", settings.isAutoStartEnabled());
+
+        // v1.189.0：桌宠大小——此前窗口宽高硬编码为屏幕的 35%×57%，桌面只占一条窄带。
+        // 缩放持久化到 Settings.scale，桌宠在运行时立即重建窗口，无需重启服务。
+        LinearLayout sizeRow = new LinearLayout(activity);
+        sizeRow.setOrientation(LinearLayout.VERTICAL);
+        final TextView tvScale = new TextView(activity);
+        tvScale.setTextSize(13f);
+        tvScale.setTextColor(UiKit.color(activity, R.color.operit_text_secondary));
+        final int scale0 = OverlayGeometry.clampScale(settings.getScale());
+        tvScale.setText("桌宠大小：" + scale0 + "%");
+        SeekBar sbScale = new SeekBar(activity);
+        sbScale.setMax(OverlayGeometry.SCALE_MAX - OverlayGeometry.SCALE_MIN);
+        sbScale.setProgress(scale0 - OverlayGeometry.SCALE_MIN);
+        sbScale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int value = OverlayGeometry.SCALE_MIN + progress;
+                tvScale.setText("桌宠大小：" + value + "%");
+                settings.setScale(value);
+                if (!fromUser) return;
+                PetService svc = PetService.getInstance();
+                if (svc != null) svc.applyOverlayScale();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        sizeRow.addView(tvScale, UiKit.lp(activity, 0));
+        sizeRow.addView(sbScale, UiKit.lp(activity, 0));
+        cSwitch.addView(sizeRow, UiKit.lp(activity, 4));
 
         Button btnAccessibility = UiKit.button(activity, cSwitch, "无障碍感知权限（可选，增强互动）");
         btnAccessibility.setOnClickListener(v -> requestAccessibilityPermission());
