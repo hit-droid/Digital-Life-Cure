@@ -68,7 +68,7 @@ public class PetOverlayView extends FrameLayout {
     private float lastTouchX, lastTouchY;
     private boolean live2DReady = false;
 
-    /** 可交互人偶区域（模型带）：v1.189.0 由 OverlayGeometry 统一定义（水平 10%~90%、垂直 10%~100%）；区域外触摸透传给下层应用 */
+    /** 可交互人偶区域（模型带）：v1.189.1 起由 OverlayGeometry 统一定义（横向铺满、纵向 10%~100%）；区域外触摸透传给下层应用 */
     private final android.graphics.Rect modelRect = new android.graphics.Rect();
 
     /** v1.184.0：本次按下投递的原生命中查询序号；抬手判定点击时取回结果 */
@@ -625,8 +625,8 @@ public class PetOverlayView extends FrameLayout {
             lp.topMargin = (int) (h * 0.26f);
             bubbleContainer.setLayoutParams(lp);
         }
-        // 人偶区域（模型带）：v1.189.0 起由 OverlayGeometry 统一定义——
-        // 水平 10%~90%、垂直 10%~100%；此前只有中间 60% 宽，边缘摸不到。
+        // 人偶区域（模型带）：v1.189.1 起由 OverlayGeometry 统一定义——
+        // 横向铺满窗口、纵向 10%~100%；此前中间只覆盖 60%，模型边缘点不中。
         if (w > 0 && h > 0) {
             int[] band = OverlayGeometry.touchBand(w, h);
             modelRect.set(band[0], band[1], band[2], band[3]);

@@ -7,6 +7,11 @@ package com.digitallife.util;
  * （启动与旋转重建），人偶触摸带又单独写了一套 {@code 0.2f~0.8f}。三处魔数
  * 各改各的，结果就是「桌宠在桌面上只占一条窄带」。这里统一成一份可测的几何：
  * 窗口占屏幕的比例、缩放上下限、触摸带范围。</p>
+ *
+ * <p>v1.189.1：触摸带改为横向铺满窗口。v1.189.0 仍是中间 80% 宽，
+ * 模型张开手臂或站在窗口边缘时点不中，事件直接落到下层应用——这正是用户
+ * 说的「范围太窄」的另一半。同时补上 {@link #clampX} / {@link #clampY}，
+ * 让窗口变大后恢复的旧坐标不会跑出屏幕。</p>
  */
 public final class OverlayGeometry {
 
@@ -19,10 +24,10 @@ public final class OverlayGeometry {
     public static final int SCALE_MAX = 130;
     public static final int SCALE_DEFAULT = 100;
 
-    /** 触摸带左右留白（占窗口宽）；10% 起、90% 止，即中间 80% 宽 */
-    public static final float TOUCH_LEFT = 0.10f;
-    public static final float TOUCH_RIGHT = 0.90f;
-    /** 触摸带顶部留白（占窗口高），底部贴到窗口下沿 */
+    /** 触摸带左右边界（占窗口宽）：v1.189.1 起铺满整个窗口，不再留 10% 的穿透缝 */
+    public static final float TOUCH_LEFT = 0f;
+    public static final float TOUCH_RIGHT = 1f;
+    /** 触摸带顶部留白（占窗口高），底部贴到窗口下沿；上方留给气泡 / 输入框 */
     public static final float TOUCH_TOP = 0.10f;
 
     private OverlayGeometry() {
@@ -53,5 +58,17 @@ public final class OverlayGeometry {
         int t = Math.max(0, Math.round(h * TOUCH_TOP));
         int r = Math.min(w, Math.round(w * TOUCH_RIGHT));
         return new int[]{l, t, r, h};
+    }
+
+    /** v1.189.1：窗口横向坐标夹回屏内（窗口比屏幕还宽时贴左上角） */
+    public static int clampX(int x, int overlayWidth, int screenWidth) {
+        int max = Math.max(0, screenWidth - overlayWidth);
+        return Math.max(0, Math.min(x, max));
+    }
+
+    /** v1.189.1：窗口纵向坐标夹回屏内 */
+    public static int clampY(int y, int overlayHeight, int screenHeight) {
+        int max = Math.max(0, screenHeight - overlayHeight);
+        return Math.max(0, Math.min(y, max));
     }
 }

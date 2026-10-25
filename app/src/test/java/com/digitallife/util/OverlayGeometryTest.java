@@ -10,6 +10,8 @@ import org.junit.Test;
  *
  * <p>锁住两件事：默认尺寸不再是一条窄带（宽度明显大于旧的 35%），
  * 以及缩放被夹在可用的上下限内、触摸带不越界。</p>
+ *
+ * <p>v1.189.1 追加：触摸带横向铺满窗口，以及窗口坐标夹回屏内。</p>
  */
 public class OverlayGeometryTest {
 
@@ -64,9 +66,40 @@ public class OverlayGeometryTest {
     }
 
     @Test
+    public void touchBandSpansFullWindowWidth() {
+        // v1.189.1：横向铺满，模型边缘（张开的手臂、贴边站立）也能点中
+        int[] band = OverlayGeometry.touchBand(600, 1200);
+        assertEquals(0, band[0]);
+        assertEquals(600, band[2]);
+        assertEquals(600, band[2] - band[0]);
+    }
+
+    @Test
+    public void touchBandTopLeavesRoomForBubble() {
+        int[] band = OverlayGeometry.touchBand(600, 1200);
+        assertEquals(Math.round(1200 * OverlayGeometry.TOUCH_TOP), band[1]);
+    }
+
+    @Test
     public void touchBandAlwaysOrdered() {
         int[] band = OverlayGeometry.touchBand(0, 0);
         assertTrue(band[0] <= band[2]);
         assertTrue(band[1] <= band[3]);
+    }
+
+    @Test
+    public void clampKeepsWindowInsideScreen() {
+        assertEquals(0, OverlayGeometry.clampX(-50, 400, 1080));
+        assertEquals(680, OverlayGeometry.clampX(900, 400, 1080));
+        assertEquals(300, OverlayGeometry.clampX(300, 400, 1080));
+        assertEquals(0, OverlayGeometry.clampY(-20, 1200, 2400));
+        assertEquals(1200, OverlayGeometry.clampY(2000, 1200, 2400));
+    }
+
+    @Test
+    public void clampHandlesWindowBiggerThanScreen() {
+        // 缩放上限 130% 时窗口仍小于屏幕，但极小屏/分屏下可能超出，此时贴左上角
+        assertEquals(0, OverlayGeometry.clampX(120, 1080, 800));
+        assertEquals(0, OverlayGeometry.clampY(120, 2400, 1600));
     }
 }

@@ -242,8 +242,9 @@ public class PetService extends Service implements AICore.Output,
         float px = settings.getOverlayX();
         float py = settings.getOverlayY();
         if (px >= 0 && py >= 0) {
-            overlayParams.x = (int) px;
-            overlayParams.y = (int) py;
+            // v1.189.1：窗口变大（缩放上限提高）后旧的持久化坐标可能越界，先夹回屏内
+            overlayParams.x = OverlayGeometry.clampX((int) px, overlayW, size.x);
+            overlayParams.y = OverlayGeometry.clampY((int) py, overlayH, size.y);
         } else {
             overlayParams.x = size.x / 2 - overlayW / 2;
             overlayParams.y = (int) (size.y * 0.18f);
@@ -896,8 +897,8 @@ public class PetService extends Service implements AICore.Output,
             }
             overlayParams.width = overlayW;
             overlayParams.height = overlayH;
-            overlayParams.x = Math.max(0, Math.min(overlayParams.x, Math.max(0, size.x - overlayW)));
-            overlayParams.y = Math.max(0, Math.min(overlayParams.y, Math.max(0, size.y - overlayH)));
+            overlayParams.x = OverlayGeometry.clampX(overlayParams.x, overlayW, size.x);
+            overlayParams.y = OverlayGeometry.clampY(overlayParams.y, overlayH, size.y);
             windowManager.updateViewLayout(overlayView, overlayParams);
         } catch (Exception ignored) {
         }

@@ -506,3 +506,15 @@ Entries discovered by the Agent during task execution should follow this format:
   - 原生 HitArea、`PetTouchReaction.zoneFor` 回退、拖拽/贴边停靠（`OverlayDock`）逻辑均未改动。
   - `OverlayGeometryTest` 7 条锁几何（默认宽度 >=40% 屏宽、比例算式、缩放夹取、极小屏不塌缩、触摸带不越界且 >=80% 宽、坐标有序）。
   - 环境坑复述：lint 任务的 lint-gradle 在独立 JVM 下载，`JAVA_OPTS` 无效，要 `JAVA_TOOL_OPTIONS` 设代理，否则 `Connect to dl.google.com:443 timed out`。
+
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.189.1 触摸带铺满 + 坐标夹取
+- Category: Pet Overlay / Geometry
+- Instructions:
+  - v1.189.0 只把窗口放大到 48%×62%、触摸带扩到 80% 宽，**没有真正解决「范围太窄」**：模型按窗口宽度铺满，窗口左右各 10% 仍是穿透缝，张开手臂/贴边站立时点不中。
+  - v1.189.1 修法：`OverlayGeometry.TOUCH_LEFT=0f`、`TOUCH_RIGHT=1f`（横向铺满整个窗口），`TOUCH_TOP` 保持 `0.10f`（顶部留给气泡/输入框）。`touchBand` 是唯一来源，`PetOverlayView.modelRect` 与 `Live2DGLView.setTouchRegion` 必须用同一个 rect，否则会出现「点得中但不触发」。
+  - 新增 `OverlayGeometry.clampX/clampY`：窗口宽高变化（缩放滑块、横竖屏）后旧坐标可能越界，`PetService.ensureRunning` 恢复持久化坐标与 `resizeOverlayForDisplay` 都必须夹回屏内；窗口比屏幕大时返回 0（贴左上角）。
+  - 设计取舍：横向铺满意味着悬浮窗覆盖的整块区域都会吃掉触摸，不再透传给桌面；这是用户明确要求（点得中优先），窗口本身只占屏宽 48%，可接受。
+  - `OverlayGeometryTest` 由 7 条扩到 11 条：新增触摸带铺满宽度、顶部留白、坐标夹取、窗口大于屏幕贴左上角。
+  - 版本冲突处理：v1.189.0 已由远端提交 `513e0e8` 占用并打了 tag，本地另一套实现（`ui/pet/PetWindowMetrics`）不可强推，改为以远端为基线做 v1.189.1 增量。
