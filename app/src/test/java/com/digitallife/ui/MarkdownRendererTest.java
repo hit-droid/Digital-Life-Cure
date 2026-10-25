@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.text.Spannable;
+import android.text.style.ForegroundColorSpan;
 import android.text.style.ImageSpan;
 import android.text.style.URLSpan;
 
@@ -346,5 +347,73 @@ public class MarkdownRendererTest {
         String out = renderer().renderRich(md, 600, 42f).toString();
         assertTrue("表格前的文字应保留：" + out, out.contains("前文"));
         assertTrue("表格后的文字应保留：" + out, out.contains("后文"));
+    }
+
+    // ==================== v1.188.0：代码块语法高亮 ====================
+
+    @Test
+    public void render_codeBlockAppliesSyntaxColors() {
+        String md = "```java\npublic class Demo { String s = \"hi\"; }\n```";
+        Spannable ss = (Spannable) renderer().render(md);
+        ForegroundColorSpan[] spans =
+                ss.getSpans(0, ss.length(), ForegroundColorSpan.class);
+        boolean hasKeyword = false;
+        boolean hasString = false;
+        for (ForegroundColorSpan span : spans) {
+            if (span.getForegroundColor() == 0xFFFF7B72) hasKeyword = true;
+            if (span.getForegroundColor() == 0xFFA5D6FF) hasString = true;
+        }
+        assertTrue("关键字应着色：" + spans.length, hasKeyword);
+        assertTrue("字符串应着色：" + spans.length, hasString);
+    }
+
+    @Test
+    public void render_codeBlockKeepsTextAndCopyTip() {
+        String md = "```java\nint a = 1;\n```";
+        String out = renderer().render(md).toString();
+        assertTrue("代码正文应保留：" + out, out.contains("int a = 1;"));
+        assertTrue("点击复制提示应保留：" + out, out.contains("[复制代码]"));
+    }
+
+    @Test
+    public void renderRich_codeBlockAlsoHighlighted() {
+        // 表格位图走的是 renderRich，代码块必须同样上色
+        String md = "```python\ndef f():\n    return True\n```\n";
+        Spannable ss = (Spannable) renderer().renderRich(md, 600, 42f);
+        ForegroundColorSpan[] spans =
+                ss.getSpans(0, ss.length(), ForegroundColorSpan.class);
+        boolean hasKeyword = false;
+        for (ForegroundColorSpan span : spans) {
+            if (span.getForegroundColor() == 0xFFFF7B72) hasKeyword = true;
+        }
+        assertTrue("代码块在 renderRich 里也应高亮", hasKeyword);
+    }
+
+    /** 同类型 span 重叠时谁生效取决于平台优先级，所以前景色区间必须互不重叠 */
+    @Test
+    public void render_codeBlockForegroundSpansDoNotOverlap() {
+        String md = "```java\npublic class Demo { String s = \"hi\"; } // 注释\n```";
+        Spannable ss = (Spannable) renderer().render(md);
+        ForegroundColorSpan[] spans =
+                ss.getSpans(0, ss.length(), ForegroundColorSpan.class);
+        assertTrue("应有多段前景色 span，实际 " + spans.length, spans.length > 3);
+        int[] starts = new int[spans.length];
+        int[] ends = new int[spans.length];
+        for (int i = 0; i < spans.length; i++) {
+            starts[i] = ss.getSpanStart(spans[i]);
+            ends[i] = ss.getSpanEnd(spans[i]);
+        }
+        // 按起点排序（插入排序，数组很小）
+        for (int i = 1; i < spans.length; i++) {
+            for (int j = i; j > 0 && starts[j - 1] > starts[j]; j--) {
+                int tmp = starts[j]; starts[j] = starts[j - 1]; starts[j - 1] = tmp;
+                tmp = ends[j]; ends[j] = ends[j - 1]; ends[j - 1] = tmp;
+            }
+        }
+        for (int i = 1; i < spans.length; i++) {
+            assertTrue("前景色 span 不应重叠：[" + starts[i - 1] + "," + ends[i - 1]
+                    + ") vs [" + starts[i] + "," + ends[i] + ")",
+                    ends[i - 1] <= starts[i]);
+        }
     }
 }

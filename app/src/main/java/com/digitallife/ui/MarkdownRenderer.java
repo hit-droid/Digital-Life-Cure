@@ -21,6 +21,8 @@ import android.text.style.TypefaceSpan;
 import android.text.style.URLSpan;
 import android.graphics.Typeface;
 
+import com.digitallife.ui.chat.CodeHighlighter;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,7 +32,9 @@ import java.util.regex.Pattern;
  */
 public final class MarkdownRenderer {
 
-    private static final Pattern CODE_BLOCK = Pattern.compile("```[^\\n]*\\n?([\\s\\S]*?)(?:```|$)");
+    // v1.188.0：围栏后的文字（语言标注）也要留下来，才能按语言高亮
+    private static final Pattern CODE_BLOCK =
+            Pattern.compile("```([^\\n]*)\\n?([\\s\\S]*?)(?:```|$)");
     private static final Pattern BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
     private static final Pattern ITALIC = Pattern.compile("(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)");
     private static final Pattern INLINE_CODE = Pattern.compile("`([^`]+)`");
@@ -67,6 +71,17 @@ public final class MarkdownRenderer {
     private final int linkColor;
     private final int dividerColor;
 
+    /**
+     * v1.188.0：代码高亮配色。App 只有深色一套色板（code_bg #2A2740），
+     * 这组颜色按 GitHub Dark 取，**不跟随主题**——浅色下本来也不会出现深色代码块。
+     * 刻意只给 5 类 token 上色，正文仍用 code_text，避免整块变成彩虹。
+     */
+    private static final int SYNTAX_KEYWORD = 0xFFFF7B72;
+    private static final int SYNTAX_STRING = 0xFFA5D6FF;
+    private static final int SYNTAX_COMMENT = 0xFF8B949E;
+    private static final int SYNTAX_NUMBER = 0xFF79C0FF;
+    private static final int SYNTAX_TYPE = 0xFFD2A8FF;
+
     public MarkdownRenderer(int codeBgColor, int codeTextColor,
                             int quoteTextColor, int baseTextColor, int linkColor,
                             int dividerColor) {
@@ -86,7 +101,7 @@ public final class MarkdownRenderer {
         Matcher m = CODE_BLOCK.matcher(text);
         while (m.find()) {
             appendInline(out, text.substring(pos, m.start()));
-            appendCodeBlock(out, m.group(1));
+            appendCodeBlock(out, m.group(2), m.group(1));
             pos = m.end();
         }
         appendInline(out, text.substring(pos));
@@ -119,7 +134,7 @@ public final class MarkdownRenderer {
         Matcher m = CODE_BLOCK.matcher(text);
         while (m.find()) {
             appendInline(out, text.substring(pos, m.start()), maxWidthPx, textSizePx, budget);
-            appendCodeBlock(out, m.group(1));
+            appendCodeBlock(out, m.group(2), m.group(1));
             pos = m.end();
         }
         appendInline(out, text.substring(pos), maxWidthPx, textSizePx, budget);
@@ -127,7 +142,7 @@ public final class MarkdownRenderer {
     }
 
 
-    private void appendCodeBlock(SpannableStringBuilder out, String code) {
+    private void appendCodeBlock(SpannableStringBuilder out, String code, String info) {
         if (out.length() > 0 && out.charAt(out.length() - 1) != '\n') {
             out.append('\n');
         }
@@ -142,10 +157,11 @@ public final class MarkdownRenderer {
         if (start < end) {
             out.setSpan(new BackgroundColorSpan(codeBgColor), start, end,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            out.setSpan(new ForegroundColorSpan(codeTextColor), start, end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             out.setSpan(new TypefaceSpan("monospace"), start, end,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // v1.188.0：按语言标注上色（info 为空时由 CodeHighlighter 猜）；
+            // 未命中 token 的文字保持 codeTextColor，实现上由它顺手铺底
+            applySyntaxHighlight(out, start, block, info);
             // v1.43.0：点击代码块即复制该块内容
             out.setSpan(new android.text.style.ClickableSpan() {
                 @Override
@@ -168,6 +184,47 @@ public final class MarkdownRenderer {
             }, tipStart, out.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         out.append('\n');
+    }
+
+    /**
+     * v1.188.0：把 {@link CodeHighlighter} 切出的 token 逐段染成前景色。
+     *
+     * <p>刻意**不做「整块铺底色 + 局部覆盖」**：同类型 span 重叠时谁生效取决于
+     * {@code Spanned} 的优先级顺序，各版本不保证。这里改成给 token 上色、
+     * 只给 token 之间的空档铺 {@code codeTextColor}，所有前景色区间互不重叠，
+     * 结果与平台实现无关。</p>
+     */
+    private void applySyntaxHighlight(SpannableStringBuilder out, int start,
+                                      String code, String info) {
+        java.util.List<CodeHighlighter.Token> tokens = CodeHighlighter.highlight(code, info);
+        int cursor = 0;
+        for (int i = 0; i < tokens.size(); i++) {
+            CodeHighlighter.Token t = tokens.get(i);
+            int color = syntaxColor(t.kind);
+            if (color == 0 || t.start >= t.end) continue;
+            if (t.start > cursor) {
+                out.setSpan(new ForegroundColorSpan(codeTextColor),
+                        start + cursor, start + t.start, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            out.setSpan(new ForegroundColorSpan(color), start + t.start, start + t.end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            cursor = t.end;
+        }
+        if (cursor < code.length()) {
+            out.setSpan(new ForegroundColorSpan(codeTextColor),
+                    start + cursor, start + code.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+    }
+
+    private static int syntaxColor(CodeHighlighter.Kind kind) {
+        switch (kind) {
+            case KEYWORD: return SYNTAX_KEYWORD;
+            case STRING: return SYNTAX_STRING;
+            case COMMENT: return SYNTAX_COMMENT;
+            case NUMBER: return SYNTAX_NUMBER;
+            case TYPE: return SYNTAX_TYPE;
+            default: return 0;
+        }
     }
 
     /** v1.43.0：把代码块内容写入剪贴板并提示，异常静默忽略 */

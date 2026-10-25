@@ -475,3 +475,20 @@ Entries discovered by the Agent during task execution should follow this format:
   - 验证：Robolectric `@GraphicsMode(NATIVE)` 可把 TextView + renderRich 真渲染成 PNG 自查（临时测试跑完即删，别入库）；`MarkdownRendererTest` 新增 7 条（ImageSpan 存在、文字可搜、span 无换行、宽度受限、窄宽回退、纯文本无 span、表前后文字保留）。
   - 本轮 verify：795 单测 / 71 类、lint 0 error、APK 通过。
   - 用户「四项都要」的四项至此全部完成：① 触摸眼神跟手（v1.185.0）② 快捷菜单换模型（v1.186.0）③ 桌宠拍张照（v1.186.0）④ 对话真表格（v1.187.0）。
+
+
+[Project Knowledge Summary]
+- Date: 2026-10-24
+- Context: Discovered by Agent while performing v1.188.0 对话代码高亮
+- Category: Chat Rendering
+- Instructions:
+  - v1.187.0 已发布：CI run 40087517273 success、Release v1.187.0 资产 app-release.apk 8,645,564B。
+  - v1.188.0 交付：聊天气泡里的代码块从「整块同色等宽字」→ **按 token 分色**。新增纯逻辑 `ui/chat/CodeHighlighter`（无 Android 依赖），`MarkdownRenderer` 只负责把 token 区间变成 `ForegroundColorSpan`。
+  - **为什么自己写词法扫描**：项目不许引第三方依赖；高亮只需 O(n) 单次字符扫描，且比正则方案更能处理「字符串里的 `//`」「转义引号」「三引号」「`${#var}` 里的 `#`」。
+  - **围栏正则改了**：`CODE_BLOCK` 由 ```` ```[^\n]*\n?([\s\S]*?) ```` 改为 ```` ```([^\n]*)\n?([\s\S]*?) ````，group(1)=语言标注、group(2)=正文；`appendCodeBlock` 签名多一个 `info`，`render` 与 `renderRich` 两个调用点都要传 `m.group(2), m.group(1)`。
+  - **没写语言要猜**：`resolveFamily` 先 `familyOf(info)`，认不出再 `guessFamily(code)`（`public class`→Java、`def `→Python、`SELECT `→SQL、`{`/`[`→JSON、`#!`→Shell、`<?xml`→XML…）；猜不出走 `GENERIC`，只染字符串/数字，纯文本日志不会被乱染色。
+  - **配色**：`code_bg #2A2740` 是深色，故直接取 GitHub Dark 五色（关键字 #FF7B72 / 字符串 #A5D6FF / 注释 #8B949E / 数字 #79C0FF / 类型 #D2A8FF），不跟主题走。**前景色区间必须互不重叠**：不要「整块铺 codeTextColor 再局部覆盖」——同类型 span 重叠时谁生效取决于 `Spanned` 优先级，各版本不保证；改为 token 上色、只给 token 空档铺 `codeTextColor`。
+  - 点击复制代码块、块尾「[复制代码]」提示、折叠/搜索逻辑都未动（只加颜色 span）。
+  - `CodeHighlighterTest` 20 条（含词法边界：URL 里的 `//`、`classy`≠`class`、SQL 大小写、Python 三引号、token 有序不重叠）；`MarkdownRendererTest` +4 条（render/renderRich 都着色、正文与复制提示保留、前景色 span 不重叠）。
+  - 本轮 verify：819 单测 / 72 类、lint 0 error、APK(debug) 9,356,770B。
+  - 环境坑：容器重置后 `/opt/android-sdk` 为空，需重装 cmdline-tools + platforms;android-34 + build-tools;34.0.0 + ndk;27.3.13750724 + cmake;3.22.1；lint 在**独立 JVM** 里下载 lint-gradle，`JAVA_OPTS` 传不进去，要改用 `JAVA_TOOL_OPTIONS` 设代理，否则报 `Connect to dl.google.com:443 timed out`。

@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.188.0 (2026-10-24)
+
+聊天气泡里的代码块不再是「一整块同色等宽字」：关键字、字符串、注释、数字、
+类型名分色显示，读长代码时结构一眼可辨。
+
+### 代码块语法高亮
+
+- 新增纯逻辑 `ui/chat/CodeHighlighter`：一次 O(n) 字符扫描把代码切成
+  `KEYWORD / STRING / COMMENT / NUMBER / TYPE` 区间，不依赖 Android，可普通 JVM 单测。
+- 按围栏语言选择关键字表：Java / Kotlin / JavaScript·TypeScript / Python /
+  Shell / SQL / C·C++ / Go / Rust / JSON / YAML / CSS，并共用一套词法规则
+  （`//`、`/* */`、`#`、`--`、`<!-- -->`、单双引号、反引号、三引号、转义引号、进制/浮点/后缀数字）。
+- 围栏没写语言时按内容猜（`public class` → Java、`def` → Python、`SELECT` → SQL、
+  `{`/`[` → JSON…），模型偷懒省略 `java` 标注也能高亮；认不出就保持原样，
+  纯文本输出不会被乱染色。
+- 边界处理：字符串里的 `//`（如 URL）不算注释；`${#var}` 里的 `#` 不算注释；
+  SQL 关键字大小写不敏感；`classy` 不会被当成 `class`。
+
+### 渲染接线
+
+- `MarkdownRenderer.CODE_BLOCK` 正则改为保留围栏后的语言标注（`appendCodeBlock`
+  多一个 `info` 参数），`render` 与 `renderRich` 两条出口都走同一套高亮。
+- 配色按深色代码底（`code_bg #2A2740`）取 GitHub Dark 五色；正文仍用原
+  `code_text`，避免整块变彩虹。点击代码块复制、块尾「[复制代码]」提示保持不变。
+- 不引第三方依赖，不改任何交互语义。
+
+### 校验
+
+`CodeHighlighterTest` 新增 20 条（语言识别、各语言词法边界、猜测、token 有序不重叠）；
+`MarkdownRendererTest` 新增 4 条（`render`/`renderRich` 都着色、代码正文与复制提示保留、
+前景色 span 互不重叠）。
+`tools/verify.sh` 全绿：819 单测 / 72 类、lint 0 error、APK 通过。
+
 ## v1.187.0 (2026-10-24)
 
 聊天气泡里的表格从「等宽字符对齐」升级为**真网格**：单元格按可用宽度自动换行、
