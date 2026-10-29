@@ -525,6 +525,9 @@ Entries discovered by the Agent during task execution should follow this format:
 - Category: Chat Rendering
 - Instructions:
   - **版本号冲突**：远端已用 v1.189.0（桌宠占位）/ v1.189.1（触摸带铺满）并打了 tag，本地这套聊天分享只能顺延为 **v1.190.0**（versionCode 194）；rebase 时 CHANGELOG/AGENTS.md/MEMORY.md 三处头部都会冲突，按「远端条目保留 + 我的条目改号置顶」手工合并。
+  - **已发布**：Release v1.190.0（id 427764080，tag @ 319f44b，资产 app-release.apk 8,658,291B）；CI run 40863217045（319f44b）与 40863702747（43cdf0c）均 success。
+  - **多写入者发版教训**：`git push` 前必须 `git fetch` 看远端有没有别的写入者抢先用了版本号；冲突时先 `git rebase origin/main`，手工合并后 `git rebase --continue` 会把 main 指针更新好（**rebase 期间 HEAD 是 detached，提交后要确认 `git rebase --continue` 跑过**，否则 main 还指着旧 commit）。
+  - **代码注释里的版本号也要跟改**：远端占用了 v1.189.0 后，本地新增文件注释仍写 v1.189.0 会误导后来人，rebase 完统一替换成 v1.190.0。
   - v1.190.0 交付：聊天气泡长按菜单新增「**分享为图片**」——把消息渲染成卡片长图再发出去，表格位图与代码配色原样保留。
   - **不要重新解析 Markdown**：气泡里的 `CharSequence` 本来就是 `MarkdownRenderer.renderRich` 的产物（表格是 `ImageSpan` 位图、代码块是 `ForegroundColorSpan`），直接拿这份富文本用 `StaticLayout` 画一遍即可；`MessageCardRenderer.render(body, cardWidthPx, textSizePx, style, header, footer)` 是纯绘制层，不碰 Markdown 语法。
   - **后台线程要用独立的 `MarkdownRenderer` 实例**：`MarkdownRenderer` 有可变字段（表格位图预算计数器 `tableBitmapPixelsUsed`），UI 线程与后台线程共用一个实例会产生数据竞争；`shareMessageAsImage` 里 `new MarkdownRenderer(...)` 单独起一个。
