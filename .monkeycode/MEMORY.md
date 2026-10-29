@@ -534,5 +534,5 @@ Entries discovered by the Agent during task execution should follow this format:
   - `ParcelFileDescriptor.createInputStream()` 在 Robolectric + JDK17 下 `close()` 会抛 `InaccessibleObjectException: module java.base does not "opens java.io"`；单测里**只读不关**，用 `fd.getStatSize()` 断言大小。
   - 菜单加项必须同步顺延索引：用户气泡 0..6（「分享为图片」在「分享」之后），AI 气泡 0..7（「重新生成 / 删除」顺延）。
   - `MessageCardRendererTest` 7 条（图宽含页边距、空 body 返回 null、非法尺寸返回 null、多行更高、5000 行被截断到 ≤8000px、含表格位图与含代码块的富文本都能画）；`ShareFileProviderTest` 7 条（URI 拼装、正常读图、缺文件抛错、**路径穿越被拒**、MIME、写操作不支持）。
-  - 本轮 verify：833 单测 / 74 类、lint 0 error、APK(debug) 9,189,127B；耗时 compile 8s / test 47s / lint 44s / apk 60s。
+  - 本轮 verify：844 单测 / 75 类、lint 0 error、APK(debug) 9,190,673B；耗时 compile 9s / test 46s / lint 35s / apk 14s。
   - 待办（AGENTS.md §5.3 第 3 条已过期）：仓库里已有 `mcp/McpClient` / `McpServerManager` / `McpResponseParser`（Streamable HTTP + SSE），「真 MCP 对接」那条应订正。

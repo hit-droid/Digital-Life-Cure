@@ -32,7 +32,7 @@
 多行更高、5000 行被截断到高度上限、含表格位图与含代码块的富文本都能画出来）；
 `ShareFileProviderTest` 新增 7 条（URI 拼装、正常读图、缺文件抛错、**路径穿越被拒绝**、
 MIME 类型、写操作不支持）。
-`tools/verify.sh` 全绿：833 单测 / 74 类、lint 0 error、APK 通过。
+`tools/verify.sh` 全绿：844 单测 / 75 类、lint 0 error、APK 通过。
 
 ## v1.189.1 (2026-10-24)
 
