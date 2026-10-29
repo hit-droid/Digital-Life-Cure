@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 /**
- * v1.189.0 {@link MessageCardRenderer} 的回归。
+ * v1.190.0 {@link MessageCardRenderer} 的回归。
  *
  * <p>用 Robolectric 的 NATIVE 图形模式真出一张图，锁住三件事：尺寸算得对、
  * 空内容不炸、超长消息被截断（否则一张图十几 MB，分享出去也是坑）。</p>

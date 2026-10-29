@@ -10,7 +10,7 @@ import android.text.StaticLayout;
 import android.text.TextPaint;
 
 /**
- * v1.189.0：把一条消息渲染成「可分享的长图」。
+ * v1.190.0：把一条消息渲染成「可分享的长图」。
  *
  * <p>聊天气泡里的内容其实已经是富文本（{@link com.digitallife.ui.MarkdownRenderer}
  * 的产物：表格是位图 span、代码块有配色、引用/加粗都有 span），所以这里不重新

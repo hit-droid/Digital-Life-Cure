@@ -2206,7 +2206,7 @@ public class ChatActivity extends Activity {
                     // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
-                    // v1.189.0：新增「分享为图片」（索引 6），其后索引再顺延
+                    // v1.190.0：新增「分享为图片」（索引 6），其后索引再顺延
                     .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
                             "引用回复", "重新发送", "分享", "分享为图片"}, (d, w) -> {
                         if (w == 0) {
@@ -2262,7 +2262,7 @@ public class ChatActivity extends Activity {
                     // v1.29.0：新增「重新生成」「删除」
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
-                    // v1.189.0：新增「分享为图片」（索引 5），其后索引再顺延
+                    // v1.190.0：新增「分享为图片」（索引 5），其后索引再顺延
                     .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
                                     "引用回复", "分享", "分享为图片", "重新生成", "删除"},
                             (d, w) -> {
@@ -2651,7 +2651,7 @@ public class ChatActivity extends Activity {
     }
 
     /**
-     * v1.189.0：把一条消息渲染成「长图」再分享。
+     * v1.190.0：把一条消息渲染成「长图」再分享。
      *
      * <p>气泡里的内容本来就是富文本（表格是位图 span、代码块有配色），所以这里
      * 不重新解析 Markdown，直接拿那份 {@code CharSequence} 画成一张图。</p>
@@ -2729,7 +2729,7 @@ public class ChatActivity extends Activity {
         }, "msg-image").start();
     }
 
-    /** v1.189.0：把生成的 PNG 交给系统分享面板 */
+    /** v1.190.0：把生成的 PNG 交给系统分享面板 */
     private void shareImageFile(File file) {
         try {
             Uri uri = ShareFileProvider.uriFor(this, file.getName());
@@ -2745,7 +2745,7 @@ public class ChatActivity extends Activity {
         }
     }
 
-    /** v1.189.0：分享缓存只保留最近几张，避免 cache 目录无限膨胀 */
+    /** v1.190.0：分享缓存只保留最近几张，避免 cache 目录无限膨胀 */
     private void cleanupShareCache(File dir) {
         File[] files = dir.listFiles();
         if (files == null || files.length <= 5) return;

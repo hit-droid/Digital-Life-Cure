@@ -165,7 +165,7 @@
             android:name="com.digitallife.brain.TaskReceiver"
             android:exported="false" />
 
-        <!-- v1.189.0：分享消息长图用的最小文件提供器（只读、只暴露 cacheDir/share） -->
+        <!-- v1.190.0：分享消息长图用的最小文件提供器（只读、只暴露 cacheDir/share） -->
         <provider
             android:name="com.digitallife.util.ShareFileProvider"
             android:authorities="${applicationId}.share"

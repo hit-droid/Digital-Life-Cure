@@ -22,7 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 
 /**
- * v1.189.0 {@link ShareFileProvider} 的回归。
+ * v1.190.0 {@link ShareFileProvider} 的回归。
  *
  * <p>这个提供器是对外暴露面（能被别的 App 通过 URI 读文件），所以重点测两件事：
  * 正常文件能读出来、**路径穿越必须被挡住**。</p>

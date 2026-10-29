@@ -11,7 +11,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 /**
- * v1.189.0：分享消息长图用的最小文件提供器。
+ * v1.190.0：分享消息长图用的最小文件提供器。
  *
  * <p>项目约定不引第三方依赖，因此没有用 {@code androidx.core.content.FileProvider}，
  * 而是自己实现 {@code openFile}——分享一张图只需要「按 URI 读出一个只读文件描述符」。</p>
