@@ -2,6 +2,7 @@ package com.digitallife.ui;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -38,12 +39,14 @@ import com.digitallife.ui.chat.ChatLayoutOps;
 import com.digitallife.ui.chat.ChatTextOps;
 import com.digitallife.ui.chat.FailoverPolicy;
 import com.digitallife.ui.chat.HistoryBudget;
+import com.digitallife.ui.chat.MessageCardRenderer;
 import com.digitallife.ui.chat.ScrollAnchor;
 import com.digitallife.ui.chat.SuggestionEngine;
 import com.digitallife.util.ApiManager;
 import com.digitallife.util.ApiProfile;
 import com.digitallife.util.ChatStore;
 import com.digitallife.util.Settings;
+import com.digitallife.util.ShareFileProvider;
 
 import org.json.JSONObject;
 
@@ -2203,8 +2206,9 @@ public class ChatActivity extends Activity {
                     // v1.76.0：补上「朗读」，与 AI 气泡菜单保持一致
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
+                    // v1.189.0：新增「分享为图片」（索引 6），其后索引再顺延
                     .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
-                            "引用回复", "重新发送", "分享"}, (d, w) -> {
+                            "引用回复", "重新发送", "分享", "分享为图片"}, (d, w) -> {
                         if (w == 0) {
                             speakText(txt);
                         } else if (w == 1) {
@@ -2215,8 +2219,11 @@ public class ChatActivity extends Activity {
                             quoteIntoInput(txt);
                         } else if (w == 4) {
                             sendRaw(txt);
-                        } else {
+                        } else if (w == 5) {
                             shareText(txt);
+                        } else {
+                            shareMessageAsImage(txt, true,
+                                    "我 · " + ChatTextOps.formatBubbleTime(ts));
                         }
                     })
                     .show();
@@ -2255,8 +2262,9 @@ public class ChatActivity extends Activity {
                     // v1.29.0：新增「重新生成」「删除」
                     // v1.127.0：新增「引用回复」（索引 2），其后项索引顺延
                     // v1.147.0（#83）：新增「复制为 Markdown」（索引 2），其后索引再顺延
+                    // v1.189.0：新增「分享为图片」（索引 5），其后索引再顺延
                     .setItems(new String[]{"朗读", "复制", ChatTextOps.MENU_COPY_MARKDOWN,
-                                    "引用回复", "分享", "重新生成", "删除"},
+                                    "引用回复", "分享", "分享为图片", "重新生成", "删除"},
                             (d, w) -> {
                         if (w == 0) {
                             speakText(clean);
@@ -2269,6 +2277,10 @@ public class ChatActivity extends Activity {
                         } else if (w == 4) {
                             shareText(clean);
                         } else if (w == 5) {
+                            CharSequence raw = rawMarkdown.get(b);
+                            shareMessageAsImage(raw != null ? raw.toString() : clean, false,
+                                    "数字生命 · " + ChatTextOps.formatBubbleTime(ts));
+                        } else if (w == 6) {
                             regenerateLast(b);
                         } else {
                             deleteBubble(b);
@@ -2635,6 +2647,112 @@ public class ChatActivity extends Activity {
             startActivity(Intent.createChooser(send, "分享消息"));
         } catch (Exception e) {
             Toast.makeText(this, "没有可用的分享应用", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * v1.189.0：把一条消息渲染成「长图」再分享。
+     *
+     * <p>气泡里的内容本来就是富文本（表格是位图 span、代码块有配色），所以这里
+     * 不重新解析 Markdown，直接拿那份 {@code CharSequence} 画成一张图。</p>
+     *
+     * <p>渲染在后台线程做：一张长图可能要几百毫秒，主线程会卡。渲染用**独立的
+     * {@link MarkdownRenderer} 实例**，避免和 UI 线程共用一个实例时表格位图预算
+     * 计数器出现数据竞争（那个计数器是可变字段）。</p>
+     *
+     * @param raw    消息原文（AI 气泡传原始 Markdown，用户气泡传纯文本）
+     * @param isUser 是否用户消息（决定用纯文本渲染还是富文本渲染）
+     * @param header 图片顶部的标题行（角色 + 时间）
+     */
+    private void shareMessageAsImage(final String raw, final boolean isUser, final String header) {
+        if (raw == null || raw.trim().isEmpty()) {
+            Toast.makeText(this, "这条消息没有内容", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(this, "正在生成图片…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            File out = null;
+            Bitmap bitmap = null;
+            try {
+                float density = getResources().getDisplayMetrics().density;
+                int cardWidth = Math.max(dp(240), Math.min(maxBubbleWidth, dp(320)));
+                int innerWidth = cardWidth - Math.round(18 * density) * 2;
+                float textSizePx = android.util.TypedValue.applyDimension(
+                        android.util.TypedValue.COMPLEX_UNIT_SP, 15f,
+                        getResources().getDisplayMetrics());
+                // 独立实例：后台渲染，不与 UI 线程共享可变状态
+                MarkdownRenderer renderer = new MarkdownRenderer(
+                        getColorCompat(R.color.code_bg),
+                        getColorCompat(R.color.code_text),
+                        getColorCompat(R.color.operit_text_secondary),
+                        getColorCompat(R.color.operit_text_primary),
+                        getColorCompat(R.color.operit_accent),
+                        getColorCompat(R.color.operit_divider));
+                CharSequence body = isUser
+                        ? renderer.render(raw)
+                        : renderer.renderRich(raw, innerWidth, textSizePx);
+                MessageCardRenderer.Style style = new MessageCardRenderer.Style(
+                        getColorCompat(R.color.operit_bg),
+                        getColorCompat(R.color.operit_surface),
+                        getColorCompat(R.color.operit_text_primary),
+                        getColorCompat(R.color.operit_text_secondary),
+                        getColorCompat(R.color.operit_accent),
+                        density);
+                bitmap = MessageCardRenderer.render(body, cardWidth, textSizePx, style,
+                        header, "数字生命 · Digital Life");
+                if (bitmap == null) throw new IllegalStateException("消息为空，无法出图");
+                File dir = new File(getCacheDir(), ShareFileProvider.DIR);
+                if (!dir.exists() && !dir.mkdirs()) {
+                    throw new IllegalStateException("无法创建分享缓存目录");
+                }
+                cleanupShareCache(dir);
+                File file = new File(dir, "msg_" + System.currentTimeMillis() + ".png");
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+                }
+                out = file;
+            } catch (Throwable t) {
+                out = null;
+            } finally {
+                if (bitmap != null) bitmap.recycle();
+            }
+            final File file = out;
+            final String fallback = raw;
+            runOnUiThread(() -> {
+                if (file == null || !file.exists()) {
+                    Toast.makeText(this, "图片生成失败，改为分享文字", Toast.LENGTH_SHORT).show();
+                    shareText(fallback);
+                    return;
+                }
+                shareImageFile(file);
+            });
+        }, "msg-image").start();
+    }
+
+    /** v1.189.0：把生成的 PNG 交给系统分享面板 */
+    private void shareImageFile(File file) {
+        try {
+            Uri uri = ShareFileProvider.uriFor(this, file.getName());
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("image/png");
+            send.putExtra(Intent.EXTRA_STREAM, uri);
+            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(send, "分享消息图片");
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(chooser);
+        } catch (Exception e) {
+            Toast.makeText(this, "没有可用的分享应用", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** v1.189.0：分享缓存只保留最近几张，避免 cache 目录无限膨胀 */
+    private void cleanupShareCache(File dir) {
+        File[] files = dir.listFiles();
+        if (files == null || files.length <= 5) return;
+        java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        for (int i = 5; i < files.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            files[i].delete();
         }
     }
 

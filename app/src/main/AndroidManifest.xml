@@ -165,6 +165,13 @@
             android:name="com.digitallife.brain.TaskReceiver"
             android:exported="false" />
 
+        <!-- v1.189.0：分享消息长图用的最小文件提供器（只读、只暴露 cacheDir/share） -->
+        <provider
+            android:name="com.digitallife.util.ShareFileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <!-- 开机自启接收器（v1.133.0）：按设置把桌宠拉回来 -->
         <receiver
             android:name="com.digitallife.service.BootReceiver"

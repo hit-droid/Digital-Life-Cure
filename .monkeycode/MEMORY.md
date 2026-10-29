@@ -518,3 +518,21 @@ Entries discovered by the Agent during task execution should follow this format:
   - 设计取舍：横向铺满意味着悬浮窗覆盖的整块区域都会吃掉触摸，不再透传给桌面；这是用户明确要求（点得中优先），窗口本身只占屏宽 48%，可接受。
   - `OverlayGeometryTest` 由 7 条扩到 11 条：新增触摸带铺满宽度、顶部留白、坐标夹取、窗口大于屏幕贴左上角。
   - 版本冲突处理：v1.189.0 已由远端提交 `513e0e8` 占用并打了 tag，本地另一套实现（`ui/pet/PetWindowMetrics`）不可强推，改为以远端为基线做 v1.189.1 增量。
+
+[Project Knowledge Summary]
+- Date: 2026-10-29
+- Context: Discovered by Agent while performing v1.190.0 消息分享为长图
+- Category: Chat Rendering
+- Instructions:
+  - **版本号冲突**：远端已用 v1.189.0（桌宠占位）/ v1.189.1（触摸带铺满）并打了 tag，本地这套聊天分享只能顺延为 **v1.190.0**（versionCode 194）；rebase 时 CHANGELOG/AGENTS.md/MEMORY.md 三处头部都会冲突，按「远端条目保留 + 我的条目改号置顶」手工合并。
+  - v1.190.0 交付：聊天气泡长按菜单新增「**分享为图片**」——把消息渲染成卡片长图再发出去，表格位图与代码配色原样保留。
+  - **不要重新解析 Markdown**：气泡里的 `CharSequence` 本来就是 `MarkdownRenderer.renderRich` 的产物（表格是 `ImageSpan` 位图、代码块是 `ForegroundColorSpan`），直接拿这份富文本用 `StaticLayout` 画一遍即可；`MessageCardRenderer.render(body, cardWidthPx, textSizePx, style, header, footer)` 是纯绘制层，不碰 Markdown 语法。
+  - **后台线程要用独立的 `MarkdownRenderer` 实例**：`MarkdownRenderer` 有可变字段（表格位图预算计数器 `tableBitmapPixelsUsed`），UI 线程与后台线程共用一个实例会产生数据竞争；`shareMessageAsImage` 里 `new MarkdownRenderer(...)` 单独起一个。
+  - **不引 androidx ⇒ 自实现 ContentProvider**：项目禁用第三方依赖，用不了 `androidx.core.content.FileProvider`，故自写 `util/ShareFileProvider`（只实现 `openFile`，`ParcelFileDescriptor.MODE_READ_ONLY`）；只暴露 `cacheDir/share` 下的**纯文件名**——拒绝 `/`、`\`、`..`，并二次校验 `getCanonicalPath()` 仍在该目录内；`insert/delete/update` 一律抛 `UnsupportedOperationException`。
+  - **分享 URI**：`new Uri.Builder().scheme("content").authority(pkg + ".share").appendPath(fileName).build()`；Intent 需 `FLAG_GRANT_READ_URI_PERMISSION`（send 与 chooser 都要加）；Manifest 里 provider `exported=false` + `grantUriPermissions=true`。
+  - **长图截断的两个坑**：① 高度上限要先扣掉标题/落款高度——`maxBodyHeight = MAX_CARD_HEIGHT_PX - margin*2 - pad*2 - headerH - footerH`，否则总高仍会超；② 比例收缩循环里分母必须是**当前** layout 高度，且截断后要重算 layout；最终写法：先按 `getLineEnd(getLineForVertical())` 按行截断，再最多 12 轮按比例收缩（切 `Spanned` 子串，span 保留），末尾补「…（内容过长，已截断）」。
+  - `ParcelFileDescriptor.createInputStream()` 在 Robolectric + JDK17 下 `close()` 会抛 `InaccessibleObjectException: module java.base does not "opens java.io"`；单测里**只读不关**，用 `fd.getStatSize()` 断言大小。
+  - 菜单加项必须同步顺延索引：用户气泡 0..6（「分享为图片」在「分享」之后），AI 气泡 0..7（「重新生成 / 删除」顺延）。
+  - `MessageCardRendererTest` 7 条（图宽含页边距、空 body 返回 null、非法尺寸返回 null、多行更高、5000 行被截断到 ≤8000px、含表格位图与含代码块的富文本都能画）；`ShareFileProviderTest` 7 条（URI 拼装、正常读图、缺文件抛错、**路径穿越被拒**、MIME、写操作不支持）。
+  - 本轮 verify：833 单测 / 74 类、lint 0 error、APK(debug) 9,189,127B；耗时 compile 8s / test 47s / lint 44s / apk 60s。
+  - 待办（AGENTS.md §5.3 第 3 条已过期）：仓库里已有 `mcp/McpClient` / `McpServerManager` / `McpResponseParser`（Streamable HTTP + SSE），「真 MCP 对接」那条应订正。
