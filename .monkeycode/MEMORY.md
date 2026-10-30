@@ -555,5 +555,6 @@ Entries discovered by the Agent during task execution should follow this format:
   - 本轮单测：新建 `CronMatcherTest`(11，含与 `CareAutomation.cronMatches` 的**逐值差分**测试) / `LLMClientTest`(2，close 后 `chatStream` 抛 `RejectedExecutionException`、close 幂等) / `McpServerManagerTest`(4，验证全局注册表注销)；扩展 `RunLogTest`→11、`RunLogStoreTest`→9、`McpResponseParserTest`→16。`CronTextTest` 原有 13 条断言**全部保留未改**。
   - `CronMatcher.parse` 对少于 5 段返回 null，但 `"not a cron at all"` 按空白切成 5 段**不返回 null**——写断言时别想当然。
   - 本轮 verify：**873 单测 / 78 类，失败 0 错误 0；lint Error 0；APK(debug) 9,230,157B**（增量构建产物；全量重建约 9.7MB，差异来自增量打包）；耗时 compile 10s / test 48s / lint 34s / apk 10s。
+  - **v1.191.0 已发布**：versionCode 195 / versionName 1.191.0、Release id 429321526、资产 app-release.apk 8,688,813B、tag v1.191.0 @ b6050a6（= main）；CI run 41100670348 success。
   - 本轮版本：versionCode 195 / versionName 1.191.0。
   - 已知未改（有意）：`MarkdownRenderer.tableBitmapPixelsUsed` 只增不减（整页 6M 像素预算即到顶，设计如此）；cron 的 day/dow **AND vs OR** 语义未动（改语义会打破 `CronTextTest` 断言并改变已有任务触发条件），只在 `CronMatcher` 注释里写明。
