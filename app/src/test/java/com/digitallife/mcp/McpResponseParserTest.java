@@ -28,9 +28,24 @@ public class McpResponseParserTest {
 
     @Test
     public void parse_plainJsonToleratesIdMismatch() throws Exception {
-        // 非 SSE 只有一帧，无法歧义，不因 id 不符而失败
+        // 非 SSE 只有一帧，且**没有回显 id** → 无法判定归属，容忍
         JSONObject o = McpResponseParser.parse("{\"result\":{\"n\":2}}", 99);
         assertEquals(2, o.getJSONObject("result").optInt("n"));
+    }
+
+    /**
+     * v1.191.0：普通 JSON 也校验 id——回的是别的请求的应答时必须报错，
+     * 不能当成自己的结果用（此前会静默吞掉真实错误）。
+     */
+    @Test
+    public void parse_plainJsonWithMismatchedIdThrows() {
+        assertThrowsWithIdMismatch("{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"ok\":true}}", 7);
+    }
+
+    @Test
+    public void parse_plainJsonWithMatchingIdOk() throws Exception {
+        JSONObject o = McpResponseParser.parse("{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"ok\":true}}", 7);
+        assertEquals(7, o.optLong("id"));
     }
 
     // ==================== SSE ====================
@@ -83,9 +98,21 @@ public class McpResponseParserTest {
 
     @Test
     public void parse_sseFallsBackToFirstParsableWhenNoIdMatch() throws Exception {
+        // 帧没有回显 id → 无法判定归属，容忍回退
         String sse = "data: {\"jsonrpc\":\"2.0\",\"result\":{\"x\":1}}\n\n";
         JSONObject o = McpResponseParser.parse(sse, 99);
         assertEquals(1, o.getJSONObject("result").optInt("x"));
+    }
+
+    /**
+     * v1.191.0：SSE 里出现了**带 id 但对不上**的帧 → 必须报错。
+     * 此前一律回退到「首个可解析帧」，会把别的请求的应答当成自己的结果，真实错误被吞。
+     */
+    @Test
+    public void parse_sseWithMismatchedIdThrows() {
+        String sse = "data: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"x\":1}}\n\n"
+                + "data: {\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"x\":2}}\n\n";
+        assertThrowsWithIdMismatch(sse, 7);
     }
 
     @Test
@@ -146,6 +173,17 @@ public class McpResponseParserTest {
             fail("应当抛出异常，输入：" + input);
         } catch (Exception expected) {
             // 预期
+        }
+    }
+
+    /** 应当因 id 不匹配抛错（且错误信息里含「id」） */
+    private static void assertThrowsWithIdMismatch(String input, long expectedId) {
+        try {
+            McpResponseParser.parse(input, expectedId);
+            fail("应当因 id 不匹配抛错，输入：" + input);
+        } catch (Exception expected) {
+            assertTrue("错误信息应说明 id 不匹配，实际：" + expected.getMessage(),
+                    String.valueOf(expected.getMessage()).contains("id"));
         }
     }
 }

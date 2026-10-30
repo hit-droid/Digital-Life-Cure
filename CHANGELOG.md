@@ -1,5 +1,81 @@
 # Changelog
 
+## v1.191.0 (2026-10-31)
+
+一轮「挑刺 + 修」：把整个 App 按**能复现 + 影响明确**筛了一遍，修掉 11 处真实缺陷。
+重点是三类：**主线程被重活卡住**、**线程池泄漏到用户无感但 App 越用越卡**、
+**远程工具残留导致「删了还在」**。
+
+### 主线程不再跑重活（ANR 风险）
+
+- `care/CareAutomation` 的**体检**与**工作流执行**此前都在主线程 Handler 上跑，
+  而它们内部是纯磁盘 IO：逐个模型 `analyze_model` / `repair_model`、执行整条
+  `run_workflow`（可能解压模型、写文件）。模型多 / 任务重时单次可达数秒 → 直接 ANR。
+  现在 Handler 只负责「按时唤醒」，实际工作丢给一个单线程后台执行器（串行，避免并发体检）。
+- **连招播放仍留在主线程**：`ComboPlayer` 的逐步下发依赖主线程 Handler，后台线程调会失效。
+- 体检与工作流的收尾（落盘 RunLog + 写自动化事件 + 推气泡）抽成 `finishTask`，两路共用。
+
+### cron 推算不再逐分钟扫描（UI 卡顿）
+
+- `care/CronText.nextFireMillis` 此前为了找下一次触发，**以分钟为单位**逐分钟试匹配，
+  最多 366×24×60 ≈ 52.7 万次；每次推进都重新 `split` cron 并逐字段 `parseInt`。
+  而它偏偏又在 **UI 线程**被调用（工作台列表每行一次 + 新建任务表单实时预览）→ 列表滑动直接卡住。
+- 新增纯逻辑 `care/CronMatcher`：把 cron **预解析**成布尔表（分 60 / 时 24 / 日 32 / 月 13 / 周 7），
+  推算改为「**按天跳跃**」——先跳过不匹配的日期，再在当天内找命中时刻。
+- 语义保证：布尔表的每一项都是**用原判定函数逐值求出来的**
+  （`CareAutomation.fieldMatch` / `dowFieldMatch`），与 `cronMatches` 逐位一致，
+  不存在「两套 cron 语义」的风险。
+
+### 线程池泄漏（App 越用越卡）
+
+- `brain/LLMClient` 每个实例都持有一个**从不回收**的单线程池。凡是「用完即弃」新建客户端的地方
+  都会每次泄漏一个线程：新增 `close()`，并在 `AICore.stop()` / `AICore.applyConfig()`、
+  `TaskScheduler`、`CareAI.initLLM`、`ProactiveEngine`、`MemoryExtractor`、`ThoughtLoopManager`
+  七处补上回收。
+- `ui/ChatActivity` 此前**每次发送消息都新建**一个 `LLMClient` → 每发一条泄漏一个线程。
+  现在按「配置指纹」（base + model + profile id）**复用**实例，配置变化才重建（重建前关旧实例）；
+  页面销毁时关闭主对话与全部子智能体客户端。
+- `care/CareAI` 的 `history` 改 `CopyOnWriteArrayList`（此前主线程 + pool 线程 + 自动化线程并发 add）；
+  落盘改为专用单线程池**串行**执行，快照在调用时捕获（切会话时不会写到错的库）。
+
+### 桌宠与 MCP 的残留
+
+- `service/PetService`：`addView` 失败（窗口权限被撤销 / 悬浮窗被系统拦）时**只打日志**，
+  `overlayView` 仍非空 → `ensureRunning()` 开头的 `if (overlayView != null) return;`
+  永远短路，用户再也起不来桌宠，只能重启 App。现在失败即置空并停服务。
+- `PetService.applyOverlayScale()` 此前会**顺带挪动桌宠位置**且不落盘；
+  现在只改宽高、位置原地不动、夹回屏内，并把位置写回设置。
+- `PetService.onDestroy()` 补 `mcpManager.disconnectAll()`：桌宠服务销毁时断开 MCP 连接。
+- `mcp/McpServerManager` 的连接表此前是**实例字段**，但本进程里它有多个实例
+  （桌宠服务、插件页），而远程工具注册进的是**全局单例** `ToolRegistry` →
+  「插件页删除服务器」时它自己实例的表是空的，桌宠侧建立的连接没被断开、工具残留在注册表里，
+  大脑仍能看见并调用一个**已被删除的服务器**的工具。现在连接表改为**进程级共享**，
+  并把匹配键从 endpoint 改成**配置 id**（同一 endpoint 配两条时不会连带注销另一条）。
+- `mcp/McpResponseParser`：SSE 里出现**带 id 但对不上**的帧时，此前一律回退到「首个可解析帧」，
+  会把别的请求的应答 / 服务端通知当成自己的结果，**真实错误被吞**。现在报错；帧没回显 id 时仍容忍回退。
+
+### 工作流执行记录
+
+- `care/RunLog.looksOk` 此前只按关键词全文扫描，步骤**输出正文**里出现
+  「失败 / 异常 / 未找到」等字样（如「异常项：0」）时，整条运行会被**误判为失败**。
+  现在先看步骤行：只要存在 `步骤 N: tool → …` 形式的步骤行，就以这些行的成败标记为准；
+  没有步骤行时才退回关键词判定。
+- `RunLog.move`（改名迁移）此前直接覆盖写入目标键，目标键原有的执行记录会被整段冲掉。
+  现在改为**合并**：源 + 目标按时间倒序合并、裁剪到 20 条再落盘。
+
+### 原生层线程安全
+
+- `cpp/LApp/LAppLive2DManager` 的 `g_extraModelDirs` / `g_extraModelJsonBases` 此前无保护地
+  跨线程读写（模型导入线程 + GL 线程）。现加 `std::mutex` 保护，并删除返回内部指针的
+  `GetModelDirName` / `GetModelJsonBase`，改为拷贝式 `CopyModelDirName` / `CopyModelJsonBase`。
+
+### 校验
+
+新增 `CronMatcherTest`（11 条，含与 `cronMatches` 的逐值差分测试）、
+`LLMClientTest`（2 条）、`McpServerManagerTest`（4 条）；
+`RunLogTest` 扩到 11 条、`RunLogStoreTest` 扩到 9 条、`McpResponseParserTest` 扩到 16 条。
+`tools/verify.sh` 全绿：**873 单测 / 78 类**、lint 0 error、APK 通过。
+
 ## v1.190.0 (2026-10-29)
 
 聊天气泡的长按菜单新增「**分享为图片**」：把这条消息渲染成一张长图再发出去，

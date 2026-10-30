@@ -77,6 +77,11 @@ public class McpClient {
         registeredToolNames.clear();
     }
 
+    /** 本客户端已注册进全局注册表的工具名（副本） */
+    public List<String> getRegisteredToolNames() {
+        return new ArrayList<>(registeredToolNames);
+    }
+
     private void initialize() throws Exception {
         JSONObject params = new JSONObject();
         JSONObject clientInfo = new JSONObject();

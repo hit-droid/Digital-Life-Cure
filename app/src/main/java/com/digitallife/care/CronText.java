@@ -16,7 +16,7 @@ import java.util.Calendar;
 public final class CronText {
 
     /** 推算上限：约一年（超出视为「近一年内不触发」） */
-    private static final int MAX_LOOKAHEAD_MINUTES = 366 * 24 * 60;
+    private static final int MAX_LOOKAHEAD_DAYS = 366;
 
     private CronText() {
     }
@@ -74,32 +74,55 @@ public final class CronText {
     /**
      * 从 {@code fromMillis} 之后的第一次触发（毫秒，取整到分钟）。
      * 一年内无匹配返回 {@code -1}；cron 非法同样返回 {@code -1}。
+     *
+     * <p>v1.191.0：改为「预解析 + 按天跳跃」。此前是逐分钟推进（最多 52.7 万次），
+     * 每次推进都重新 {@code split} cron 并逐字段 {@code parseInt}，而它又在 UI 线程被调用
+     * （工作台每行一次 + 新建表单实时预览）→ 列表滑动直接卡住。</p>
      */
     public static long nextFireMillis(String cron, long fromMillis) {
         if (!isValid(cron)) return -1;
+        CronMatcher matcher = CronMatcher.parse(cron);
+        if (matcher == null) return -1;
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(fromMillis);
         c.set(Calendar.SECOND, 0);
         c.set(Calendar.MILLISECOND, 0);
         c.add(Calendar.MINUTE, 1); // 下一次触发严格晚于 from
-        for (int i = 0; i < MAX_LOOKAHEAD_MINUTES; i++) {
-            if (matches(c, cron)) return c.getTimeInMillis();
-            c.add(Calendar.MINUTE, 1);
+        // 按天推进：先跳过不匹配的日期，再在当天内找命中时刻
+        for (int day = 0; day <= MAX_LOOKAHEAD_DAYS; day++) {
+            int minute = c.get(Calendar.MINUTE);
+            int hour = c.get(Calendar.HOUR_OF_DAY);
+            int dom = c.get(Calendar.DAY_OF_MONTH);
+            int month = c.get(Calendar.MONTH) + 1;
+            int dow = c.get(Calendar.DAY_OF_WEEK);
+            int cronDow = dow == Calendar.SUNDAY ? 0 : dow - 1;
+            if (matcher.matchesDate(dom, month, cronDow)) {
+                // 当天可能命中多个时刻，取最早的（晚于 from 的那一刻）
+                int hitHour = -1;
+                for (int h = hour; h < 24 && hitHour < 0; h++) {
+                    if (!matcher.hourMatches(h)) continue;
+                    for (int m = 0; m < 60; m++) {
+                        // 第一天只接受不早于当前分钟的命中
+                        if (day == 0 && h == hour && m < minute) continue;
+                        if (matcher.minuteMatches(m)) {
+                            hitHour = h;
+                            c.set(Calendar.HOUR_OF_DAY, h);
+                            c.set(Calendar.MINUTE, m);
+                            break;
+                        }
+                    }
+                }
+                if (hitHour >= 0) return c.getTimeInMillis();
+            }
+            // 跳到次日 00:00
+            c.add(Calendar.DAY_OF_MONTH, 1);
+            c.set(Calendar.HOUR_OF_DAY, 0);
+            c.set(Calendar.MINUTE, 0);
         }
         return -1;
     }
 
     // ==================== 内部 ====================
-
-    private static boolean matches(Calendar c, String cron) {
-        int minute = c.get(Calendar.MINUTE);
-        int hour = c.get(Calendar.HOUR_OF_DAY);
-        int day = c.get(Calendar.DAY_OF_MONTH);
-        int month = c.get(Calendar.MONTH) + 1;
-        int dow = c.get(Calendar.DAY_OF_WEEK);
-        int cronDow = dow == Calendar.SUNDAY ? 0 : dow - 1;
-        return CareAutomation.cronMatches(cron, minute, hour, day, month, cronDow);
-    }
 
     private static void validateField(String field, int min, int max) {
         if (field.equals("*")) return;

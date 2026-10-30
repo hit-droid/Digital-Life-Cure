@@ -53,7 +53,13 @@ public class ThoughtLoopManager {
 
     public void stop() {
         running = false;
-        if (llm != null) llm.cancel();
+        if (llm != null) {
+            llm.cancel();
+            // v1.191.0：cancel 只是中断在途请求，不会回收 LLMClient 的线程池。
+            // 引擎停止后无人再用，必须 close 掉，否则线程池常驻泄漏。
+            llm.close();
+            llm = null;
+        }
         thread.interrupt();
     }
 

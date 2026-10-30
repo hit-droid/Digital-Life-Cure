@@ -417,11 +417,12 @@ extern "C"
     JNIEXPORT jstring JNICALL
     Java_com_digitallife_render_Live2DNative_nativeGetModelDirName(JNIEnv *env, jclass type, jint index)
     {
-        const char* name = LAppLive2DManager::GetModelDirName(index);
-        if (name == NULL) {
+        // v1.191.0：copy で受け取る（内部 vector 要素のポインタを渡さない）
+        std::string name;
+        if (!LAppLive2DManager::CopyModelDirName(index, name)) {
             return env->NewStringUTF("");
         }
-        return env->NewStringUTF(name);
+        return env->NewStringUTF(name.c_str());
     }
 
     JNIEXPORT void JNICALL

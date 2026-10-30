@@ -147,6 +147,8 @@ public class ProactiveEngine {
      * 异步执行；延迟 LLM_DELAY_MS 推送；推送前检查用户是否已活跃（避免打扰）。
      */
     private void tryLlmUpgrade(long idleMs, int hour) {
+        // v1.191.0：llm 提到 try 外面——此前它定义在 try 块内，catch 里无法回收它的线程池
+        LLMClient llm = null;
         try {
             Settings settings = new Settings(appCtx);
             String baseUrl = settings.getApiBase();
@@ -163,7 +165,7 @@ public class ProactiveEngine {
                     + "请用一句简短自然的话主动发起关心或闲聊，"
                     + "15~30 字以内，符合你的人格设定。直接输出文案，不要解释。";
 
-            LLMClient llm = new LLMClient(baseUrl, apiKey, model);
+            llm = new LLMClient(baseUrl, apiKey, model);
             java.util.List<LLMClient.ChatMessage> msgs = new java.util.ArrayList<>();
             // 注入当前活跃 Persona 的人格（与 ChatActivity/AICore 一致）
             try {
@@ -182,7 +184,8 @@ public class ProactiveEngine {
             msgs.add(new LLMClient.ChatMessage("user", userMsg));
 
             long startTime = System.currentTimeMillis();
-            llm.chatStream(msgs, null, new LLMClient.StreamListener() {
+            final LLMClient client = llm;
+            client.chatStream(msgs, null, new LLMClient.StreamListener() {
                 @Override
                 public void onDelta(String delta) {}
 
@@ -203,15 +206,32 @@ public class ProactiveEngine {
                             out = out.substring(1, out.length() - 1);
                         }
                         schedulePush(out, startTime);
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    } finally {
+                        // v1.191.0：用完即弃 → 关掉线程池，否则每次空闲升级泄漏一个常驻线程
+                        closeQuietly(client);
+                    }
                 }
 
                 @Override
                 public void onError(String error) {
                     // 失败：保底硬编码已推送，不补救
+                    closeQuietly(client);
                 }
             });
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+            // v1.191.0：异常路径下也要回收线程池（此前 llm 定义在 try 内，根本无法回收）
+            if (llm != null) llm.close();
+        }
+    }
+
+    /** 关闭 LLM 客户端（回收线程池），异常吞掉——关闭失败不影响业务 */
+    private static void closeQuietly(LLMClient client) {
+        if (client == null) return;
+        try {
+            client.close();
+        } catch (Exception ignored) {
+        }
     }
 
     /**

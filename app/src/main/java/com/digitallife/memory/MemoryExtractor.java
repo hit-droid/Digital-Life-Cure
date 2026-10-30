@@ -88,11 +88,20 @@ public class MemoryExtractor {
             public void onToolCall(String name, JSONObject args, String toolCallId) {}
             @Override
             public void onDone(String full) {
-                handleResult(full, listener);
+                try {
+                    handleResult(full, listener);
+                } finally {
+                    // v1.191.0：用完即弃的客户端必须关掉线程池，否则每 6 小时泄漏一个常驻线程
+                    llm.close();
+                }
             }
             @Override
             public void onError(String err) {
-                if (listener != null) listener.onError(err);
+                try {
+                    if (listener != null) listener.onError(err);
+                } finally {
+                    llm.close();
+                }
             }
         });
     }

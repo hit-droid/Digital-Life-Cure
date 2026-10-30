@@ -60,11 +60,24 @@ public final class RunLog {
      * 从 {@code run_workflow} 的结果文本判断成败。
      *
      * <p>{@code run_workflow} 正常返回形如 {@code ▶ 执行工作流「x」:\n  步骤 1: tool → ✅ 成功…}，
-     * 失败会带 {@code ❌ 失败}；参数缺失则返回「未找到 / 请指定 / 没有步骤」等提示。这里以
-     * **失败标记**为准：命中任一标记即判失败，否则视为成功。</p>
+     * 失败会带 {@code ❌ 失败}；参数缺失则返回「未找到 / 请指定 / 没有步骤」等提示。</p>
+     *
+     * <p><b>v1.191.0 修正假阴性</b>：此前只按关键词全文扫描，步骤**输出正文**里出现
+     * 「失败 / 异常 / 未找到」等字样（如「异常项：0」「上次失败记录」）时，整条运行会被误判为失败。
+     * 现在改为**先看步骤行**：只要结果里存在 {@code 步骤 N: tool → …} 形式的步骤行，
+     * 就以这些行的成败标记为准（任一步 ❌ 即失败）；没有步骤行时才退回关键词判定
+     * （那类是「未找到工作流」「没有步骤」这类整体失败提示）。</p>
      */
     public static boolean looksOk(String result) {
         if (result == null) return false;
+        boolean sawStep = false;
+        for (String raw : result.split("\n")) {
+            String line = raw.trim();
+            if (!line.startsWith("步骤 ") || !line.contains("→")) continue;
+            sawStep = true;
+            if (line.contains("❌")) return false;
+        }
+        if (sawStep) return true;
         String[] fail = {"❌", "失败", "异常", "未找到", "没有步骤", "请指定", "请填写"};
         for (String f : fail) {
             if (result.contains(f)) return false;
@@ -145,12 +158,36 @@ public final class RunLog {
     /**
      * 改名迁移（v1.181.0）：把 {@code from} 的记录整段搬到 {@code to}，保住历史。
      * 定时任务改名后若不搬，「上次运行」会凭空消失；同键 / 空键 / 源无记录一律不动。
+     *
+     * <p><b>v1.191.0 修正覆盖式写入</b>：此前直接 {@code putString(to, raw)}，目标键
+     * 原有的执行记录会被整段冲掉（例如新名此前也跑过、恰好同名）。现在改为**合并**：
+     * 源 + 目标的记录按时间倒序合并、裁剪到 {@link #MAX_KEPT} 条再落盘。</p>
      */
     public static void move(Context ctx, String from, String to) {
         if (from == null || to == null || from.isEmpty() || to.isEmpty() || from.equals(to)) return;
         String raw = prefs(ctx).getString(from, null);
         if (raw == null) return;
-        prefs(ctx).edit().putString(to, raw).remove(from).apply();
+        List<Record> merged = merge(read(ctx, from), read(ctx, to));
+        if (merged.isEmpty()) {
+            // 源键存在但内容为空/损坏：只删源键，不动目标
+            prefs(ctx).edit().remove(from).apply();
+            return;
+        }
+        prefs(ctx).edit().putString(to, toJson(merged).toString()).remove(from).apply();
+    }
+
+    /**
+     * 合并两段记录：按时间倒序（新的在前），同刻时先放 {@code first} 的；
+     * 裁剪到 {@link #MAX_KEPT} 条。纯逻辑，可直接单测。
+     */
+    static List<Record> merge(List<Record> first, List<Record> second) {
+        List<Record> out = new ArrayList<>();
+        if (first != null) out.addAll(first);
+        if (second != null) out.addAll(second);
+        // v1.191.0：用 Collections.sort 而非 List#sort——后者需要 API 24，本项目 minSdk 21
+        java.util.Collections.sort(out, (a, b) -> Long.compare(b.at, a.at));
+        while (out.size() > MAX_KEPT) out.remove(out.size() - 1);
+        return out;
     }
 
     private static List<Record> read(Context ctx, String key) {

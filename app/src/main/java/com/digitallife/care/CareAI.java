@@ -15,6 +15,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,7 +41,29 @@ public class CareAI {
     public static synchronized void resetInstance() {
         if (instance != null) {
             instance.clearHistory();
+            instance.close();
             instance = null;
+        }
+    }
+
+    /**
+     * v1.191.0：释放本实例持有的线程池。
+     *
+     * <p>本类持有两个常驻线程池（对话执行 + 历史落盘），实例被丢弃时必须关掉，
+     * 否则每次重建单例都留下两个永不退出的线程。</p>
+     */
+    public void close() {
+        try {
+            pool.shutdownNow();
+        } catch (Exception ignored) {
+        }
+        try {
+            persistPool.shutdownNow();
+        } catch (Exception ignored) {
+        }
+        if (llm != null) {
+            llm.close();
+            llm = null;
         }
     }
 
@@ -74,6 +97,16 @@ public class CareAI {
 
     private final Context ctx;
     private final CareExecutor executor;
+    /**
+     * v1.191.0：对话历史改为写时复制列表。
+     *
+     * <p>此前是 {@code ArrayList}，但它同时被主线程（{@code sendMessage}）与后台线程
+     * （{@code pool.execute(this::converse)}、自动化线程的 {@code logAutomationEvent}）写入。
+     * {@code ArrayList.add} 的扩容会覆写内部数组，另一线程此刻遍历就会读到半截数据，
+     * 甚至抛 {@code ConcurrentModificationException} / {@code ArrayIndexOutOfBoundsException}。</p>
+     *
+     * <p>历史条数有限（每轮最多几十条），写时复制的开销可忽略，换来的是彻底的线程安全。</p>
+     */
     private final List<LLMClient.ChatMessage> history;
     private final ChatStore chatStore;
     private final Handler handler;
@@ -103,7 +136,7 @@ public class CareAI {
         this.ctx = ctx.getApplicationContext();
         this.executor = CareExecutor.getInstance(ctx);
         this.chatStore = new ChatStore(ctx);
-        this.history = new ArrayList<>();
+        this.history = new CopyOnWriteArrayList<>();
         this.handler = new Handler(Looper.getMainLooper());
         this.pool = Executors.newSingleThreadExecutor();
         loadHistory();
@@ -136,19 +169,52 @@ public class CareAI {
         }
     }
 
-    /** 把当前内存历史整体落盘（恢复/新增/清理后调用） */
-    private void persistHistory() {
+    /** 把指定历史快照整体落盘到指定会话（恢复/新增/清理后调用） */
+    private void persistHistory(String key, List<LLMClient.ChatMessage> snapshot) {
         try {
-            chatStore.clearSession(sessionKey);
-            for (LLMClient.ChatMessage m : history) {
+            chatStore.clearSession(key);
+            for (LLMClient.ChatMessage m : snapshot) {
                 if ("user".equals(m.role) || "system".equals(m.role)) {
-                    chatStore.addMessage(sessionKey, m.role, m.content, null, null, System.currentTimeMillis());
+                    chatStore.addMessage(key, m.role, m.content, null, null, System.currentTimeMillis());
                 } else if ("tool".equals(m.role)) {
-                    chatStore.addMessage(sessionKey, m.role, m.content, null, m.toolCallId, System.currentTimeMillis());
+                    chatStore.addMessage(key, m.role, m.content, null, m.toolCallId, System.currentTimeMillis());
                 } else {
-                    chatStore.addMessage(sessionKey, m.role, m.content, m.toolCalls, null, System.currentTimeMillis());
+                    chatStore.addMessage(key, m.role, m.content, m.toolCalls, null, System.currentTimeMillis());
                 }
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * v1.191.0：把「整段历史重写落盘」挪到专用单线程后台执行器。
+     *
+     * <p>此前 {@code persistHistory()} 直接在调用线程跑：清空会话 + 逐条重插（最多 120 条），
+     * 一次就是上百次 SQLite 写。主线程调一次（发消息、工具返回）就会卡住几百毫秒。
+     * 自动化线程现在也会写历史，若不串行化，两个线程会同时「清空 + 逐条重插」，
+     * 互相把对方已插入的行删掉 → 历史随机丢消息。</p>
+     *
+     * <p>用独立单线程池：既不阻塞主线程，又保证多次落盘严格串行（后写的覆盖先写的，
+     * 且每次写的是当时的完整快照，结果始终一致）。</p>
+     */
+    private final ExecutorService persistPool = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "care-history-persist");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /**
+     * 异步落盘历史（不阻塞调用线程）。
+     *
+     * <p>会话 key 与历史快照都在**调用时**捕获：否则排队中的落盘任务执行时
+     * {@code sessionKey} 可能已被 {@link #setSession} 切走、历史也可能已被清空，
+     * 结果是把新会话的内容写进了旧会话。</p>
+     */
+    private void schedulePersist() {
+        final String key = sessionKey;
+        final List<LLMClient.ChatMessage> snapshot = new ArrayList<>(history);
+        try {
+            persistPool.execute(() -> persistHistory(key, snapshot));
         } catch (Exception ignored) {
         }
     }
@@ -170,6 +236,8 @@ public class CareAI {
             return;
         }
         configFingerprint = fp;
+        // v1.191.0：配置变了要换客户端，先关掉旧实例的线程池，否则每改一次配置泄漏一个线程
+        if (llm != null) llm.close();
         if (profile != null) {
             llm = new LLMClient(profile.baseUrl,
                     apiManager.nextKey(ApiManager.SCOPE_CARE, profile.id), profile.model);
@@ -239,7 +307,7 @@ public class CareAI {
     public void sendMessage(String text) {
         initLLM();
         history.add(new LLMClient.ChatMessage("user", text));
-        persistHistory();
+        schedulePersist();
         if (running.compareAndSet(false, true)) {
             pendingMessage.set(false);
             pool.execute(this::converse);
@@ -466,7 +534,7 @@ public class CareAI {
                         if (gen != generation) return;
                         if (fullText != null && !fullText.isEmpty()) {
                             history.add(new LLMClient.ChatMessage("assistant", fullText));
-                            persistHistory();
+                            schedulePersist();
                             postDone(fullText);
                         }
                         // 是否继续对话：
@@ -542,7 +610,7 @@ public class CareAI {
                 result == null ? "（工具无返回）" : result);
         tool.toolCallId = pendingToolCallId;
         history.add(tool);
-        persistHistory();
+        schedulePersist();
     }
 
     /** 最近一次工具调用的 id，供 tool 结果消息配对 */
@@ -558,7 +626,9 @@ public class CareAI {
 
     public void clearHistory() {
         history.clear();
-        chatStore.clearSession(sessionKey);
+        // v1.191.0：落盘走串行队列，这里排一次「空快照」即可把库清空；
+        // 队列保序 → 之前排队的旧快照先写、随后被这份空快照覆盖，最终库中为空。
+        schedulePersist();
     }
 
     /** 切换到指定护理会话（每个会话独立历史）。打开护理会话时调用。 */
@@ -566,7 +636,8 @@ public class CareAI {
         if (key == null || key.isEmpty()) key = SESSION_CARE;
         if (sessionKey.equals(key)) return;
         cancel();
-        persistHistory();
+        // 先把旧会话的历史落盘（快照在调用时捕获，之后切 key 也不会写错库）
+        schedulePersist();
         sessionKey = key;
         history.clear();
         loadHistory();
@@ -583,7 +654,7 @@ public class CareAI {
      */
     public void logAutomationEvent(String text) {
         history.add(new LLMClient.ChatMessage("assistant", "【自动化记录】" + text));
-        persistHistory();
+        schedulePersist();
     }
 
     // ============ 回调 ============

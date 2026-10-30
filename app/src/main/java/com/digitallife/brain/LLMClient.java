@@ -129,6 +129,20 @@ public class LLMClient implements com.digitallife.harness.LlmAdapter {
         cancelled = false;
     }
 
+    /**
+     * v1.191.0：释放底层线程池。
+     *
+     * <p>本类每个实例都持有一个 {@code newSingleThreadExecutor}，从不回收——凡是「用完即弃」
+     * 地新建客户端的地方（此前 {@code ChatActivity.ensureChatLlm()} 每次发送都新建一个），
+     * 线程都会随实例泄漏。调用方在丢弃客户端时必须 {@code close()}。</p>
+     */
+    public void close() {
+        try {
+            pool.shutdownNow();
+        } catch (Exception ignored) {
+        }
+    }
+
     /** 发起流式对话请求（后台线程），结果通过 listener 回调 */
     public void chatStream(List<ChatMessage> messages, JSONObject extraSystem, StreamListener listener) {
         pool.execute(() -> {

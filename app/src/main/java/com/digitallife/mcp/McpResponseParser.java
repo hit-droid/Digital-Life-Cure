@@ -27,7 +27,7 @@ public final class McpResponseParser {
      *
      * @param text       原始响应体
      * @param expectedId 本次请求的 JSON-RPC id；≤0 表示不校验
-     * @throws Exception 响应为空、非 JSON，或 SSE 中没有任何可用 JSON 帧
+     * @throws Exception 响应为空、非 JSON、id 与请求不符，或 SSE 中没有任何可用 JSON 帧
      */
     public static JSONObject parse(String text, long expectedId) throws Exception {
         if (text == null || text.trim().isEmpty()) {
@@ -37,21 +37,38 @@ public final class McpResponseParser {
         if (t.startsWith("data:") || t.startsWith("event:") || t.startsWith(":")) {
             return parseSse(t, expectedId);
         }
+        JSONObject o;
         try {
-            return new JSONObject(t);
+            o = new JSONObject(t);
         } catch (Exception e) {
             throw new Exception("MCP 响应非 JSON: " + e.getMessage());
         }
+        // v1.191.0：普通 JSON 也校验 id——回的是别的请求的应答时必须报错，不能当成自己的结果用
+        if (expectedId > 0 && hasId(o) && o.optLong("id", Long.MIN_VALUE) != expectedId) {
+            throw new Exception("MCP 响应 id 不匹配（期望 " + expectedId
+                    + "，实际 " + o.optLong("id", -1) + "）");
+        }
+        return o;
     }
 
     private static JSONObject parseSse(String text, long expectedId) throws Exception {
         List<String> frames = splitEvents(text);
         JSONObject firstParsable = null;
+        JSONObject mismatched = null;
         for (String frame : frames) {
             JSONObject o = tryParse(frame);
             if (o == null) continue;
             if (firstParsable == null) firstParsable = o;
-            if (matchesId(o, expectedId)) return o;
+            if (expectedId <= 0) return o;
+            if (!hasId(o)) continue;            // 帧没回显 id（服务端通知）：无法据此判定，留给兜底
+            if (o.optLong("id", Long.MIN_VALUE) == expectedId) return o;
+            if (mismatched == null) mismatched = o;
+        }
+        // v1.191.0：帧带了 id 却对不上 = 响应属于别的请求，必须报错；
+        // 此前一律回退到「首个可解析帧」，会把别的请求的应答 / 服务端通知当成自己的结果，真实错误被吞。
+        if (mismatched != null) {
+            throw new Exception("MCP 响应 id 不匹配（期望 " + expectedId
+                    + "，实际 " + mismatched.optLong("id", -1) + "）");
         }
         if (firstParsable != null) return firstParsable;
         throw new Exception("MCP SSE 响应中无可用 JSON 帧");
@@ -96,9 +113,8 @@ public final class McpResponseParser {
         }
     }
 
-    private static boolean matchesId(JSONObject o, long expectedId) {
-        if (expectedId <= 0) return true;
-        if (!o.has("id") || o.isNull("id")) return false;
-        return o.optLong("id", Long.MIN_VALUE) == expectedId;
+    /** 帧是否回显了 id（服务端通知帧通常没有 id） */
+    private static boolean hasId(JSONObject o) {
+        return o != null && o.has("id") && !o.isNull("id");
     }
 }

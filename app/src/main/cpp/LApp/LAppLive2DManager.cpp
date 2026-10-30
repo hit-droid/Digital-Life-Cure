@@ -7,6 +7,7 @@
 
 #include "LAppLive2DManager.hpp"
 #include <math.h>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <GLES2/gl2.h>
@@ -27,8 +28,12 @@ namespace {
     LAppLive2DManager* s_instance = NULL;
 
     // インポートしたモデルディレクトリの動的リスト（LAppDefine::ModelDir の後ろに連結される）
+    // v1.191.0：インストール（AddModelDir・Java 线程）と参照（GetModelDirCount/ChangeScene・GL 线程、
+    //           体检扫描・后台线程）会并发读写这两个 vector。加锁避免数据竞争与 vector 重分配导致的
+    //           指针悬垂；取名一律用 Copy* 接口返回副本，不再把内部元素指针交给调用方。
     std::vector<std::string> g_extraModelDirs;
     std::vector<std::string> g_extraModelJsonBases;
+    std::mutex g_extraModelLock;
 
     void FinishedMotion(ACubismMotion* self)
     {
@@ -371,9 +376,9 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
 
     // ModelDir[]（内蔵）+ 動的追加（インポート）からモデルディレクトリ名を決定する.
     // ディレクトリ名とmodel3.jsonの名前を一致させておくこと.
-    const csmChar* dirName = GetModelDirName(index);
-    const csmChar* jsonBasePtr = GetModelJsonBase(index);
-    if (dirName == NULL)
+    // v1.191.0：副本で受け取る（内部 vector 要素のポインタを渡さない）
+    std::string dirName;
+    if (!CopyModelDirName(index, dirName))
     {
         LAppPal::PrintLog("[APP]model index out of range: %d", _sceneIndex);
         ReleaseAllModel();
@@ -385,8 +390,9 @@ void LAppLive2DManager::ChangeScene(Csm::csmInt32 index)
 
     // 使用 ModelJsonName（如果为 NULL 则使用 ModelDir）
     std::string modelBase;
-    if (jsonBasePtr != NULL && jsonBasePtr[0] != '\0') {
-        modelBase = jsonBasePtr;
+    std::string jsonBase;
+    if (CopyModelJsonBase(index, jsonBase) && !jsonBase.empty()) {
+        modelBase = jsonBase;
     } else {
         modelBase = model;
     }
@@ -458,35 +464,53 @@ csmUint32 LAppLive2DManager::GetModelNum() const
 
 csmInt32 LAppLive2DManager::GetModelDirCount()
 {
+    std::lock_guard<std::mutex> lock(g_extraModelLock);
     return static_cast<csmInt32>(ModelDirSize + g_extraModelDirs.size());
 }
 
-const csmChar* LAppLive2DManager::GetModelDirName(csmInt32 index)
+bool LAppLive2DManager::CopyModelDirName(csmInt32 index, std::string& out)
 {
-    if (index < 0) return NULL;
-    if (index < ModelDirSize) return ModelDir[index];
+    if (index < 0) return false;
+    if (index < ModelDirSize) {
+        out = ModelDir[index] != NULL ? ModelDir[index] : "";
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(g_extraModelLock);
     csmUint32 extra = static_cast<csmUint32>(index - ModelDirSize);
-    if (extra < g_extraModelDirs.size()) return g_extraModelDirs[extra].c_str();
-    return NULL;
+    if (extra < g_extraModelDirs.size()) {
+        out = g_extraModelDirs[extra];
+        return true;
+    }
+    return false;
 }
 
-const csmChar* LAppLive2DManager::GetModelJsonBase(csmInt32 index)
+bool LAppLive2DManager::CopyModelJsonBase(csmInt32 index, std::string& out)
 {
-    if (index < 0) return NULL;
-    if (index < ModelDirSize) return ModelJsonName[index];
+    if (index < 0) return false;
+    if (index < ModelDirSize) {
+        // 内蔵モデルの ModelJsonName が NULL の場合は空文字（呼び出し側で dir と同名扱い）
+        out = ModelJsonName[index] != NULL ? ModelJsonName[index] : "";
+        return ModelJsonName[index] != NULL;
+    }
+    std::lock_guard<std::mutex> lock(g_extraModelLock);
     csmUint32 extra = static_cast<csmUint32>(index - ModelDirSize);
     if (extra < g_extraModelDirs.size()) {
         // jsonBase 未指定时与目录同名
-        if (g_extraModelJsonBases[extra].empty()) return g_extraModelDirs[extra].c_str();
-        return g_extraModelJsonBases[extra].c_str();
+        if (g_extraModelJsonBases[extra].empty()) {
+            out = g_extraModelDirs[extra];
+        } else {
+            out = g_extraModelJsonBases[extra];
+        }
+        return true;
     }
-    return NULL;
+    return false;
 }
 
 void LAppLive2DManager::AddModelDir(const csmChar* dir, const csmChar* jsonBase)
 {
     if (dir == NULL || dir[0] == '\0') return;
     std::string d(dir);
+    std::lock_guard<std::mutex> lock(g_extraModelLock);
     for (size_t i = 0; i < g_extraModelDirs.size(); i++) {
         if (g_extraModelDirs[i] == d) return;  // 去重
     }

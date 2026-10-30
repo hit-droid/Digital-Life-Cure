@@ -11,6 +11,8 @@ import org.json.JSONObject;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * CareAutomation：护理大脑自动化引擎。
@@ -44,6 +46,20 @@ public class CareAutomation {
     private final Map<String, String> lastFired = new HashMap<>();
     /** v1.178.0：定时连招播放器（静默播放，结果经 Report 反馈） */
     private final ComboPlayer comboPlayer;
+    /**
+     * v1.191.0：体检与定时工作流的后台执行器。
+     *
+     * <p>此前 {@code runHealthCheck()} 与 {@code checkScheduledTasks()} 都在主线程 Handler 上跑，
+     * 而它们内部是纯磁盘 IO：逐个模型 {@code analyze_model} / {@code repair_model}、执行整条
+     * {@code run_workflow}（可能解压模型、写文件）。模型多 / 任务重时单次可达数秒 → 直接 ANR。</p>
+     *
+     * <p>改为：Handler 只负责「按时唤醒」，实际工作丢给这个单线程后台执行器（串行，避免并发体检）。</p>
+     */
+    private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "care-automation");
+        t.setDaemon(true);
+        return t;
+    });
 
     public CareAutomation(Context ctx, CareExecutor executor, CareAI careAI, Report report) {
         this.ctx = ctx.getApplicationContext();
@@ -66,6 +82,7 @@ public class CareAutomation {
         running = false;
         handler.removeCallbacks(healthTask);
         handler.removeCallbacks(cronTask);
+        worker.shutdownNow();
     }
 
     // ============ 自动体检 + 自动修复 ============
@@ -74,14 +91,25 @@ public class CareAutomation {
         @Override
         public void run() {
             if (!running) return;
+            // v1.191.0：体检是纯磁盘 IO（逐模型 analyze / repair），放后台避免 ANR
             try {
-                runHealthCheck();
-            } catch (Exception e) {
-                if (report != null) report.onAutoReport("体检出错: " + com.digitallife.ui.UiKit.safeMsg(e));
+                worker.execute(() -> {
+                    try {
+                        runHealthCheck();
+                    } catch (Exception e) {
+                        reportError("体检出错: " + com.digitallife.ui.UiKit.safeMsg(e));
+                    }
+                });
+            } catch (Exception ignored) {
             }
             handler.postDelayed(this, HEALTH_INTERVAL_MS);
         }
     };
+
+    /** 异常信息统一走气泡反馈（内部已保证切主线程） */
+    private void reportError(String text) {
+        if (report != null) report.onAutoReport(text);
+    }
 
     /** 执行一次完整体检：列出模型 → 逐个分析 → 异常自动修复 → 汇总报告 */
     public void runHealthCheck() {
@@ -174,34 +202,56 @@ public class CareAutomation {
                 if (fireKey.equals(lastFired.get(name))) continue;
                 lastFired.put(name, fireKey);
 
-                // 命中：连招任务播放连招（v1.178.0），其余执行工作流
-                String result;
-                try {
-                    if (combo) {
+                if (combo) {
+                    // 连招播放留在主线程：ComboPlayer 的逐步下发依赖主线程 Handler
+                    String result;
+                    try {
                         int n = comboPlayer.play(task.optString("modelDir", ""), comboName);
                         result = n > 0
                                 ? "✅ 已播放连招「" + comboName + "」（" + n + " 步）"
                                 : "❌ 连招「" + comboName + "」" + (n == 0
                                         ? "没有可播放的步骤（动作 / 表情可能已被删除或改名）"
                                         : "播放失败（桌宠未运行或找不到连招）");
-                    } else {
-                        JSONObject args = new JSONObject();
-                        args.put("name", workflowName);
-                        result = executor.getTools().execute("run_workflow", args);
+                    } catch (Exception e) {
+                        result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
                     }
-                } catch (Exception e) {
-                    result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
+                    finishTask(name, null, result);
+                } else {
+                    // v1.191.0：工作流执行是重磁盘操作（可能解压模型 / 写文件），放后台避免 ANR
+                    final String wf = workflowName;
+                    try {
+                        worker.execute(() -> {
+                            String result;
+                            try {
+                                JSONObject args = new JSONObject();
+                                args.put("name", wf);
+                                result = executor.getTools().execute("run_workflow", args);
+                            } catch (Exception e) {
+                                result = "执行失败: " + com.digitallife.ui.UiKit.safeMsg(e);
+                            }
+                            finishTask(name, wf, result);
+                        });
+                    } catch (Exception ignored) {
+                    }
                 }
-                // 落盘执行记录（v1.173.0）：工作台据此显示「上次运行 / 记录」
-                RunLog.record(ctx, RunLog.scheduleKey(name), RunLog.looksOk(result), result);
-                if (!combo) {
-                    RunLog.record(ctx, RunLog.workflowKey(workflowName), RunLog.looksOk(result), result);
-                }
-                careAI.logAutomationEvent("定时任务「" + name + "」触发:\n" + result);
-                if (report != null) report.onAutoReport("⏰ 定时任务「" + name + "」已触发\n" + result);
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * 任务执行完毕后的收尾：落盘执行记录 + 写入护理上下文 + 气泡反馈。
+     *
+     * <p>可能在后台线程调用（工作流路径），因此内部对共享状态的访问必须线程安全。</p>
+     */
+    private void finishTask(String name, String workflowName, String result) {
+        // 落盘执行记录（v1.173.0）：工作台据此显示「上次运行 / 记录」
+        RunLog.record(ctx, RunLog.scheduleKey(name), RunLog.looksOk(result), result);
+        if (workflowName != null) {
+            RunLog.record(ctx, RunLog.workflowKey(workflowName), RunLog.looksOk(result), result);
+        }
+        careAI.logAutomationEvent("定时任务「" + name + "」触发:\n" + result);
+        if (report != null) report.onAutoReport("⏰ 定时任务「" + name + "」已触发\n" + result);
     }
 
     /** 是否为「定时播放连招」任务：缺省 {@code kind} 视为工作流（兼容 v1.178.0 之前的旧数据） */
@@ -232,7 +282,7 @@ public class CareAutomation {
     }
 
     /** 周字段匹配：dow 已归一化为 0=周日、1-6=周一到周六；标准 cron 中 7 也视为周日 */
-    private static boolean dowFieldMatch(String field, int dow) {
+    static boolean dowFieldMatch(String field, int dow) {
         if (field.startsWith("*/")) {
             int step = Integer.parseInt(field.substring(2));
             if (step <= 0) return false;
@@ -260,7 +310,8 @@ public class CareAutomation {
         return v == 7 ? 0 : v;
     }
 
-    private static boolean fieldMatch(String field, int value) throws Exception {
+    /** 单字段匹配（分 / 时 / 日 / 月通用）：支持 *、逗号列表、步进 *&#47;n、a-b 范围、具体值 */
+    static boolean fieldMatch(String field, int value) throws Exception {
         if (field.equals("*")) return true;
         // 支持逗号列表
         if (field.contains(",")) {

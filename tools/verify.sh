@@ -12,15 +12,31 @@ cd "$ROOT"
 
 if [ -x /tmp/opencode/toolchain/jdk-17.0.20.1+1/bin/java ]; then
   export JAVA_HOME=/tmp/opencode/toolchain/jdk-17.0.20.1+1
+elif [ -x /usr/lib/jvm/java-17-openjdk-amd64/bin/java ]; then
+  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+elif [ -x /root/.local/share/mise/installs/java/17.0.20+101/bin/java ]; then
+  export JAVA_HOME=/root/.local/share/mise/installs/java/17.0.20+101
 else
   export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 fi
-export ANDROID_HOME=/opt/android-sdk
+# v1.191.0：SDK 优先用持久卷 /workspace/toolchain（容器重启不会丢），
+# 退化到 /opt/android-sdk（可能是指向持久卷的软链）。
+if [ -d /workspace/toolchain/android-sdk/platforms ]; then
+  export ANDROID_HOME=/workspace/toolchain/android-sdk
+else
+  export ANDROID_HOME=/opt/android-sdk
+fi
 export PATH="$JAVA_HOME/bin:$PATH"
 
 if [ ! -x "$JAVA_HOME/bin/java" ]; then
   echo "!! JDK 缺失：$JAVA_HOME"
   echo "   容器重启会清空 /tmp，重装方式见 AGENTS.md 第 2.1.1 节"
+  exit 2
+fi
+
+if [ ! -d "$ANDROID_HOME/platforms" ]; then
+  echo "!! Android SDK 缺失：$ANDROID_HOME"
+  echo "   重装方式见 AGENTS.md 第 2.1.1 节"
   exit 2
 fi
 

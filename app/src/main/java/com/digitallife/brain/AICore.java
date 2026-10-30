@@ -207,6 +207,8 @@ public class AICore {
         cancelled = true;
         llm.cancel();
         requestGen++;
+        // v1.191.0：停机时释放 LLM 客户端的线程池（桌宠服务销毁 → 桌面进程还活着时线程不该继续驻留）
+        llm.close();
     }
 
     /** 热切换 LLM 配置：按当前 Settings 重建客户端，无需重启桌宠 */
@@ -214,6 +216,8 @@ public class AICore {
         cancelled = true;
         llm.cancel();
         requestGen++;
+        // v1.191.0：旧客户端的线程池必须关掉，否则每次热切换配置都泄漏一个常驻线程
+        llm.close();
         llm = new LLMClient(settings.getApiBase(), settings.getApiKey(), settings.getModel());
         llm.setTools(tools.toJsonArray());
         cancelled = false;

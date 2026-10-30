@@ -210,6 +210,8 @@ public class TaskScheduler {
                     if (out.length() > 800) out = out.substring(0, 800) + "…";
                     AgentNotifier.notify(ctx, "定时任务完成", out);
                 } finally {
+                    // v1.191.0：用完即弃的客户端必须关掉线程池，否则每个定时任务泄漏一个线程
+                    llm.close();
                     if (onDone != null) onDone.run();
                 }
             }

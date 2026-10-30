@@ -28,6 +28,68 @@ public class RunLogTest {
         assertFalse(RunLog.looksOk(null));
     }
 
+    /**
+     * v1.191.0：步骤**正文**里出现「失败 / 异常 / 未找到」等字样时，
+     * 整条运行不应被误判为失败（旧实现全文扫关键词 → 假阴性）。
+     */
+    @Test
+    public void looksOk_stepBodyWithFailureWordsStillOk() {
+        String ok = "▶ 执行工作流「晨报」:\n"
+                + "  步骤 1: read_file → ✅ 成功\n"
+                + "上次失败记录：0 条，异常项：无，未找到文件：0\n";
+        assertTrue("步骤正文含失败字样不应误判为失败", RunLog.looksOk(ok));
+    }
+
+    @Test
+    public void looksOk_anyStepFailedMeansNotOk() {
+        String mixed = "▶ 执行工作流「x」:\n"
+                + "  步骤 1: a → ✅ 成功\n"
+                + "  步骤 2: b → ❌ 失败: boom\n";
+        assertFalse(RunLog.looksOk(mixed));
+    }
+
+    @Test
+    public void looksOk_noStepLinesFallsBackToKeywordScan() {
+        // 没有步骤行 → 退回关键词判定（整体失败提示）
+        assertFalse(RunLog.looksOk("未找到工作流「x」"));
+        assertFalse(RunLog.looksOk("请指定工作流名称"));
+        assertTrue(RunLog.looksOk("已执行完成"));
+    }
+
+    // ==================== merge ====================
+
+    @Test
+    public void merge_sortedByTimeDesc() {
+        RunLog.Record a = new RunLog.Record(1000, true, "a");
+        RunLog.Record b = new RunLog.Record(3000, false, "b");
+        RunLog.Record c = new RunLog.Record(2000, true, "c");
+        java.util.List<RunLog.Record> out =
+                RunLog.merge(java.util.Arrays.asList(a, b), java.util.Collections.singletonList(c));
+        assertEquals(3, out.size());
+        assertEquals("b", out.get(0).summary);
+        assertEquals("c", out.get(1).summary);
+        assertEquals("a", out.get(2).summary);
+    }
+
+    @Test
+    public void merge_capsToMaxKept() {
+        java.util.List<RunLog.Record> first = new java.util.ArrayList<>();
+        for (int i = 0; i < RunLog.MAX_KEPT + 5; i++) {
+            first.add(new RunLog.Record(i, true, "s" + i));
+        }
+        java.util.List<RunLog.Record> out =
+                RunLog.merge(first, java.util.Collections.<RunLog.Record>emptyList());
+        assertEquals(RunLog.MAX_KEPT, out.size());
+        assertEquals("s" + (RunLog.MAX_KEPT + 4), out.get(0).summary);
+    }
+
+    @Test
+    public void merge_nullsAreTolerated() {
+        assertEquals(0, RunLog.merge(null, null).size());
+        assertEquals(1, RunLog.merge(null,
+                java.util.Collections.singletonList(new RunLog.Record(1, true, "x"))).size());
+    }
+
     @Test
     public void summarize_foldsWhitespaceAndTruncates() {
         assertEquals("a b c", RunLog.summarize("a\n  b\tc "));

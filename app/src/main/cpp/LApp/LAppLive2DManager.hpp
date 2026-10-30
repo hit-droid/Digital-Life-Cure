@@ -10,6 +10,7 @@
 #include <CubismFramework.hpp>
 #include <Math/CubismMatrix44.hpp>
 #include <Type/csmVector.hpp>
+#include <string>
 
 class LAppModel;
 
@@ -111,15 +112,18 @@ public:
     static Csm::csmInt32 GetModelDirCount();
 
     /**
-    * @brief   インデックスに対応するモデルディレクトリ名を得る
+    * @brief   インデックスに対応するモデルディレクトリ名を out へコピーする
+    * @return  取得できたら true
+    * @note    v1.191.0：内部 vector の要素ポインタではなくコピーを返す（別スレッドの
+    *          登録処理で vector が再配置されても safe になる）
     */
-    static const Csm::csmChar* GetModelDirName(Csm::csmInt32 index);
+    static bool CopyModelDirName(Csm::csmInt32 index, std::string& out);
 
     /**
-    * @brief   インデックスに対応する model.json / model3.json のファイル名（拡張子除く）
-    *          内蔵モデルで ModelJsonName が NULL の場合は NULL を返す
+    * @brief   インデックスに対応する model.json / model3.json のファイル名（拡張子除く）を out へコピーする
+    * @return  内蔵モデルで ModelJsonName が NULL の場合は false
     */
-    static const Csm::csmChar* GetModelJsonBase(Csm::csmInt32 index);
+    static bool CopyModelJsonBase(Csm::csmInt32 index, std::string& out);
 
     /**
     * @brief   インポートしたモデルディレクトリを動的に追加登録する

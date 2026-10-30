@@ -130,6 +130,8 @@ public class ChatActivity extends Activity {
     private CareAI careAI;
     private CareAI.CareListener careListener;
     private LLMClient llm;
+    /** v1.191.0：对话客户端配置指纹（变化才重建，避免每次发送新建 LLMClient 泄漏线程池） */
+    private String chatLlmFingerprint = null;
     private MarkdownRenderer mdRenderer;
 
     // 待发送附件（选文件后不立即发，与消息一起提交）
@@ -140,6 +142,8 @@ public class ChatActivity extends Activity {
     /** v1.42.0：记录最后一条用户消息原文，供失败后一键重试 */
     private String lastUserText = null;
     private String lastAttachContext = null;
+    /** v1.191.0：本轮用户消息的数据库 rowid（组装上下文时按 id 精确定位，不靠文本匹配） */
+    private long pendingUserMsgId = -1L;
 
     private String sessionKey;
     private String title;
@@ -772,6 +776,10 @@ public class ChatActivity extends Activity {
             TextView ub = appendUserBubble(bubble);
             long uid = chatStore.addMessage(sessionKey, "user", bubble, null, null, System.currentTimeMillis());
             msgIds.put(ub, uid);
+            // v1.191.0：记住本轮用户消息的 rowid——组装上下文时按 id 精确定位这一条，
+            // 此前按「文本相等」匹配，入库内容多了「📄 文件名」行 → 匹配不上，
+            // 于是又追加了一条 user 消息（同一句话在上下文里出现两次）。
+            pendingUserMsgId = uid;
             rememberUser(text.isEmpty() ? display : text);
             scrollToBottom();
             final String filePath = pendingFilePath;
@@ -839,6 +847,7 @@ public class ChatActivity extends Activity {
         TextView ub = appendUserBubble(text);
         long uid = chatStore.addMessage(sessionKey, "user", text, null, null, System.currentTimeMillis());
         msgIds.put(ub, uid);
+        pendingUserMsgId = uid;   // v1.191.0：按 rowid 定位本轮用户消息（见附件分支说明）
         scrollToBottom();
         if (isCare) {
             if (careAI == null) careAI = CareAI.getInstance(this);
@@ -898,12 +907,8 @@ public class ChatActivity extends Activity {
                 if (harness != null) harness.cancel();
                 llm.cancel();
                 // v1.111.0：连同正在运行的子智能体一起停（v1.117.0 可能并行多个）
-                synchronized (subAgentLlms) {
-                    for (LLMClient c : subAgentLlms) {
-                        if (c != null) c.cancel();
-                    }
-                    subAgentLlms.clear();
-                }
+                // v1.191.0：停完顺便关闭它们，释放线程池（此前只 cancel + clear）
+                closeSubAgentLlms();
             }
         } catch (Exception ignored) {
         }
@@ -1107,7 +1112,62 @@ public class ChatActivity extends Activity {
     // ==================== 对话大脑独立对话（不依赖桌宠） ====================
 
     private void ensureChatLlm() {
+        // v1.191.0：复用实例。此前每次发送都新建一个 LLMClient，而 LLMClient 内部持有一个
+        // 单线程池且从不回收 → 每发一条消息泄漏一个线程（整个 Activity 生命周期累积）。
+        // 配置指纹变化时才重建（重建前关闭旧实例），与 CareAI.initLLM 同款策略。
+        String fp = chatConfigFingerprint();
+        if (llm != null && fp.equals(chatLlmFingerprint)) {
+            // 配置未变化：仅轮换密钥池 key，复用客户端实例（与 CareAI.initLLM 同款策略）
+            ApiManager am = new ApiManager(this);
+            ApiProfile p = am.getCurrent(ApiManager.SCOPE_CHAT);
+            if (p != null) {
+                llm.setApiKey(am.nextKey(ApiManager.SCOPE_CHAT, p.id));
+                llm.setApiKeys(p.effectiveKeys());
+            }
+            return;
+        }
+        closeChatLlm();
+        chatLlmFingerprint = fp;
         llm = newChatLlmClient();
+    }
+
+    /** 对话客户端配置指纹：base + model + 当前 profile id（变化才重建客户端） */
+    private String chatConfigFingerprint() {
+        ApiManager am = new ApiManager(this);
+        ApiProfile p = am.getCurrent(ApiManager.SCOPE_CHAT);
+        if (p != null && p.baseUrl != null && !p.baseUrl.isEmpty()) {
+            return p.baseUrl + "|" + p.model + "|" + p.id;
+        }
+        Settings s = new Settings(this);
+        return s.getApiBase() + "|" + s.getModel() + "|";
+    }
+
+    /** 关闭并丢弃当前对话客户端（配置变更 / 页面销毁时调用，释放其线程池） */
+    private void closeChatLlm() {
+        if (llm == null) return;
+        try {
+            llm.cancel();
+            llm.close();
+        } catch (Exception ignored) {
+        }
+        llm = null;
+    }
+
+    /** 关闭所有子智能体客户端（不再只是丢掉引用，否则线程池泄漏） */
+    private void closeSubAgentLlms() {
+        List<LLMClient> snapshot;
+        synchronized (subAgentLlms) {
+            snapshot = new ArrayList<>(subAgentLlms);
+            subAgentLlms.clear();
+        }
+        for (LLMClient c : snapshot) {
+            if (c == null) continue;
+            try {
+                c.cancel();
+                c.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     /** 按当前对话配置新建一个模型客户端实例（主对话与子智能体各用各的实例） */
@@ -1213,22 +1273,44 @@ public class ChatActivity extends Activity {
         // v1.30.0：上下文预算裁剪，避免长对话撑爆 token
         List<ChatStore.StoredMsg> hist = HistoryBudget.trim(
                 chatStore.getMessages(sessionKey, 40));
-        boolean found = false;
-        for (ChatStore.StoredMsg m : hist) {
+        // v1.191.0：定位「本轮用户消息」在历史中的下标。
+        // 此前按「文本相等」匹配，且 hist 是**升序** → 命中的是最早那条同名消息；
+        // 附件消息入库内容多一行「📄 文件名」，与发送文本根本不相等 → 匹配不上，
+        // 于是又追加了一条 user 消息（同一句话在上下文里出现两次）。
+        // 现在优先按 rowid 精确匹配；退而求其次取**最后**一条内容相同的 user 消息。
+        int targetIdx = -1;
+        if (pendingUserMsgId > 0) {
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                if (hist.get(i).id == pendingUserMsgId) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+        }
+        if (targetIdx < 0) {
+            for (int i = hist.size() - 1; i >= 0; i--) {
+                ChatStore.StoredMsg m = hist.get(i);
+                if (m != null && "user".equals(m.role) && text != null && text.equals(m.content)) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+        }
+        for (int i = 0; i < hist.size(); i++) {
+            ChatStore.StoredMsg m = hist.get(i);
             if (m.content == null || m.content.isEmpty()) continue;
             // v1.30.0：system 说明原样传（不归类成 assistant）
             String role = "user".equals(m.role) ? "user"
                     : ("system".equals(m.role) ? "system" : "assistant");
-            if (!found && "user".equals(role) && text.equals(m.content)) {
+            if (i == targetIdx) {
                 msgs.add(new LLMClient.ChatMessage(role,
                         attachContext != null && !attachContext.isEmpty()
                                 ? m.content + "\n\n" + attachContext : m.content));
-                found = true;
             } else {
                 msgs.add(new LLMClient.ChatMessage(role, m.content));
             }
         }
-        if (!found) {
+        if (targetIdx < 0) {
             msgs.add(new LLMClient.ChatMessage("user",
                     attachContext != null && !attachContext.isEmpty()
                             ? text + "\n\n" + attachContext : text));
@@ -1270,8 +1352,9 @@ public class ChatActivity extends Activity {
             });
             return;
         }
-        // 新一轮：上一轮的子智能体客户端已结束，清空跟踪列表
-        subAgentLlms.clear();
+        // 新一轮：上一轮的子智能体客户端已结束，关闭并清空跟踪列表
+        // v1.191.0：此前只 clear() 丢引用 → 子智能体的线程池随实例泄漏
+        closeSubAgentLlms();
         ensureChatTools();
         if (harness == null) {
             harness = com.digitallife.harness.DeepSeekHarness.boot(getApplicationContext());
@@ -1437,7 +1520,8 @@ public class ChatActivity extends Activity {
             careAI.reconfigure();
             return;
         }
-        llm = null;
+        // v1.191.0：换配置时关掉旧客户端（释放其线程池），再重建
+        closeChatLlm();
         ensureChatLlm();
     }
 
@@ -2568,11 +2652,13 @@ public class ChatActivity extends Activity {
         // 找到上一条用户消息作为重发内容
         List<ChatStore.StoredMsg> hist = chatStore.getMessages(sessionKey, 40);
         String lastUser = null;
+        long lastUserId = -1L;
         for (int i = hist.size() - 1; i >= 0; i--) {
             ChatStore.StoredMsg m = hist.get(i);
             if (m != null && "user".equals(m.role) && m.content != null
                     && !m.content.trim().isEmpty()) {
                 lastUser = m.content.trim();
+                lastUserId = m.id;
                 break;
             }
         }
@@ -2582,6 +2668,8 @@ public class ChatActivity extends Activity {
         }
         // 移除界面上的旧气泡
         removeBubble(bubble);
+        // v1.191.0：重发的就是库里那条用户消息本身，按 rowid 定位（内容可能被 trim 过）
+        pendingUserMsgId = lastUserId;
         // 重新发送（走正常发送流程，会重新 append user bubble + 请求）
         sendChatMessage(lastUser, null);
         Toast.makeText(this, "已重新生成", Toast.LENGTH_SHORT).show();
@@ -3393,7 +3481,9 @@ public class ChatActivity extends Activity {
         super.onDestroy();
         if (careAI != null && careListener != null) careAI.removeListener(careListener);
         if (harness != null) harness.cancel();
-        if (llm != null) llm.cancel();
+        // v1.191.0：关闭（而非仅取消）客户端，释放其内部线程池
+        closeChatLlm();
+        closeSubAgentLlms();
         // v1.31.0：释放语音识别资源，避免泄漏
         if (speechRecognizer != null) {
             try {

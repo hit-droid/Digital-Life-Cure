@@ -252,7 +252,15 @@ public class PetService extends Service implements AICore.Output,
         try {
             windowManager.addView(overlayView, overlayParams);
         } catch (Exception e) {
+            // v1.191.0：添加窗口失败（如窗口权限被撤销 / 悬浮窗被系统拦）时必须把 overlayView 置空。
+            // 此前只 e.printStackTrace()，overlayView 仍非 null → ensureRunning() 开头的
+            // `if (overlayView != null) return;` 会永远短路，用户再也起不来桌宠，只能重启 App。
             e.printStackTrace();
+            overlayView = null;
+            overlayParams = null;
+            stopForeground(true);
+            stopSelf();
+            return;
         }
 
         // 屏幕方向/尺寸变化时（横竖屏切换）自适应窗口大小与位置，避免窗口过小或跑出屏幕
@@ -906,10 +914,28 @@ public class PetService extends Service implements AICore.Output,
 
     /**
      * v1.189.0：设置页调整「桌宠大小」后立即生效。
-     * 复用旋转重建的几何逻辑（含位置等比迁移与屏内夹取），不需要重启服务。
+     *
+     * <p>v1.191.0：不再复用旋转重建的 {@link #resizeOverlayForDisplay()}。那条路径会把坐标
+     * 按「新旧宽高比」等比迁移（那是横竖屏切换时为了保持相对位置的需要），但用户改缩放时
+     * 桌宠不该乱跑——只是变大变小，位置应当原地不动。同时这里改完必须把坐标落盘，
+     * 否则下次启动仍是旧位置（旋转路径不落盘是有意的：旋转后的临时位置不该覆盖用户设置）。</p>
      */
     public void applyOverlayScale() {
-        resizeOverlayForDisplay();
+        if (windowManager == null || overlayView == null || overlayParams == null) return;
+        try {
+            Point size = new Point();
+            windowManager.getDefaultDisplay().getRealSize(size);
+            int overlayW = OverlayGeometry.windowWidth(size.x, settings.getScale());
+            int overlayH = OverlayGeometry.windowHeight(size.y, settings.getScale());
+            overlayParams.width = overlayW;
+            overlayParams.height = overlayH;
+            // 位置不变，仅夹回屏内（变大后可能超出边界）
+            overlayParams.x = OverlayGeometry.clampX(overlayParams.x, overlayW, size.x);
+            overlayParams.y = OverlayGeometry.clampY(overlayParams.y, overlayH, size.y);
+            windowManager.updateViewLayout(overlayView, overlayParams);
+            settings.setOverlayPos(overlayParams.x, overlayParams.y);
+        } catch (Exception ignored) {
+        }
     }
 
     // ================= 模型统一管理 =================
@@ -1355,6 +1381,13 @@ public class PetService extends Service implements AICore.Output,
         // 注销无障碍服务监听器，避免匿名内部类持有 Service 引用造成泄漏
         com.digitallife.service.PetAccessibilityService.setListener(null);
         if (careAutomation != null) careAutomation.stop();
+        // v1.191.0：断开 MCP 连接并注销其注册的远程工具。
+        // 此前 onDestroy 不处理 MCP，工具残留在全局 ToolRegistry 里 → 服务停了但大脑仍能
+        // 调用一个已经不再连接的远程工具；下次启动又连一遍，同名工具反复叠加。
+        if (mcpManager != null) {
+            mcpManager.disconnectAll();
+            mcpManager = null;
+        }
         if (memoryExtractor != null) {
             memoryExtractor.cancel();
             memoryExtractor = null;

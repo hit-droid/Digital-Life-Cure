@@ -673,9 +673,14 @@ public class AgentWorkbenchActivity extends Activity {
             } catch (Exception e) {
                 res = "保存失败：" + UiKit.safeMsg(e);
             }
-            // 改名成功才搬记录（搬早/搬错都会让新名「上次运行」错位）
-            if (!newName.equals(origName)
-                    && getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).contains(newName)) {
+            // v1.191.0：只有**改名确实成功**才搬记录。
+            // 此前用「新名是否已存在于 care_schedules」判断——撞名被拒时新名同样存在，
+            // 于是旧名的执行记录被搬到别人的名下，新名「上次运行」凭空出现、旧的也丢了。
+            // update_scheduled_task 成功时返回以 ✅ 开头，撞名/未找到等失败路径不带 ✅。
+            boolean renamed = !newName.equals(origName)
+                    && res != null && res.startsWith("✅")
+                    && !getSharedPreferences(PREFS_SCHEDULE, MODE_PRIVATE).contains(origName);
+            if (renamed) {
                 RunLog.move(getApplicationContext(),
                         RunLog.scheduleKey(origName), RunLog.scheduleKey(newName));
             }

@@ -539,3 +539,21 @@ Entries discovered by the Agent during task execution should follow this format:
   - `MessageCardRendererTest` 7 条（图宽含页边距、空 body 返回 null、非法尺寸返回 null、多行更高、5000 行被截断到 ≤8000px、含表格位图与含代码块的富文本都能画）；`ShareFileProviderTest` 7 条（URI 拼装、正常读图、缺文件抛错、**路径穿越被拒**、MIME、写操作不支持）。
   - 本轮 verify：844 单测 / 75 类、lint 0 error、APK(debug) 9,190,673B；耗时 compile 9s / test 46s / lint 35s / apk 14s。
   - 待办（AGENTS.md §5.3 第 3 条已过期）：仓库里已有 `mcp/McpClient` / `McpServerManager` / `McpResponseParser`（Streamable HTTP + SSE），「真 MCP 对接」那条应订正。
+
+[Project Knowledge Summary]
+- Date: 2026-10-31
+- Context: Discovered by Agent while performing v1.191.0 挑刺修复轮（主线程重活 / 线程池泄漏 / MCP 工具残留 / cron 推算性能）+ 容器两次重置后工具链迁移
+- Category: Operations & Deployment
+- Instructions:
+  - **容器会被重置**：`/opt/android-sdk`、`/tmp/opencode`、`~/.gradle`、`/usr/lib/jvm` 已被清空两次，工具链**必须装到持久卷** `/workspace/toolchain`（android-sdk + gradle-8.7 + dl 压缩包），再用软链接回 `/opt/android-sdk`、`/usr/lib/jvm/java-17-openjdk-amd64`，否则 `local.properties` 的 `sdk.dir` 与既有脚本失效。
+  - `tools/verify.sh` 已改成**自动探测** JAVA_HOME / ANDROID_HOME（顺序：`/workspace/toolchain` → `/opt/android-sdk`；JDK 顺序：`/tmp/opencode/toolchain/jdk-17.0.20.1+1` → `/usr/lib/jvm/java-17-openjdk-amd64` → mise 的 java 17），并在 SDK 缺失时 exit 2。
+  - Gradle wrapper dist 目录哈希算法：MD5(distributionUrl) → BigInteger → base36；gradle-8.7-bin 对应 `~/.gradle/wrapper/dists/gradle-8.7-bin/bhs2wmbdwecv87pi65oeuq5iu/`（放好解压目录并写 `.ok` 标记即可免下载）。
+  - 无网环境：`~/.gradle/init.gradle` 配阿里云镜像（google/public/gradle-plugin），`~/.gradle/gradle.properties` 配 `systemProp.http[s].proxyHost/Port`；代理端口本环境为 **18080**。
+  - **minSdk 21 铁律**：`List#sort` 需要 API 24，lint 会报 `NewApi` **error**，必须用 `java.util.Collections.sort(list, comparator)`（本轮 `care/RunLog.merge` 踩过）。
+  - Robolectric 首跑下载 `android-all-instrumented` jar 偶发 `Failed to fetch maven artifact`（网络瞬断），**重跑即过**，不要误判为代码问题。
+  - 本轮挑刺修掉的真问题（按严重度）：① `care/CareAutomation` 的体检/工作流在**主线程 Handler** 上跑（内含逐模型 analyze/repair、整条 `run_workflow` 的解压与写文件 IO）→ 改后台单线程执行器串行执行，Handler 只负责按时唤醒；**连招播放必须留主线程**（`ComboPlayer` 逐步下发依赖主线程 Handler）；② `care/CronText.nextFireMillis` **逐分钟**试匹配（52.7 万次 × 重新 split/parseInt）且在 **UI 线程**被调（工作台每行 + 新建表单实时预览）→ 新增纯逻辑 `care/CronMatcher` 预解析成布尔表（分60/时24/日32/月13/周7）+ 按天跳跃；**布尔表每项都用原判定函数（`CareAutomation.fieldMatch`/`dowFieldMatch`）逐值求**，保证与 `cronMatches` 逐位一致，不出现两套 cron 语义；③ `brain/LLMClient` 每个实例持一个**从不回收**的单线程池 → 新增 `close()`，在 7 处「用完即弃」新建点补回收；`ui/ChatActivity` 此前每次发送都新建客户端 → 改按「配置指纹 base+model+profile id」复用；④ `service/PetService` 的 `addView` 失败（悬浮窗权限被撤）只打日志、`overlayView` 仍非空 → `ensureRunning()` 永远短路，用户再也起不来桌宠 → 失败即置空并停服务；`applyOverlayScale()` 此前会顺带挪位置且不落盘 → 改只改宽高 + 写回设置；⑤ `mcp/McpServerManager` 的连接表是**实例字段**但工具注册进**全局单例** `ToolRegistry` → 「插件页删服务器」时桌宠侧连接没断、工具残留、大脑仍能调用 → 连接表改**进程级共享**，匹配键由 endpoint 改**配置 id**；⑥ `mcp/McpResponseParser` 遇 SSE **带 id 但对不上**的帧会回退「首个可解析帧」，把别的请求应答当自己的结果、真实错误被吞 → 现报错；帧没回显 id 仍容忍回退；⑦ `care/RunLog.looksOk` 全文扫关键词，步骤输出正文里的「异常项：0」就被**误判为失败** → 先看步骤行、有步骤行以其成败标记为准，无步骤行才退回关键词；`RunLog.move`（改名迁移）覆盖写入冲掉目标键原有记录 → 改**合并**（按时间倒序、裁剪 20 条）；⑧ 原生 `cpp/LApp/LAppLive2DManager` 的 `g_extraModelDirs`/`g_extraModelJsonBases` 无保护跨线程读写 → 加 `std::mutex`，并删掉返回内部指针的 `GetModelDirName`/`GetModelJsonBase` 改拷贝式 `CopyModelDirName`/`CopyModelJsonBase`。
+  - 本轮单测：新建 `CronMatcherTest`(11，含与 `CareAutomation.cronMatches` 的**逐值差分**测试) / `LLMClientTest`(2，close 后 `chatStream` 抛 `RejectedExecutionException`、close 幂等) / `McpServerManagerTest`(4，验证全局注册表注销)；扩展 `RunLogTest`→11、`RunLogStoreTest`→9、`McpResponseParserTest`→16。`CronTextTest` 原有 13 条断言**全部保留未改**。
+  - `CronMatcher.parse` 对少于 5 段返回 null，但 `"not a cron at all"` 按空白切成 5 段**不返回 null**——写断言时别想当然。
+  - 本轮 verify：**873 单测 / 78 类，失败 0 错误 0；lint Error 0；APK(debug) 9,230,157B**（增量构建产物；全量重建约 9.7MB，差异来自增量打包）；耗时 compile 10s / test 48s / lint 34s / apk 10s。
+  - 本轮版本：versionCode 195 / versionName 1.191.0。
+  - 已知未改（有意）：`MarkdownRenderer.tableBitmapPixelsUsed` 只增不减（整页 6M 像素预算即到顶，设计如此）；cron 的 day/dow **AND vs OR** 语义未动（改语义会打破 `CronTextTest` 断言并改变已有任务触发条件），只在 `CronMatcher` 注释里写明。

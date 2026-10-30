@@ -102,6 +102,26 @@ public class RunLogStoreTest {
         assertEquals(1, RunLog.recent(ctx(), to).size());
     }
 
+    /**
+     * v1.191.0：改名迁移不再「覆盖式写入」——目标键原有的记录会被保留，
+     * 两段记录按时间倒序合并。
+     */
+    @Test
+    public void move_mergesWithExistingTargetRecords() {
+        String from = RunLog.scheduleKey("旧名");
+        String to = RunLog.scheduleKey("新名");
+        RunLog.record(ctx(), from, true, "源记录", T0 + 1000);
+        RunLog.record(ctx(), to, false, "目标旧记录", T0);
+
+        RunLog.move(ctx(), from, to);
+
+        List<RunLog.Record> all = RunLog.recent(ctx(), to);
+        assertEquals(2, all.size());
+        assertEquals("源记录", all.get(0).summary);   // 新的在前
+        assertEquals("目标旧记录", all.get(1).summary);
+        assertNull("源键应被移除", RunLog.last(ctx(), from));
+    }
+
     @Test
     public void fromJson_skipsGarbage() throws Exception {
         JSONArray arr = new JSONArray()

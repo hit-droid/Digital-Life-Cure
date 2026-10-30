@@ -25,7 +25,26 @@ public class McpServerManager {
     private final SharedPreferences sp;
     /** v1.143.0：headerValue 多为 Authorization 令牌，落盘改走设备级加密（与 API Key 同策略） */
     private final SecureStore secure = new SecureStore();
-    private final List<McpClient> connected = new ArrayList<>();
+
+    /**
+     * v1.191.0：进程级共享的「配置 id → 该连接注册进全局注册表的工具名」表。
+     *
+     * <p>此前连接表是**实例字段**，而 {@code McpServerManager} 在本进程里不止一个实例
+     * （桌宠服务 {@code PetService} 一个、插件页 {@code PluginTabView} 一个）。
+     * 远程工具注册进的是全局单例 {@code ToolRegistry}，于是「插件页删除服务器」时
+     * 它自己那个实例的连接表是空的 → 桌宠侧建立的连接没被断开、工具残留在注册表里，
+     * 大脑仍能看见并调用一个已被删除的服务器的工具。</p>
+     *
+     * <p>同时把匹配键从 <b>endpoint</b> 改成 <b>配置 id</b>：同一 endpoint 配了两条
+     * （比如不同命名空间）时，删一条会连带注销另一条的工具。</p>
+     */
+    private static final java.util.concurrent.ConcurrentMap<String, List<String>> CONNECTED_TOOLS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 测试可见：进程内已连接的「配置 id → 工具名」 */
+    static java.util.concurrent.ConcurrentMap<String, List<String>> connectedTools() {
+        return CONNECTED_TOOLS;
+    }
 
     public McpServerManager(Context ctx) {
         sp = ctx.getApplicationContext().getSharedPreferences(PREF, Context.MODE_PRIVATE);
@@ -91,30 +110,20 @@ public class McpServerManager {
     }
 
     public void remove(String id) {
-        McpServerConfig removed = null;
         List<McpServerConfig> keep = new ArrayList<>();
         for (McpServerConfig c : list()) {
-            if (c.id.equals(id)) {
-                removed = c;
-            } else {
-                keep.add(c);
-            }
+            if (!c.id.equals(id)) keep.add(c);
         }
         persist(keep);
-        // 同步断开已连接实例并注销其注册的工具，避免删除后工具残留
-        if (removed != null && removed.endpoint != null) {
-            java.util.Iterator<McpClient> it = connected.iterator();
-            while (it.hasNext()) {
-                McpClient cl = it.next();
-                if (removed.endpoint.equals(cl.getEndpoint())) {
-                    try {
-                        cl.unregisterTools();
-                    } catch (Exception ignored) {
-                    }
-                    it.remove();
-                }
-            }
-        }
+        // 注销该配置注册的远程工具（进程级共享表，删谁都能删干净），避免删除后工具残留
+        unregisterTools(CONNECTED_TOOLS.remove(id));
+    }
+
+    /** 注销一批工具名（只注销 MCP 注册的，不动内置/插件工具） */
+    private static void unregisterTools(List<String> names) {
+        if (names == null || names.isEmpty()) return;
+        com.digitallife.tools.ToolRegistry reg = com.digitallife.tools.ToolRegistry.getInstance();
+        for (String n : names) reg.unregister(n);
     }
 
     private void persist(List<McpServerConfig> list) {
@@ -144,7 +153,12 @@ public class McpServerManager {
     public void connect(McpServerConfig cfg) {
         McpClient client = new McpClient(cfg.endpoint, cfg.headerName, cfg.headerValue);
         client.connectAndRegister(cfg.namespace);
-        connected.add(client);
+        // v1.191.0：记进进程级共享表（按配置 id），删除该配置时能精确注销它注册的工具
+        List<String> names = client.getRegisteredToolNames();
+        if (cfg.id != null && !cfg.id.isEmpty()) {
+            List<String> prev = CONNECTED_TOOLS.put(cfg.id, names);
+            if (prev != null) unregisterTools(prev);   // 重复连接同一配置：注销上一轮残留
+        }
     }
 
     /** 连接全部已保存服务器 */
@@ -161,13 +175,10 @@ public class McpServerManager {
 
     /** 断开并移除所有 MCP 工具（仅注销 MCP 注册的工具，保留内置/插件工具） */
     public void disconnectAll() {
-        for (McpClient c : connected) {
-            try {
-                c.unregisterTools();
-            } catch (Exception ignored) {
-            }
+        for (List<String> names : CONNECTED_TOOLS.values()) {
+            unregisterTools(names);
         }
-        connected.clear();
+        CONNECTED_TOOLS.clear();
     }
 
     public String newId() {
